@@ -25,6 +25,45 @@ the bytes and the signature. It is **complementary to** transaction simulation
 danger-primitive shapes (which simulation has been shown to miss), while
 simulation catches economic/oracle outcomes that static decoding cannot. Use both.
 
+### How sign-safe would have caught Drift
+
+The Drift attack had two layers: the transaction was (1) a **durable-nonce
+carrier** (non-expiring, can be replayed at any future block), and (2) executed
+via a **Squads `vaultTransactionExecute`** whose CPI inner instruction was an
+**`update_admin`** -- an admin authority transfer to the attacker's address.
+Neither piece was visible in the signed top-level message bytes; signers saw only
+the Squads program id and an opaque 8-byte discriminator.
+
+With sign-safe:
+
+1. **Durable nonce alone is NEVER SIGN.** An `AdvanceNonceAccount` at ix0 forces
+   at minimum HOLD -- a non-expiring transaction is always flagged regardless of
+   the rest of the payload.
+
+2. **Squads execute without inner bytes is NEVER SIGN.** The offline core detects
+   `vaultTransactionExecute` by program id + Anchor discriminator (`c208a15799a4…`)
+   and injects a mandatory HOLD finding (`squads-execute-unverified`). A signer
+   cannot approve without first fetching the VaultTransaction PDA bytes.
+
+3. **Durable nonce + any non-INFO finding = REJECT (Drift composite).** Because
+   the mandatory Squads HOLD is present alongside the durable-nonce marker, the
+   verdict escalates to REJECT -- not mere HOLD. Both pieces together are the
+   $285M attack class.
+
+4. **With the VaultTransaction PDA bytes, the inner `update_admin` is decoded
+   and named.** When the runtime (or the operator) supplies the PDA account bytes
+   to `reviewBase64(..., vaultTxBytes)`, the offline core borsh-decodes the
+   `VaultTransaction`, resolves inner program IDs from the embedded `account_keys`
+   array, and classifies the leading 8 bytes against the Anchor authority-mutation
+   registry. It finds `a1b028d53cb8b3e4` = `update_admin` -> REJECT, emitting a
+   finding labelled **"Anchor: update_admin (admin transfer) [inner, via Squads
+   vault]"** and reason text that explicitly names the inner authority transfer
+   and the blind-signing attack class. The signer now sees exactly what they are
+   about to approve: not a Squads shell, but an admin handoff.
+
+Verdict path summary: `durable-nonce at ix0` + `squads-execute-unverified` ->
+`driftComposite = true` -> **REJECT**, exit code 20, before any key is touched.
+
 ## What it does
 
 Given a base64 message (legacy or v0), the deterministic core:
@@ -44,7 +83,18 @@ Given a base64 message (legacy or v0), the deterministic core:
    transfers) plus a pure Token-2022 TLV extension walker,
 4. **computes** the statically-declared signer outflow,
 5. **emits** a `SIGN / HOLD / REJECT` verdict + `verdict.json`, escalating the
-   Drift composite (durable-nonce marker at ix0 + authority change) to REJECT.
+   Drift composite (durable-nonce marker at ix0 + authority change) to REJECT,
+6. **clear-signs Squads v4 proposals** (WHEN given the VaultTransaction PDA
+   bytes): offline borsh-decodes the PDA, resolves inner program IDs from the
+   embedded account_keys array, classifies them against the 11-entry
+   **Anchor authority-mutation registry** (`catalog/anchor-danger.json`), and
+   folds the inner findings into the verdict -- surfacing e.g. "Drift UpdateAdmin
+   [inner, via Squads vault]" when the inner instruction carries that
+   discriminator. Without the PDA bytes a mandatory HOLD is injected (never
+   SIGN a Squads execute whose inner content is unknown),
+7. **computes a deterministic transaction digest** (`digest.ts`, SHA-256 with a
+   20-hex-char human-verifiable short code `XXXX-XXXX-XXXX-XXXX-XXXX`) so
+   signers can confirm byte identity across devices out-of-band.
 
 **Fail-closed by construction:** malformed input -> REJECT; unresolved ALT
 references can never produce SIGN; unknown programs can never produce SIGN, and
@@ -77,6 +127,15 @@ in this blob is recognized as dangerous," never "this is safe."
 - Classifying instructions against a 35-entry danger-primitive catalog
   (authority handoffs, program upgrades, durable nonces, delegate grants,
   account closes, large transfers) plus a pure Token-2022 TLV extension walker.
+- Offline clear-signing of Squads v4 VaultTransaction proposals: when the PDA
+  bytes are provided, decoding inner instructions and classifying them against
+  an 11-entry Anchor authority-mutation registry (`anchor-danger.json`).
+- Durable-nonce escalation: a bare durable nonce is HOLD; combined with any
+  non-INFO finding, unknown program, or Squads execute it escalates to REJECT
+  (the Drift-class composite). `governanceContext` flag makes even a bare
+  durable nonce REJECT.
+- Out-of-band digest: SHA-256 + 20-hex-char short code for cross-device byte
+  identity confirmation (`src/digest.ts`, exposed by the CLI and verdict).
 - Computing the statically-declared signer outflow (lamports + SPL transfers).
 - Emitting a `SIGN / HOLD / REJECT` verdict and a machine-readable
   `verdict.json` with a verdict-mirroring exit code.
@@ -118,7 +177,7 @@ a planned enhancement.)
 
 Most skills are prose. This one ships a small, **pure-function** TypeScript core
 with a deterministic, fully **offline** test suite (`vitest` + `fast-check`),
-**183 checks across 10 files** (`npm test`, see exact counts below):
+**238 checks across 13 files** (`npm test`, see exact counts below):
 
 - **10 synthetic golden fixtures** -- serialized messages built with
   `@solana/web3.js`, decoded by *our own* parser, verdicts deep-equal-checked
@@ -343,19 +402,22 @@ for the machine-readable source.
 ```
 $ npm test            # vitest run -- the full suite (exits nonzero on any fail)
 
- ✓ skill/test/decode.test.ts        (25 tests)   compact-u16 vectors/rejection, D19, versions, fail-closed
- ✓ skill/test/roles.test.ts         (13 tests)   is_writable_index + demotion goldens, multi-lookup, reserved
- ✓ skill/test/classify.test.ts        (21 tests)   Transfer/TransferChecked, SetAuthority, TLV, loader, routing
+ ✓ skill/test/decode.test.ts           (25 tests)   compact-u16 vectors/rejection, D19, versions, fail-closed
+ ✓ skill/test/roles.test.ts            (13 tests)   is_writable_index + demotion goldens, multi-lookup, reserved
+ ✓ skill/test/classify.test.ts         (21 tests)   Transfer/TransferChecked, SetAuthority, TLV, loader, routing
  ✓ skill/test/catalog-coverage.test.ts (29 tests)   dangerous shapes never SIGN (SPL+T22 Approve/Close/Freeze/MintTo/Burn/WithdrawExcess/Unwrap/Batch + T22 confidential mint/burn, fee-withdraw & permissioned-burn sub-instructions, WithdrawNonce, CreateAccount[WithSeed]); config sub-instructions still SIGN
- ✓ skill/test/verdict.test.ts         (12 tests)   durable nonce ix0 gate, Drift composite, prompt-injection, V2
- ✓ skill/test/pbt.test.ts             ( 7 tests)   round-trip, fail-closed, no-trailing, compact-u16 (fast-check)
- ✓ skill/test/fixtures.test.ts        (52 tests)   golden + web3.js + kit differential + disagreement + no-network
- ✓ skill/test/real-fixtures.test.ts   (14 tests)   REAL mainnet txs decoded offline + cross-validated
- ✓ skill/test/fulltx.test.ts          ( 9 tests)   full signed-tx input stripped + fail-closed (W011 §7)
- ✓ skill/test/legacy-runner.test.ts   ( 1 test )   runs the standalone node smoke runner
+ ✓ skill/test/verdict.test.ts          (12 tests)   durable nonce ix0 gate, Drift composite, prompt-injection, V2
+ ✓ skill/test/squads.test.ts           (28 tests)   VaultTransaction borsh decode, discriminator math, ALT-unresolved fail-closed, real fixture
+ ✓ skill/test/squad-verdict.test.ts    (13 tests)   Squads execute verdict integration, durable-nonce+execute REJECT, governanceContext, never-SIGN
+ ✓ skill/test/digest.test.ts           (14 tests)   SHA-256 digest, short-code format, determinism, out-of-band byte identity
+ ✓ skill/test/pbt.test.ts              ( 7 tests)   round-trip, fail-closed, no-trailing, compact-u16 (fast-check)
+ ✓ skill/test/fixtures.test.ts         (52 tests)   golden + web3.js + kit differential + disagreement + no-network
+ ✓ skill/test/real-fixtures.test.ts    (14 tests)   REAL mainnet txs decoded offline + cross-validated
+ ✓ skill/test/fulltx.test.ts           ( 9 tests)   full signed-tx input stripped + fail-closed (W011 §7)
+ ✓ skill/test/legacy-runner.test.ts    ( 1 test )   runs the standalone node smoke runner
 
- Test Files  10 passed (10)
-      Tests  183 passed (183)
+ Test Files  13 passed (13)
+      Tests  238 passed (238)
 ```
 
 There are two entry points: `npm test` (vitest, the full suite) and
@@ -397,14 +459,14 @@ commands and no network access at test time:
 ```bash
 npm install            # deps for generation + cross-validation only (no postinstall, no curl)
 npm run gen-fixtures   # rebuild the 10 synthetic .b64 from @solana/web3.js (deterministic, byte-identical)
-npm test               # 183 checks, 10 files, fully offline; exits nonzero on any failure
+npm test               # 238 checks, 13 files, fully offline; exits nonzero on any failure
 ```
 
-Expected: `Tests  183 passed (183)`, and `git status` clean afterward (the
+Expected: `Tests  238 passed (238)`, and `git status` clean afterward (the
 deterministic generator reproduces the committed `.b64` byte-for-byte). To also
 confirm the type contract: `npx tsc --noEmit` (exit 0).
 
-What those 183 checks actually validate:
+What those 238 checks actually validate:
 
 | Coverage area | Where | What it proves |
 |---|---|---|
@@ -415,6 +477,9 @@ What those 183 checks actually validate:
 | **SDK role / demotion goldens** | `roles.test.ts` | Two-layer writability against SDK semantics: `is_writable_index` partition, runtime program-id demotion flip (SIMD-0105), multi-lookup ordering, reserved-key set vs Incinerator, ALT accounts marked `addressVerified: false`. |
 | **Full-tx input + untrusted data (W011)** | `fulltx.test.ts` | A full signed transaction (signatures + message) is detected, its signatures stripped (never verified), and the inner message reaches the same verdict as the bare message; a mismatched signature count or non-canonical garbage fails closed; decoded on-chain strings are surfaced as data, never obeyed. |
 | **Catalog coverage (never false-SIGN)** | `catalog-coverage.test.ts` | The dangerous shapes most easily missed — Token-2022 `Approve`/`CloseAccount`/`Freeze`/`MintTo`, `Burn` (both programs), System `WithdrawNonceAccount`, and large `CreateAccount` / `CreateAccountWithSeed` funding — must **never** return SIGN; small/benign equivalents still SIGN (no over-flagging). Closes the SPL-vs-Token-2022 asymmetry and the variable-offset seed-funding drain. |
+| **Squads VaultTransaction decode** | `squads.test.ts` | 28 checks: discriminator math, borsh decode of frozen real mainnet PDA fixture (344 bytes, verified against `meta.json`), ALT-space program-id resolution (fail-closed null when index >= accountKeys.len), structural fail-closed (bad disc, truncation, trailing junk, over-long Vec), determinism, purity (no network imports). |
+| **Squads + verdict integration** | `squad-verdict.test.ts` | 13 checks: execute without inner bytes -> HOLD; with inner `update_admin` -> REJECT naming the authority; durable-nonce + execute -> REJECT (Drift composite); bare durable nonce stays HOLD (regression guard); `governanceContext` escalates to REJECT; Squads execute NEVER produces SIGN (with or without inner). |
+| **Transaction digest** | `digest.test.ts` | 14 checks: SHA-256 correctness, short-code format and determinism, round-trip, out-of-band identity confirms, no-network purity. |
 | **Fail-closed / adversarial** | `decode.test.ts`, `verdict.test.ts` | Truncation, trailing garbage, out-of-range index, unsupported version `0x81`, empty/single-byte → REJECT; unresolved ALT can never SIGN; unknown program writing a value-bearing account → REJECT; cross-oracle disagreement ⇒ fail-closed (V10); prompt-injection (decoded data never interpolated, V8); banned reassurance phrases fail loud. |
 | **Determinism** | `run.ts` + CI | The standalone node runner's output is byte-identical across two runs (no timing/nondeterminism in the core). |
 | **No-network** | `fixtures.test.ts` | Core modules import no `http`/`https`/`net`/`fetch`; the suite makes zero network calls at run time. |
@@ -451,15 +516,19 @@ sign-safe-skill/
     │   ├── danger-catalog.md
     │   └── decode-notes.md
     ├── catalog/
-    │   └── danger-primitives.json
+    │   ├── danger-primitives.json   # 35-entry native-program danger catalog
+    │   └── anchor-danger.json       # 11-entry Anchor authority-mutation registry (clear-signing)
     ├── src/
     │   ├── types.ts        # the shared contract (two-layer role model)
     │   ├── decode.ts       # PURE base64 -> DecodedMessage (legacy + v0) + re-encoder
     │   ├── roles.ts        # PURE two-layer writability (partition + demotion) + reserved set
     │   ├── classify.ts     # PURE instruction x catalog -> Finding[]
+    │   ├── classify-inner.ts # PURE inner-instruction classifier (Squads VaultTransaction)
     │   ├── outflow.ts      # PURE statically-declared signer outflow
     │   ├── tlv.ts          # PURE Token-2022 mint/account TLV extension walker
     │   ├── banned.ts       # PURE banned-reassurance-phrase enforcement
+    │   ├── squads.ts       # PURE Squads v4 VaultTransaction borsh decoder + isSquadsVaultExecute
+    │   ├── digest.ts       # PURE SHA-256 transaction digest + short-code (cross-device verification)
     │   ├── verdict.ts      # PURE Finding[] -> Verdict + verdict.json (Drift composite)
     │   ├── enrich.ts       # IMPURE runtime hooks (NEVER imported by core/tests)
     │   └── cli.ts          # thin CLI wrapper
@@ -469,12 +538,16 @@ sign-safe-skill/
     │   ├── NN_*.b64        # 10 synthetic serialized messages
     │   ├── NN_*.verdict.json   # 10 golden verdicts
     │   └── real/           # REAL mainnet fixtures (frozen .b64 + .meta.json provenance)
+    │       └── accounts/   # frozen on-chain account bytes (Squads VaultTransaction PDA)
     └── test/
         ├── helpers.ts          # offline message-byte builders + fixture loaders
         ├── decode.test.ts      # wire-format / compact-u16 / sanitization / fail-closed
         ├── roles.test.ts       # role-derivation goldens (partition + demotion)
         ├── classify.test.ts    # instruction classification + TLV
         ├── verdict.test.ts     # durable nonce / Drift composite / prompt-injection
+        ├── squads.test.ts      # VaultTransaction decode, discriminator, ALT-unresolved, real fixture
+        ├── squad-verdict.test.ts  # Squads+verdict integration, governanceContext, never-SIGN
+        ├── digest.test.ts      # SHA-256 digest, short-code, determinism, out-of-band identity
         ├── pbt.test.ts         # fast-check property-based tests (seed 42)
         ├── fixtures.test.ts    # golden + web3.js/kit differential + no-network
         ├── real-fixtures.test.ts # real mainnet txs decoded offline + cross-validated

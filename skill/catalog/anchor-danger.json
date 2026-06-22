@@ -1,0 +1,94 @@
+{
+  "$schema": "sign-safe/anchor-danger-catalog@1",
+  "description": "Clear-signing registry of dangerous Anchor instructions matched by their 8-byte sha256(global:<name>)[0..8] discriminator. A 'program' of '*' matches any program carrying that discriminator (discriminator-only match). A specific base58 program id narrows the match to that program. Severity REJECT = admin/ownership transfer that enables immediate full control loss; HOLD = significant protocol-level danger requiring human review.",
+  "entries": [
+    {
+      "name": "update_admin",
+      "discriminatorHex": "a1b028d53cb8b3e4",
+      "program": "*",
+      "severity": "REJECT",
+      "label": "Anchor: update_admin (admin transfer)",
+      "mapsToLoss": "Transfers the admin role of a protocol to the new address specified in the instruction. An attacker gaining admin can drain protocol funds, modify parameters, or rug users instantly."
+    },
+    {
+      "name": "set_admin",
+      "discriminatorHex": "fba300345bc2bb5c",
+      "program": "*",
+      "severity": "REJECT",
+      "label": "Anchor: set_admin (admin assignment)",
+      "mapsToLoss": "Assigns or replaces the admin authority of an Anchor program. Equivalent to update_admin; full protocol control transfers to the new admin immediately."
+    },
+    {
+      "name": "transfer_admin",
+      "discriminatorHex": "2af2426ae40a6f9c",
+      "program": "*",
+      "severity": "REJECT",
+      "label": "Anchor: transfer_admin (admin transfer)",
+      "mapsToLoss": "Initiates or completes an admin authority transfer. Once the new admin accepts, they gain full control over the protocol."
+    },
+    {
+      "name": "set_owner",
+      "discriminatorHex": "48ca78344d8060c5",
+      "program": "*",
+      "severity": "REJECT",
+      "label": "Anchor: set_owner (ownership assignment)",
+      "mapsToLoss": "Replaces the owner of an Anchor-managed account or protocol. The new owner can withdraw funds, modify state, or reassign further authority."
+    },
+    {
+      "name": "transfer_ownership",
+      "discriminatorHex": "41b1d749352d632f",
+      "program": "*",
+      "severity": "REJECT",
+      "label": "Anchor: transfer_ownership (ownership transfer)",
+      "mapsToLoss": "Transfers ownership of the protocol or a key account to a new address. Enables complete takeover by the recipient."
+    },
+    {
+      "name": "set_authority",
+      "discriminatorHex": "85fa25156ea31a79",
+      "program": "*",
+      "severity": "REJECT",
+      "label": "Anchor: set_authority (authority assignment)",
+      "mapsToLoss": "Sets a new authority on an Anchor-managed resource. Depending on the authority type, enables withdrawals, upgrades, or parameter control by the attacker."
+    },
+    {
+      "name": "update_authority",
+      "discriminatorHex": "202e401c954bf358",
+      "program": "*",
+      "severity": "REJECT",
+      "label": "Anchor: update_authority (authority update)",
+      "mapsToLoss": "Replaces an existing authority. Same danger surface as set_authority."
+    },
+    {
+      "name": "set_upgrade_authority",
+      "discriminatorHex": "72ee56da0a7f2d49",
+      "program": "*",
+      "severity": "REJECT",
+      "label": "Anchor: set_upgrade_authority (upgrade authority transfer)",
+      "mapsToLoss": "Transfers the upgrade authority of a program account. The new authority can deploy arbitrary bytecode, enabling an instant rug."
+    },
+    {
+      "name": "update_whitelist",
+      "discriminatorHex": "5ec62114c0612c3b",
+      "program": "*",
+      "severity": "HOLD",
+      "label": "Anchor: update_whitelist (whitelist modification)",
+      "mapsToLoss": "Modifies an on-chain whitelist controlling which addresses may interact with the protocol. An attacker can add themselves or remove legitimate actors."
+    },
+    {
+      "name": "add_collateral",
+      "discriminatorHex": "7f52792aa1b0f9ce",
+      "program": "*",
+      "severity": "HOLD",
+      "label": "Anchor: add_collateral (collateral modification)",
+      "mapsToLoss": "Adds or modifies collateral configuration in a lending or perpetuals protocol. Misconfiguration enables undercollateralized borrowing or oracle manipulation attacks."
+    },
+    {
+      "name": "update_oracle",
+      "discriminatorHex": "7029d112f8e2fcbc",
+      "program": "*",
+      "severity": "HOLD",
+      "label": "Anchor: update_oracle (oracle configuration change)",
+      "mapsToLoss": "Replaces or reconfigures a price oracle. A manipulated oracle enables draining a protocol via inflated/deflated prices."
+    }
+  ]
+}

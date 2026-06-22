@@ -196,6 +196,15 @@ export interface Verdict {
 export interface VerdictContext {
   /** Lamport threshold above which a System Transfer is a HOLD finding. */
   lamportThreshold: number;
+  /**
+   * When true, a bare durable-nonce transaction (even with no other finding)
+   * is escalated to REJECT. This models a strict privileged-signing policy
+   * where non-expiring transactions are never acceptable, regardless of
+   * payload. Default false: a truly bare durable nonce (no other finding, no
+   * unknown program) remains HOLD (a durable nonce can be legitimate for
+   * offline cold-storage signing).
+   */
+  governanceContext?: boolean;
 }
 
 export const DEFAULT_CONTEXT: VerdictContext = {

@@ -487,6 +487,14 @@ export function decodeInput(b64: string): {
   message: DecodedMessage;
   inputWasFullTransaction: boolean;
   signatureCount: number;
+  /**
+   * The raw wire bytes of the MESSAGE (without signature slots). This is the
+   * input to sha256 for the transaction digest -- covering the same bytes the
+   * verdict was computed over. For a bare-message input these are the base64-
+   * decoded bytes as-is; for a full signed transaction these are the bytes
+   * starting after the signature slots.
+   */
+  rawMessageBytes: Uint8Array;
 } {
   let raw: Uint8Array;
   try {
@@ -497,14 +505,18 @@ export function decodeInput(b64: string): {
   if (raw.length === 0) throw new DecodeError("empty input");
   try {
     const message = decodeMessageBytes(raw);
-    return { message, inputWasFullTransaction: false, signatureCount: 0 };
+    return { message, inputWasFullTransaction: false, signatureCount: 0, rawMessageBytes: raw };
   } catch (messageErr) {
     const full = tryDecodeFullTransaction(raw);
     if (full !== null) {
+      // Reconstruct the message start offset to slice the raw message bytes.
+      const head = decodeCompactU16At(raw, 0)!;
+      const msgStart = head.bytesRead + full.signatureCount * 64;
       return {
         message: full.message,
         inputWasFullTransaction: true,
         signatureCount: full.signatureCount,
+        rawMessageBytes: raw.subarray(msgStart),
       };
     }
     throw messageErr; // fail-closed with the original message-parse error

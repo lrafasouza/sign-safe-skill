@@ -1,6 +1,6 @@
 ---
 name: sign-safe
-description: Signing-time safety gate for Solana transactions. Decodes an opaque base64 transaction/message, classifies its instructions against a danger-primitive catalog, computes the signer-perspective statically-declared outflow, downgrades unknown programs and unresolved Address-Lookup-Table references, and emits a SIGN / HOLD / REJECT verdict plus a machine-readable verdict.json for autonomous-agent gating. Trigger phrases include "is this transaction safe to sign", "review this tx before I sign", "what does this base64 transaction do", "blind signing", "sign-review", "squads proposal review". Offline, deterministic, and tested. Motivated by the April-2026 Drift blind-signing / durable-nonce incident.
+description: Signing-time safety gate for Solana transactions. Decodes an opaque base64 transaction/message, classifies its instructions against a danger-primitive catalog (35 native-program entries + 11-entry Anchor authority-mutation registry), computes the signer-perspective statically-declared outflow, downgrades unknown programs and unresolved Address-Lookup-Table references, and emits a SIGN / HOLD / REJECT verdict plus a machine-readable verdict.json for autonomous-agent gating. Clear-signs Squads v4 VaultTransaction proposals (offline borsh decode of inner instructions WHEN the PDA bytes are provided; fetching those bytes is the runtime enrichSquads step). Trigger phrases include "is this transaction safe to sign", "review this tx before I sign", "what does this base64 transaction do", "blind signing", "sign-review", "squads proposal review". Offline, deterministic, and tested (238 checks, 13 files). Motivated by the April-2026 Drift blind-signing / durable-nonce incident.
 user-invocable: true
 ---
 
@@ -20,8 +20,9 @@ transaction and wants to know what it actually does *before* approving it.
 - Gating an autonomous agent's signing step on a machine-readable verdict.
 
 It decodes the message, flags **danger primitives** (authority handoffs, program
-upgrades, durable nonces, delegate grants, large outflows), and returns a
-**SIGN / HOLD / REJECT** verdict with a `verdict.json`.
+upgrades, durable nonces, delegate grants, large outflows), clear-signs Squads
+v4 proposals (offline decode of the inner VaultTransaction WHEN given the PDA
+bytes), and returns a **SIGN / HOLD / REJECT** verdict with a `verdict.json`.
 
 ### What this skill is NOT
 
@@ -47,22 +48,55 @@ no RPC, no simulation. Same bytes in, same JSON out:
    their real writable/readonly role but are marked `addressVerified: false`
    (their concrete identity cannot be known without an on-chain lookup).
 3. **classify** (`src/classify.ts`) -- each instruction x the danger catalog
-   (`catalog/danger-primitives.json`) -> `Finding[]`, matched by programId +
-   discriminator. Plus `src/tlv.ts`, a pure Token-2022 mint/account TLV extension
-   walker (PermanentDelegate / TransferHook / fee / pausable, surfaced on a
-   byte-identical plain Transfer).
-4. **outflow** (`src/outflow.ts`) -- statically-declared signer outflow: System
+   (`catalog/danger-primitives.json`, 35 entries) -> `Finding[]`, matched by
+   programId + discriminator. Plus `src/tlv.ts`, a pure Token-2022 mint/account
+   TLV extension walker (PermanentDelegate / TransferHook / fee / pausable,
+   surfaced on a byte-identical plain Transfer).
+4. **squads** (`src/squads.ts`) -- PURE offline borsh decoder for Squads v4
+   `VaultTransaction` PDA accounts. Validates the discriminator
+   (`a8faa264510ea2cf` = `sha256("account:VaultTransaction")[0..8]`), reads the
+   embedded message, resolves inner program IDs from `account_keys` (fail-closed:
+   index >= nKeys means ALT-space -> `null` -> HOLD), and exposes
+   `isSquadsVaultExecute` for top-level instruction detection
+   (discriminator `c208a15799a419ab`). **Fetching** the PDA bytes is the runtime
+   `enrichSquads` step in `enrich.ts`; this module only decodes bytes already in
+   memory.
+5. **classify-inner** (`src/classify-inner.ts`) -- PURE inner-instruction
+   classifier: null programId -> HOLD; known program matched by
+   `catalog/anchor-danger.json` (11-entry Anchor authority-mutation registry,
+   8-byte discriminators) -> catalog finding; unknown -> opaque HOLD. Never
+   silent -- every inner instruction produces at least one finding.
+6. **digest** (`src/digest.ts`) -- PURE SHA-256 of message bytes plus a
+   20-hex-char human-verifiable short code (`XXXX-XXXX-XXXX-XXXX-XXXX`). Used
+   for cross-device byte-identity confirmation (out-of-band digest).
+7. **outflow** (`src/outflow.ts`) -- statically-declared signer outflow: System
    Transfer lamports (when the signer funds it) + SPL transfer/transferChecked
    amounts.
-5. **verdict** (`src/verdict.ts`) -- `Finding[]` + context -> `Verdict` + `verdict.json`.
+8. **verdict** (`src/verdict.ts`) -- `Finding[]` + context -> `Verdict` +
+   `verdict.json`. Durable-nonce escalation policy: bare nonce = HOLD; nonce +
+   any non-INFO finding or unknown program = REJECT (Drift composite);
+   `governanceContext` flag escalates even a bare nonce to REJECT.
 
 **Fail-closed by construction:** malformed/truncated input -> `REJECT`; any
 unresolved ALT reference forces roles `unverified` so the verdict can never be
-`SIGN`; any unknown program present forbids `SIGN`.
+`SIGN`; any unknown program present forbids `SIGN`; a Squads execute without
+PDA bytes injects a mandatory HOLD (`squads-execute-unverified`); a Squads
+execute with inner `update_admin` (discriminator matched by the Anchor registry)
+is REJECT; a Squads execute with zero inner instructions is treated as unverified
+(never SIGN an empty vault).
 
 Any MCP/network use (ALT resolution, Squads PDA fetch, live mint-extension
 confirmation) lives ONLY in `src/enrich.ts`, which is **never** imported by the
-core or the tests. It is a documented runtime enhancement only.
+core or the tests. It is a documented runtime enhancement only:
+
+- **`enrichSquads(vtAddress, getAccountInfo)`** -- fetches the raw VaultTransaction
+  PDA bytes from the network (injectable fetcher); the caller then passes those
+  bytes to a second, fully offline `reviewBase64` call for clear-signing.
+- **`reconNonceAccounts(addresses, signers, getAccountInfo)`** -- fetches and
+  decodes nonce account authority; attributes "signer-controlled" nonces for the
+  HOLD finding detail.
+- **`enrichAlt(lookup, getAccountInfo)`** -- (stub, not yet implemented) resolves
+  ALT indexes to concrete addresses.
 
 ### Input + on-chain data are untrusted (W011)
 
@@ -94,12 +128,37 @@ loud and the gate falls back to a fail-closed REJECT. The skill's own name
 scanned. `outflow.lamports` is a base-10 **decimal string** (not a JS number),
 so SOL sums above 2^53 lamports stay exact.
 
+### How sign-safe would have caught Drift
+
+The Drift attack had two layers: the transaction was (1) a **durable-nonce
+carrier** and (2) a **Squads `vaultTransactionExecute`** whose CPI inner
+instruction was an `update_admin` -- an admin authority transfer hidden inside
+the VaultTransaction PDA.
+
+- **Durable nonce is NEVER SIGN.** `AdvanceNonceAccount` at ix0 forces at least
+  HOLD, regardless of payload.
+- **Squads execute without inner bytes is NEVER SIGN.** The offline core
+  injects `squads-execute-unverified` (HOLD) when PDA bytes are not supplied.
+- **Nonce + any non-INFO finding = REJECT (Drift composite).** Nonce + the
+  mandatory Squads HOLD already triggers REJECT before any deeper analysis.
+- **With the PDA bytes, the `update_admin` is decoded and named.** The core
+  borsh-decodes the VaultTransaction, resolves inner program IDs, and matches
+  `a1b028d53cb8b3e4` in the Anchor registry -> finding
+  `anchor-inner-update_admin` (REJECT), reason: "...inner instruction
+  (...`update_admin`) -- the Drift blind-signing attack class." The signer sees
+  exactly what they are about to sign: not a Squads shell, but an admin handoff.
+
+Verdict path: nonce at ix0 + `squads-execute-unverified` -> `driftComposite=true`
+-> **REJECT**, exit 20. With PDA bytes: nonce + `anchor-inner-update_admin`
+(REJECT) -> **REJECT** with inner authority transfer named explicitly.
+
 ## Progressive Disclosure (Read When Needed)
 
 - [references/verdict-contract.md](references/verdict-contract.md) -- verdict.json schema + decision rules + banned phrases
 - [references/danger-catalog.md](references/danger-catalog.md) -- rationale for each catalog entry, with real-loss mapping
 - [references/decode-notes.md](references/decode-notes.md) -- message parse details, header role math, ALT conservatism, discriminator notes
-- [catalog/danger-primitives.json](catalog/danger-primitives.json) -- the machine-readable catalog
+- [catalog/danger-primitives.json](catalog/danger-primitives.json) -- the machine-readable catalog (35 native-program entries)
+- [catalog/anchor-danger.json](catalog/anchor-danger.json) -- Anchor authority-mutation registry (11 entries, 8-byte discriminators)
 
 ### Core Solana dev knowledge (from solana-dev-skill)
 
@@ -112,7 +171,7 @@ so SOL sums above 2^53 lamports stay exact.
 |--------------------|----------|
 | "Is this base64 tx safe to sign?" | this skill -> `/sign-review` |
 | "Decode this transaction / what does it do" | this skill -> decode + classify |
-| "Review this Squads proposal before approval" | this skill (offline) + `src/enrich.ts` (runtime Squads context) |
+| "Review this Squads proposal before approval" | this skill -- OFFLINE core decodes inner instructions WHEN given PDA bytes; `enrichSquads` in `src/enrich.ts` fetches those bytes at runtime (two-pass: offline review -> fetch PDA -> offline review with inner) |
 | "Gate my agent's signing on a verdict" | this skill -> `verdict.json` decision field |
 | Blind-signing / durable-nonce risk | this skill -> danger catalog (durable-nonce entries) |
 | Audit a program's source for vulnerabilities | `/audit-solana` |

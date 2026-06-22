@@ -16,18 +16,22 @@
 import { readFileSync } from "node:fs";
 import { DEFAULT_CONTEXT, type Verdict, type VerdictContext } from "./types.ts";
 import { reviewBase64, verdictToJson, rejectVerdict } from "./verdict.ts";
+import { transactionDigest, TransactionDigestError } from "./digest.ts";
 
 function parseArgs(argv: string[]): {
   file?: string;
   threshold: number;
   jsonOnly: boolean;
+  digestOnly: boolean;
 } {
   let file: string | undefined;
   let threshold = DEFAULT_CONTEXT.lamportThreshold;
   let jsonOnly = false;
+  let digestOnly = false;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--json") jsonOnly = true;
+    else if (a === "--digest") digestOnly = true;
     else if (a === "--threshold") {
       const v = argv[++i];
       if (v === undefined || !/^\d+$/.test(v)) {
@@ -47,7 +51,7 @@ function parseArgs(argv: string[]): {
       file = a;
     }
   }
-  return { file, threshold, jsonOnly };
+  return { file, threshold, jsonOnly, digestOnly };
 }
 
 function readInput(file: string | undefined): string {
@@ -121,23 +125,48 @@ function main(): void {
   // is treated as "could not establish what is being signed" => REJECT.
   let verdict: Verdict;
   let jsonOnly = false;
+  let digestOnly = false;
+
   try {
     const args = parseArgs(process.argv.slice(2));
     jsonOnly = args.jsonOnly;
-    const ctx: VerdictContext = { lamportThreshold: args.threshold };
+    digestOnly = args.digestOnly;
     const b64 = readInput(args.file);
+
+    // --digest: print the transaction digest and exit (no verdict).
+    // This is a pure, offline operation; it does NOT replace the verdict.
+    if (digestOnly) {
+      try {
+        const dig = transactionDigest(b64);
+        process.stdout.write(`message version : ${dig.messageVersion}\n`);
+        process.stdout.write(`sha256          : ${dig.sha256}\n`);
+        process.stdout.write(`short code      : ${dig.shortCode}\n`);
+        process.stdout.write(
+          `\nVerify this short code independently on a second device to confirm the\n` +
+          `transaction bytes have not been modified in transit.\n`,
+        );
+        process.exitCode = 0;
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : String(err);
+        process.stderr.write(`digest error: ${detail}\n`);
+        process.exitCode = 20;
+      }
+      return;
+    }
+
+    const ctx: VerdictContext = { lamportThreshold: args.threshold };
     verdict = reviewBase64(b64, ctx);
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
     verdict = rejectVerdict(detail);
   }
 
-  if (!jsonOnly) printHuman(verdict);
-  process.stdout.write(verdictToJson(verdict) + "\n");
+  if (!jsonOnly) printHuman(verdict!);
+  process.stdout.write(verdictToJson(verdict!) + "\n");
 
   // Exit code mirrors the verdict so scripts can gate on it.
   // 0 = SIGN, 10 = HOLD, 20 = REJECT.
-  process.exitCode = verdict.decision === "SIGN" ? 0 : verdict.decision === "HOLD" ? 10 : 20;
+  process.exitCode = verdict!.decision === "SIGN" ? 0 : verdict!.decision === "HOLD" ? 10 : 20;
 }
 
 main();
