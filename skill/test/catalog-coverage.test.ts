@@ -84,6 +84,12 @@ describe("catalog coverage — dangerous shapes must never SIGN", () => {
     ["Token-2022 UnwrapLamports (45)", msg(T22, [45]), "token2022-unwrap-lamports"],
     ["SPL Batch (255) — undecoded sub-instructions", msg(SPL, [255]), "spl-batch"],
     ["Token-2022 Batch (255) — undecoded sub-instructions", msg(T22, [255]), "token2022-batch"],
+    // 4th-pass: Token-2022 extension sub-instructions (outer tag + inner byte)
+    ["Token-2022 ConfidentialMintBurn::Mint (42,3)", msg(T22, [42, 3]), "token2022-confidential-mint"],
+    ["Token-2022 ConfidentialMintBurn::Burn (42,4)", msg(T22, [42, 4]), "token2022-confidential-burn"],
+    ["Token-2022 TransferFee::WithdrawWithheldFromMint (26,2)", msg(T22, [26, 2]), "token2022-withdraw-withheld-fees"],
+    ["Token-2022 TransferFee::WithdrawWithheldFromAccounts (26,3)", msg(T22, [26, 3]), "token2022-withdraw-withheld-fees"],
+    ["Token-2022 ConfidentialTransferFee::WithdrawWithheld (37,1)", msg(T22, [37, 1]), "token2022-confidential-withdraw-withheld-fees"],
   ];
 
   for (const [name, b64, findingId] of cases) {
@@ -105,5 +111,14 @@ describe("catalog coverage — dangerous shapes must never SIGN", () => {
   it("positive control: a small System CreateAccount (under threshold) still SIGNs", () => {
     const v = reviewBase64(msg(SYSTEM, [...u32le(0), ...u64le(2_000_000n), ...u64le(0n), ...new Array(32).fill(0)]));
     expect(v.decision).toBe("SIGN");
+  });
+
+  it("sub-discriminator precision: a config sub-instruction under the same extension tag still SIGNs", () => {
+    // ConfidentialMintBurn::InitializeMint (42,0) is config -> must NOT be flagged
+    expect(reviewBase64(msg(T22, [42, 0])).decision).toBe("SIGN");
+    // TransferFee::TransferCheckedWithFee (26,1) is a normal transfer -> SIGN
+    expect(reviewBase64(msg(T22, [26, 1])).decision).toBe("SIGN");
+    // TransferFee::HarvestWithheldTokensToMint (26,4) is permissionless consolidation -> SIGN
+    expect(reviewBase64(msg(T22, [26, 4])).decision).toBe("SIGN");
   });
 });

@@ -145,6 +145,31 @@ review; **INFO** = noted, never escalates on its own.
   the batched contents. (Recursive sub-instruction decoding is a planned
   enhancement; HOLD is the fail-closed minimum.)
 
+## Token-2022 extension sub-instructions (outer tag + inner discriminator)
+
+Some Token-2022 extension tags select an extension with byte 0 and a
+sub-instruction with byte 1. The catalog matches BOTH bytes (`subDiscriminator`),
+so dangerous sub-instructions are flagged while config sub-instructions under the
+same tag are not. (Verified against the canonical `solana-program/token-2022`
+interface enums.)
+
+### `token2022-confidential-mint` / `token2022-confidential-burn` — `ConfidentialMintBurn` (tag 42, sub 3/4) (HOLD)
+- **Maps to loss:** The confidential-balance encodings of MintTo (sub 3) and Burn
+  (sub 4) — same supply-inflation / permanent-loss classes as the plain `MintTo`
+  and `Burn` the catalog already HOLDs. `InitializeMint` (42, sub 0) is config and
+  correctly stays SIGN.
+
+### `token2022-withdraw-withheld-fees` — `TransferFee::WithdrawWithheld` (tag 26, sub 2/3) (HOLD)
+- **Maps to loss:** Moves withheld transfer-fee tokens out to a destination under
+  the withdraw-withheld authority. `TransferCheckedWithFee` (26, sub 1, a normal
+  transfer) and `HarvestWithheldTokensToMint` (26, sub 4, permissionless
+  consolidation to the mint) are correctly NOT flagged.
+
+### `token2022-confidential-withdraw-withheld-fees` — `ConfidentialTransferFee::WithdrawWithheld` (tag 37, sub 1/2) (HOLD)
+- **Maps to loss:** Confidential variant of the withheld-fee token outflow. The
+  harvest/enable/disable sub-instructions (37, sub 3/4/5) are permissionless or
+  config and correctly stay SIGN.
+
 ## Freeze & supply control (HOLD)
 
 These are mint/freeze-authority powers. A signer being asked to authorize one is

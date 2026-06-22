@@ -312,6 +312,19 @@ export function classify(
 
       if (!matched) continue;
 
+      // Token-2022 extension sub-discriminator (byte 1): tags like 26/37/42
+      // select an extension; the sub-instruction is byte[1]. An entry with a
+      // subDiscriminator only matches when byte[1] is in its list, so config
+      // sub-instructions under the same extension tag are NOT mis-flagged
+      // (e.g. ConfidentialMintBurn::Mint(42,3)/Burn(42,4) are dangers, but
+      // InitializeMint(42,0) is config and must stay a SIGN on its merits).
+      if (entry.detection.subDiscriminator) {
+        const sub = ix.data.length > 1 ? (ix.data[1] as number) : null;
+        if (sub === null || !entry.detection.subDiscriminator.includes(sub)) {
+          continue;
+        }
+      }
+
       // Threshold-gated entry: a System Transfer is only a finding when its
       // lamport amount exceeds the configured threshold.
       if (entry.id === "system-large-transfer") {

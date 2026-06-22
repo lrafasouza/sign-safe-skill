@@ -262,6 +262,42 @@
       "mapsToLoss": "Executes a sequence of batched sub-instructions that are NOT individually decoded here; any of them could be a danger primitive -- review the batch contents before signing."
     },
     {
+      "id": "token2022-confidential-mint",
+      "label": "Token-2022 ConfidentialMintBurn: Mint",
+      "program": "token-2022",
+      "programId": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+      "detection": { "instructionType": "ConfidentialMintBurn::Mint", "discriminator": [42], "subDiscriminator": [3] },
+      "severity": "HOLD",
+      "mapsToLoss": "Mints tokens to a confidential balance (extension tag 42, sub 3) -- the confidential-supply encoding of MintTo; same supply-inflation loss class."
+    },
+    {
+      "id": "token2022-confidential-burn",
+      "label": "Token-2022 ConfidentialMintBurn: Burn",
+      "program": "token-2022",
+      "programId": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+      "detection": { "instructionType": "ConfidentialMintBurn::Burn", "discriminator": [42], "subDiscriminator": [4] },
+      "severity": "HOLD",
+      "mapsToLoss": "Irreversibly burns tokens from a confidential balance (extension tag 42, sub 4) -- same permanent-loss class as Burn."
+    },
+    {
+      "id": "token2022-withdraw-withheld-fees",
+      "label": "Token-2022 TransferFee: WithdrawWithheldTokens",
+      "program": "token-2022",
+      "programId": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+      "detection": { "instructionType": "TransferFee::WithdrawWithheld", "discriminator": [26], "subDiscriminator": [2, 3] },
+      "severity": "HOLD",
+      "mapsToLoss": "Transfers withheld transfer-fee tokens out to a destination (extension tag 26, sub 2/3) -- a token outflow controlled by the withdraw-withheld authority."
+    },
+    {
+      "id": "token2022-confidential-withdraw-withheld-fees",
+      "label": "Token-2022 ConfidentialTransferFee: WithdrawWithheldTokens",
+      "program": "token-2022",
+      "programId": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+      "detection": { "instructionType": "ConfidentialTransferFee::WithdrawWithheld", "discriminator": [37], "subDiscriminator": [1, 2] },
+      "severity": "HOLD",
+      "mapsToLoss": "Confidential variant of the withheld-fee token outflow (extension tag 37, sub 1/2) -- moves withheld tokens out under the withdraw-withheld authority."
+    },
+    {
       "id": "system-withdraw-nonce",
       "label": "System: WithdrawNonceAccount",
       "program": "system",

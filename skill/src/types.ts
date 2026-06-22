@@ -213,6 +213,13 @@ export interface CatalogEntry {
     instructionType: string;
     /** Accepted leading discriminator byte(s). Omitted => program-id match. */
     discriminator?: number[];
+    /**
+     * For Token-2022 extension instructions, the OUTER tag (byte 0) selects an
+     * extension and a SECOND byte selects the sub-instruction. When present, the
+     * byte at index 1 must also be in this list for the entry to match -- so a
+     * config sub-instruction under the same extension tag is not mis-flagged.
+     */
+    subDiscriminator?: number[];
   };
   severity: Severity;
   mapsToLoss: string;
