@@ -415,3 +415,98 @@ function indexToKey(staticKeys: string[], index: number): string {
     `program id index ${index} is outside the static key set (programs cannot be ALT-sourced)`,
   );
 }
+
+/**
+ * Read a canonical compact-u16 at a fixed offset WITHOUT consuming a Reader.
+ * Returns null (never throws) on truncation / overlong / non-minimal / >16-bit
+ * encodings. Used only by the full-transaction sniffer, which must fail soft.
+ */
+function decodeCompactU16At(
+  buf: Uint8Array,
+  start: number,
+): { value: number; bytesRead: number } | null {
+  let value = 0;
+  for (let i = 0; i < 3; i++) {
+    const idx = start + i;
+    if (idx >= buf.length) return null;
+    const byte = buf[idx] as number;
+    value |= (byte & 0x7f) << (i * 7);
+    if ((byte & 0x80) === 0) {
+      if (value > 0xffff) return null;
+      if (i > 0 && byte === 0) return null; // non-canonical / non-minimal
+      return { value, bytesRead: i + 1 };
+    }
+  }
+  return null;
+}
+
+/**
+ * Try to interpret raw bytes as a FULL serialized transaction
+ * (`compact-u16 sigCount || sigCount*64 signature bytes || message`) rather than
+ * a bare message. Returns the decoded inner message + signature count, or null
+ * if the bytes are not a well-formed transaction. NEVER throws.
+ *
+ * Strong guard against coincidental matches: the leading signature count MUST
+ * equal the inner message's `numRequiredSignatures` (a signed or partially-signed
+ * transaction always carries exactly one signature slot per required signer), and
+ * the inner message must decode strictly (consuming all of its bytes). Combined
+ * with the message decoder's own strictness, a false positive is effectively
+ * impossible -- and the result is still re-run through the full danger
+ * classification, so the fail-closed guarantees are preserved either way.
+ */
+export function tryDecodeFullTransaction(
+  raw: Uint8Array,
+): { message: DecodedMessage; signatureCount: number } | null {
+  const head = decodeCompactU16At(raw, 0);
+  if (head === null) return null;
+  const signatureCount = head.value;
+  // A transaction has >=1 signature slot; the protocol's signer count is small,
+  // so an absurd leading count means this is not a transaction.
+  if (signatureCount < 1 || signatureCount > 64) return null;
+  const msgStart = head.bytesRead + signatureCount * 64;
+  if (msgStart >= raw.length) return null;
+  let message: DecodedMessage;
+  try {
+    message = decodeMessageBytes(raw.subarray(msgStart));
+  } catch {
+    return null;
+  }
+  // The decisive guard: sig slots must match declared required signatures.
+  if (message.header.numRequiredSignatures !== signatureCount) return null;
+  return { message, signatureCount };
+}
+
+/**
+ * Decode caller input that may be EITHER a bare base64 message OR a full base64
+ * signed transaction. Message-first (the documented primary input), with a
+ * strict full-transaction fallback so an operator who pastes the whole signed
+ * blob gets a transparent result instead of an opaque decode failure. Fail-closed:
+ * if neither interpretation parses, the original message DecodeError is rethrown.
+ */
+export function decodeInput(b64: string): {
+  message: DecodedMessage;
+  inputWasFullTransaction: boolean;
+  signatureCount: number;
+} {
+  let raw: Uint8Array;
+  try {
+    raw = new Uint8Array(Buffer.from(b64.trim(), "base64"));
+  } catch {
+    throw new DecodeError("input is not valid base64");
+  }
+  if (raw.length === 0) throw new DecodeError("empty input");
+  try {
+    const message = decodeMessageBytes(raw);
+    return { message, inputWasFullTransaction: false, signatureCount: 0 };
+  } catch (messageErr) {
+    const full = tryDecodeFullTransaction(raw);
+    if (full !== null) {
+      return {
+        message: full.message,
+        inputWasFullTransaction: true,
+        signatureCount: full.signatureCount,
+      };
+    }
+    throw messageErr; // fail-closed with the original message-parse error
+  }
+}

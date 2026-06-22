@@ -26,7 +26,7 @@
  * and returns a fail-closed REJECT verdict rather than throwing.
  */
 
-import { DecodeError, decodeBase64Message } from "./decode.ts";
+import { DecodeError, decodeInput } from "./decode.ts";
 import { deriveRoles, hasUnverifiedRoles, RESERVED_ACCOUNT_KEYS } from "./roles.ts";
 import { classify } from "./classify.ts";
 import { computeOutflow } from "./outflow.ts";
@@ -84,6 +84,10 @@ export function buildVerdict(args: {
   durableNonceMarker?: boolean;
   /** Any authority/ownership-changing finding is present (V4). */
   authorityOrOwnershipChange?: boolean;
+  /** Caller passed a full signed transaction; signatures were stripped. */
+  inputWasFullTransaction?: boolean;
+  /** Number of stripped signature slots (with inputWasFullTransaction). */
+  signatureCount?: number;
 }): Verdict {
   const {
     messageVersion,
@@ -95,6 +99,8 @@ export function buildVerdict(args: {
     rolesUnverified,
     durableNonceMarker = false,
     authorityOrOwnershipChange = false,
+    inputWasFullTransaction = false,
+    signatureCount = 0,
   } = args;
 
   const worst = worstSeverity(findings);
@@ -155,7 +161,17 @@ export function buildVerdict(args: {
       "Recognized instructions within thresholds; no danger primitives, unknown programs, or unverified ALT references. Not a guarantee of intent -- verify the recipients and amounts yourself.";
   }
 
-  return enforceBannedPhrases({
+  // If the caller handed us a full signed transaction, say so plainly. The
+  // signatures were never verified or reused -- only stripped so the inner
+  // message could be analyzed. This note is factual, never reassuring.
+  if (inputWasFullTransaction) {
+    reason =
+      `Input was a full signed transaction; analyzed the inner message ` +
+      `(${signatureCount} signature slot(s) stripped, not verified). ` +
+      reason;
+  }
+
+  const verdict: Verdict = {
     schema: "sign-safe/verdict@1",
     decision,
     reason,
@@ -170,7 +186,14 @@ export function buildVerdict(args: {
       decodeFailed: false,
     },
     unknownPrograms,
-  });
+  };
+  // Only attach these fields for a full-transaction input, so the common
+  // bare-message verdict shape (and its golden fixtures) stays unchanged.
+  if (inputWasFullTransaction) {
+    verdict.inputWasFullTransaction = true;
+    verdict.signatureCount = signatureCount;
+  }
+  return enforceBannedPhrases(verdict);
 }
 
 /**
@@ -215,7 +238,11 @@ export function reviewBase64(
   ctx: VerdictContext = DEFAULT_CONTEXT,
 ): Verdict {
   try {
-    const msg = decodeBase64Message(b64);
+    // Accept a bare base64 message OR a full signed transaction (signatures are
+    // stripped, never verified). decodeInput is fail-closed: unparseable input
+    // throws a DecodeError, which the catch below turns into a REJECT.
+    const { message: msg, inputWasFullTransaction, signatureCount } =
+      decodeInput(b64);
     // Runtime-accurate writability: apply the SIMD-0105 reserved-account-keys
     // demotion (R5/R6). Both partition and runtime writability are exposed on
     // each role; the verdict consumes the runtime (demoted) mode.
@@ -232,6 +259,8 @@ export function reviewBase64(
       rolesUnverified: hasUnverifiedRoles(roles),
       durableNonceMarker: cls.durableNonceMarker,
       authorityOrOwnershipChange: cls.authorityOrOwnershipChange,
+      inputWasFullTransaction,
+      signatureCount,
     });
   } catch (err) {
     const msg = err instanceof DecodeError ? err.message : String(err);

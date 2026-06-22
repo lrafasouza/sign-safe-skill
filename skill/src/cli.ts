@@ -76,6 +76,11 @@ function printHuman(v: Verdict): void {
   process.stdout.write(`\n${line}\n`);
   process.stdout.write(`${badge(v.decision)}  ${v.reason}\n`);
   process.stdout.write(`${line}\n`);
+  if (v.inputWasFullTransaction) {
+    process.stdout.write(
+      `input           : full signed transaction (${v.signatureCount} signature slot(s) stripped, not verified)\n`,
+    );
+  }
   process.stdout.write(`message version : ${v.messageVersion}\n`);
   process.stdout.write(`worst severity  : ${v.worstSeverity}\n`);
   process.stdout.write(

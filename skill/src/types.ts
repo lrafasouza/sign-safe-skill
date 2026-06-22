@@ -181,6 +181,15 @@ export interface Verdict {
   };
   /** Programs seen that are not in the recognized set. */
   unknownPrograms: string[];
+  /**
+   * Present ONLY when the caller passed a FULL signed transaction
+   * (`signatures || message`) instead of a bare message: the signature slots
+   * were stripped (never verified) and the inner message analyzed. Omitted for
+   * the common bare-message case so that verdict shape is unchanged.
+   */
+  inputWasFullTransaction?: boolean;
+  /** Number of stripped signature slots (only set with inputWasFullTransaction). */
+  signatureCount?: number;
 }
 
 /** Tunable context for the verdict (kept explicit so tests are deterministic). */

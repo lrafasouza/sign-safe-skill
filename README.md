@@ -95,7 +95,7 @@ is what you *meant*.
 
 Most skills are prose. This one ships a small, **pure-function** TypeScript core
 with a deterministic, fully **offline** test suite (`vitest` + `fast-check`),
-**145 checks across 8 files** (`npm test`, see exact counts below):
+**154 checks across 9 files** (`npm test`, see exact counts below):
 
 - **10 synthetic golden fixtures** -- serialized messages built with
   `@solana/web3.js`, decoded by *our own* parser, verdicts deep-equal-checked
@@ -306,10 +306,11 @@ $ npm test            # vitest run -- the full suite (exits nonzero on any fail)
  ✓ skill/test/pbt.test.ts           ( 7 tests)   round-trip, fail-closed, no-trailing, compact-u16 (fast-check)
  ✓ skill/test/fixtures.test.ts      (52 tests)   golden + web3.js + kit differential + disagreement + no-network
  ✓ skill/test/real-fixtures.test.ts (14 tests)   REAL mainnet txs decoded offline + cross-validated
+ ✓ skill/test/fulltx.test.ts        ( 9 tests)   full signed-tx input stripped + fail-closed (W011 §7)
  ✓ skill/test/legacy-runner.test.ts ( 1 test )   runs the standalone node smoke runner
 
- Test Files  8 passed (8)
-      Tests  145 passed (145)
+ Test Files  9 passed (9)
+      Tests  154 passed (154)
 ```
 
 There are two entry points: `npm test` (vitest, the full suite) and
@@ -351,14 +352,14 @@ commands and no network access at test time:
 ```bash
 npm install            # deps for generation + cross-validation only (no postinstall, no curl)
 npm run gen-fixtures   # rebuild the 10 synthetic .b64 from @solana/web3.js (deterministic, byte-identical)
-npm test               # 145 checks, 8 files, fully offline; exits nonzero on any failure
+npm test               # 154 checks, 9 files, fully offline; exits nonzero on any failure
 ```
 
-Expected: `Tests  145 passed (145)`, and `git status` clean afterward (the
+Expected: `Tests  154 passed (154)`, and `git status` clean afterward (the
 deterministic generator reproduces the committed `.b64` byte-for-byte). To also
 confirm the type contract: `npx tsc --noEmit` (exit 0).
 
-What those 145 checks actually validate:
+What those 154 checks actually validate:
 
 | Coverage area | Where | What it proves |
 |---|---|---|
@@ -367,6 +368,7 @@ What those 145 checks actually validate:
 | **Property-based** | `pbt.test.ts` | fast-check (seed 42): `encode(decode(b)) === b` round-trip, fail-closed on arbitrary `Uint8Array`, no trailing-byte tolerance, compact-u16 invariants over `[0, 65535]`. |
 | **Real mainnet fixtures** | `real-fixtures.test.ts` | 5 frozen mainnet txs (legacy System, SPL-Token, Token-2022, v0 no-ALT, v0 with-ALT) decoded **offline** and cross-validated; each carries a `*.meta.json` with signature, slot, cluster, and capture date for provenance. |
 | **SDK role / demotion goldens** | `roles.test.ts` | Two-layer writability against SDK semantics: `is_writable_index` partition, runtime program-id demotion flip (SIMD-0105), multi-lookup ordering, reserved-key set vs Incinerator, ALT accounts marked `addressVerified: false`. |
+| **Full-tx input + untrusted data (W011)** | `fulltx.test.ts` | A full signed transaction (signatures + message) is detected, its signatures stripped (never verified), and the inner message reaches the same verdict as the bare message; a mismatched signature count or non-canonical garbage fails closed; decoded on-chain strings are surfaced as data, never obeyed. |
 | **Fail-closed / adversarial** | `decode.test.ts`, `verdict.test.ts` | Truncation, trailing garbage, out-of-range index, unsupported version `0x81`, empty/single-byte → REJECT; unresolved ALT can never SIGN; unknown program writing a value-bearing account → REJECT; cross-oracle disagreement ⇒ fail-closed (V10); prompt-injection (decoded data never interpolated, V8); banned reassurance phrases fail loud. |
 | **Determinism** | `run.ts` + CI | The standalone node runner's output is byte-identical across two runs (no timing/nondeterminism in the core). |
 | **No-network** | `fixtures.test.ts` | Core modules import no `http`/`https`/`net`/`fetch`; the suite makes zero network calls at run time. |
