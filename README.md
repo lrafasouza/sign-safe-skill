@@ -37,11 +37,11 @@ Given a base64 message (legacy or v0), the deterministic core:
    modes; Address-Lookup-Table accounts keep their real writable/readonly role
    but are marked `addressVerified: false` (their concrete address is unknown
    offline),
-3. **classifies** each instruction against a 22-entry danger catalog covering
+3. **classifies** each instruction against a 24-entry danger catalog covering
    **both SPL Token and Token-2022** (authority/ownership handoffs, program
    upgrade/close, durable nonces incl. nonce withdrawals, delegate/approve
-   grants, account closes & freezes, mint/supply changes, large transfers) plus
-   a pure Token-2022 TLV extension walker,
+   grants, account closes & freezes, mint/supply changes, token burns, large
+   transfers) plus a pure Token-2022 TLV extension walker,
 4. **computes** the statically-declared signer outflow,
 5. **emits** a `SIGN / HOLD / REJECT` verdict + `verdict.json`, escalating the
    Drift composite (durable-nonce marker at ix0 + authority change) to REJECT.
@@ -74,7 +74,7 @@ in this blob is recognized as dangerous," never "this is safe."
   dependency-free wire parser.
 - Deriving signer / writable / readonly roles and flagging every
   Address-Lookup-Table reference as `unverified`.
-- Classifying instructions against a 22-entry danger-primitive catalog
+- Classifying instructions against a 24-entry danger-primitive catalog
   (authority handoffs, program upgrades, durable nonces, delegate grants,
   account closes, large transfers) plus a pure Token-2022 TLV extension walker.
 - Computing the statically-declared signer outflow (lamports + SPL transfers).
@@ -96,11 +96,25 @@ sign-safe is a **static, offline, fail-closed pre-signing gate**, not a runtime
 simulator and not a signer. It tells you what a blob *is*; you still confirm it
 is what you *meant*.
 
+**Known boundary of catalog-based static analysis.** The catalog flags *known*
+danger primitives on the four native programs (System, SPL Token, Token-2022, BPF
+Loader Upgradeable). An *uncatalogued but valid* instruction on one of those
+programs (e.g. `InitializeAccount`, `SyncNative`, a plain SPL `Transfer`) is
+treated as non-dangerous on that instruction's own merits — flagging every
+uncatalogued instruction would make routine transactions HOLD and is the wrong
+trade for a gate meant to be used. An *out-of-enum* discriminator is rejected by
+the runtime and cannot execute. The implication: a genuinely new dangerous native
+instruction must be added to the catalog as the protocol ships it (the catalog is
+versioned JSON, so this is a one-line data change), and for full economic-effect
+coverage you pair sign-safe with simulation. This is the deliberate scope line of
+static analysis, not a defect — and danger coverage across the catalogued
+programs is regression-tested in `catalog-coverage.test.ts`.
+
 ## Why this skill is different: it actually runs, and it is tested
 
 Most skills are prose. This one ships a small, **pure-function** TypeScript core
 with a deterministic, fully **offline** test suite (`vitest` + `fast-check`),
-**164 checks across 10 files** (`npm test`, see exact counts below):
+**168 checks across 10 files** (`npm test`, see exact counts below):
 
 - **10 synthetic golden fixtures** -- serialized messages built with
   `@solana/web3.js`, decoded by *our own* parser, verdicts deep-equal-checked
@@ -276,7 +290,7 @@ checked and hands intent verification back to the human. CLI exit codes mirror
 the verdict so scripts and agents can gate on them: **`0 = SIGN`, `10 = HOLD`,
 `20 = REJECT`**.
 
-## The danger catalog (22 primitives)
+## The danger catalog (24 primitives)
 
 | id | program | detection | severity | maps to loss |
 |----|---------|-----------|----------|--------------|
@@ -300,6 +314,8 @@ the verdict so scripts and agents can gate on them: **`0 = SIGN`, `10 = HOLD`,
 | `token2022-freeze-account` | Token-2022 | FreezeAccount (10) | HOLD | freezes a holder -> honeypot / denial |
 | `spl-mint-to` | SPL Token | MintTo/MintToChecked (7/14) | HOLD | supply inflation -> dilute / dump |
 | `token2022-mint-to` | Token-2022 | MintTo/MintToChecked (7/14) | HOLD | supply inflation -> dilute / dump |
+| `spl-burn` | SPL Token | Burn/BurnChecked (8/15) | HOLD | irreversible loss of the signer's tokens |
+| `token2022-burn` | Token-2022 | Burn/BurnChecked (8/15) | HOLD | irreversible loss of the signer's tokens |
 | `system-withdraw-nonce` | System | WithdrawNonceAccount (5) | HOLD | SOL drain from a nonce account |
 | `system-large-transfer` | System | Transfer (2) over threshold | HOLD | direct SOL outflow above threshold |
 
@@ -315,7 +331,7 @@ $ npm test            # vitest run -- the full suite (exits nonzero on any fail)
  ✓ skill/test/decode.test.ts        (25 tests)   compact-u16 vectors/rejection, D19, versions, fail-closed
  ✓ skill/test/roles.test.ts         (13 tests)   is_writable_index + demotion goldens, multi-lookup, reserved
  ✓ skill/test/classify.test.ts        (21 tests)   Transfer/TransferChecked, SetAuthority, TLV, loader, routing
- ✓ skill/test/catalog-coverage.test.ts (10 tests)   dangerous shapes never SIGN (Token-2022 Approve/Close/Freeze/MintTo, WithdrawNonce, CreateAccount)
+ ✓ skill/test/catalog-coverage.test.ts (14 tests)   dangerous shapes never SIGN (Token-2022 Approve/Close/Freeze/MintTo, Burn, WithdrawNonce, CreateAccount[WithSeed])
  ✓ skill/test/verdict.test.ts         (12 tests)   durable nonce ix0 gate, Drift composite, prompt-injection, V2
  ✓ skill/test/pbt.test.ts             ( 7 tests)   round-trip, fail-closed, no-trailing, compact-u16 (fast-check)
  ✓ skill/test/fixtures.test.ts        (52 tests)   golden + web3.js + kit differential + disagreement + no-network
@@ -324,7 +340,7 @@ $ npm test            # vitest run -- the full suite (exits nonzero on any fail)
  ✓ skill/test/legacy-runner.test.ts   ( 1 test )   runs the standalone node smoke runner
 
  Test Files  10 passed (10)
-      Tests  164 passed (164)
+      Tests  168 passed (168)
 ```
 
 There are two entry points: `npm test` (vitest, the full suite) and
@@ -366,14 +382,14 @@ commands and no network access at test time:
 ```bash
 npm install            # deps for generation + cross-validation only (no postinstall, no curl)
 npm run gen-fixtures   # rebuild the 10 synthetic .b64 from @solana/web3.js (deterministic, byte-identical)
-npm test               # 164 checks, 10 files, fully offline; exits nonzero on any failure
+npm test               # 168 checks, 10 files, fully offline; exits nonzero on any failure
 ```
 
-Expected: `Tests  164 passed (164)`, and `git status` clean afterward (the
+Expected: `Tests  168 passed (168)`, and `git status` clean afterward (the
 deterministic generator reproduces the committed `.b64` byte-for-byte). To also
 confirm the type contract: `npx tsc --noEmit` (exit 0).
 
-What those 164 checks actually validate:
+What those 168 checks actually validate:
 
 | Coverage area | Where | What it proves |
 |---|---|---|
@@ -383,7 +399,7 @@ What those 164 checks actually validate:
 | **Real mainnet fixtures** | `real-fixtures.test.ts` | 5 frozen mainnet txs (legacy System, SPL-Token, Token-2022, v0 no-ALT, v0 with-ALT) decoded **offline** and cross-validated; each carries a `*.meta.json` with signature, slot, cluster, and capture date for provenance. |
 | **SDK role / demotion goldens** | `roles.test.ts` | Two-layer writability against SDK semantics: `is_writable_index` partition, runtime program-id demotion flip (SIMD-0105), multi-lookup ordering, reserved-key set vs Incinerator, ALT accounts marked `addressVerified: false`. |
 | **Full-tx input + untrusted data (W011)** | `fulltx.test.ts` | A full signed transaction (signatures + message) is detected, its signatures stripped (never verified), and the inner message reaches the same verdict as the bare message; a mismatched signature count or non-canonical garbage fails closed; decoded on-chain strings are surfaced as data, never obeyed. |
-| **Catalog coverage (never false-SIGN)** | `catalog-coverage.test.ts` | The dangerous shapes most easily missed — Token-2022 `Approve`/`CloseAccount`/`Freeze`/`MintTo`, System `WithdrawNonceAccount`, and a large `CreateAccount` funding — must **never** return SIGN; small/benign equivalents still SIGN (no over-flagging). Closes the SPL-vs-Token-2022 asymmetry. |
+| **Catalog coverage (never false-SIGN)** | `catalog-coverage.test.ts` | The dangerous shapes most easily missed — Token-2022 `Approve`/`CloseAccount`/`Freeze`/`MintTo`, `Burn` (both programs), System `WithdrawNonceAccount`, and large `CreateAccount` / `CreateAccountWithSeed` funding — must **never** return SIGN; small/benign equivalents still SIGN (no over-flagging). Closes the SPL-vs-Token-2022 asymmetry and the variable-offset seed-funding drain. |
 | **Fail-closed / adversarial** | `decode.test.ts`, `verdict.test.ts` | Truncation, trailing garbage, out-of-range index, unsupported version `0x81`, empty/single-byte → REJECT; unresolved ALT can never SIGN; unknown program writing a value-bearing account → REJECT; cross-oracle disagreement ⇒ fail-closed (V10); prompt-injection (decoded data never interpolated, V8); banned reassurance phrases fail loud. |
 | **Determinism** | `run.ts` + CI | The standalone node runner's output is byte-identical across two runs (no timing/nondeterminism in the core). |
 | **No-network** | `fixtures.test.ts` | Core modules import no `http`/`https`/`net`/`fetch`; the suite makes zero network calls at run time. |

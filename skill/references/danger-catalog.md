@@ -140,6 +140,11 @@ Catalogued for **both** SPL Token and Token-2022 (C2).
 - **Maps to loss:** Mints new tokens (the mint authority's power). Unexpected
   **supply inflation** can dilute holders or drain pools and dump on the market.
 
+### `spl-burn` / `token2022-burn` -- `Burn` / `BurnChecked` (disc 8/15)
+- **Maps to loss:** **Irreversibly destroys** tokens from the account (callable
+  by the owner or an approved delegate). A blind-signed Burn is a permanent,
+  unrecoverable loss of the signer's own balance.
+
 ## Token-2022 TLV extensions (surfaced even on a byte-identical plain Transfer)
 
 A transfer of a permanent-delegate / transfer-hook / fee token is byte-identical

@@ -50,20 +50,33 @@ export function computeOutflow(
 
   msg.instructions.forEach((ix, instructionIndex) => {
     if (ix.programId === SYSTEM_PROGRAM) {
-      // System Transfer (tag 2) AND CreateAccount (tag 0) both fund from
-      // account[0] with the lamport amount as a u64-LE at offset 4. Count both
-      // toward signer outflow when account[0] is a signer of this message, so a
-      // large CreateAccount funding (not just a Transfer) trips the threshold.
+      // Count SOL funded FROM the signer (account[0]) toward outflow so a large
+      // amount trips the threshold:
+      //   Transfer (2) / CreateAccount (0): lamports is a u64-LE at fixed offset 4.
+      //   CreateAccountWithSeed (3): lamports is at a VARIABLE offset after the
+      //     base pubkey + the seed string -> [tag(4)][base(32)][seedLen u64(8)]
+      //     [seed bytes(seedLen)][lamports u64(8)]... so offset = 44 + seedLen.
       // WithdrawNonceAccount / TransferWithSeed also move SOL but from a
       // non-signer / seed-derived source, so they are flagged by the catalog
-      // (system-withdraw-nonce / system-transfer-with-seed) rather than counted
-      // here, to avoid mis-attributing them to the signer's own balance.
-      if (ix.data.length >= 12) {
+      // rather than counted here (to avoid mis-attributing them to the signer).
+      if (ix.data.length >= 4) {
         const tag = readU32LE(ix.data, 0);
-        if (tag === 2 || tag === 0) {
-          const fundingIndex = ix.accountIndexes[0];
-          if (fundingIndex !== undefined && signerIndexes.has(fundingIndex)) {
+        const fundingIndex = ix.accountIndexes[0];
+        const fromSigner =
+          fundingIndex !== undefined && signerIndexes.has(fundingIndex);
+        if (fromSigner) {
+          if ((tag === 2 || tag === 0) && ix.data.length >= 12) {
             lamports += readU64LE(ix.data, 4);
+          } else if (tag === 3 && ix.data.length >= 44) {
+            const seedLen = Number(readU64LE(ix.data, 36));
+            const lamportsOffset = 44 + seedLen;
+            if (
+              Number.isSafeInteger(seedLen) &&
+              seedLen >= 0 &&
+              ix.data.length >= lamportsOffset + 8
+            ) {
+              lamports += readU64LE(ix.data, lamportsOffset);
+            }
           }
         }
       }

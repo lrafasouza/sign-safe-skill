@@ -177,6 +177,10 @@ const DISCRIMINATOR_NAMES: Record<string, string> = {
   "spl-mint-to:14": "MintToChecked",
   "token2022-mint-to:7": "MintTo",
   "token2022-mint-to:14": "MintToChecked",
+  "spl-burn:8": "Burn",
+  "spl-burn:15": "BurnChecked",
+  "token2022-burn:8": "Burn",
+  "token2022-burn:15": "BurnChecked",
   "bpf-set-upgrade-authority:4": "SetAuthority",
 };
 

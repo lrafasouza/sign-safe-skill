@@ -190,6 +190,24 @@
       "mapsToLoss": "Mints new Token-2022 tokens; unexpected supply inflation can dilute or drain pools and dump on holders."
     },
     {
+      "id": "spl-burn",
+      "label": "SPL Token Burn / BurnChecked",
+      "program": "spl-token",
+      "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+      "detection": { "instructionType": "Burn", "discriminator": [8, 15] },
+      "severity": "HOLD",
+      "mapsToLoss": "Irreversibly destroys tokens from the account; a blind-signed Burn permanently removes the signer's own balance (or a delegate's-approved balance)."
+    },
+    {
+      "id": "token2022-burn",
+      "label": "Token-2022 Burn / BurnChecked",
+      "program": "token-2022",
+      "programId": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+      "detection": { "instructionType": "Burn", "discriminator": [8, 15] },
+      "severity": "HOLD",
+      "mapsToLoss": "Irreversibly destroys Token-2022 tokens from the account; permanent loss of the signer's balance."
+    },
+    {
       "id": "system-withdraw-nonce",
       "label": "System: WithdrawNonceAccount",
       "program": "system",

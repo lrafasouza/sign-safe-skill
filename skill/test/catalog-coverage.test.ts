@@ -50,6 +50,16 @@ const T22_APPROVE_B64 =
 const T22_CLOSE_B64 =
   "AQABBAEHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcBAgcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwIDBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHAwbd9uHudY/eGEJdvORszdq2GvxNg7kNJ/69+SjYoYv8+vr6+vr6+vr6+vr6+vr6+vr6+vr6+vr6+vr6+vr6+voBAwMBAgABCQ==";
 
+// Real base64 from the SECOND-pass review that originally SIGNed (Burn / seed-fund).
+const SPL_BURN_B64 =
+  "AQABAgkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJBt324ddloZPZy+FGzut5rBy0he1fWzeROoz1hX7/AKn6+vr6+vr6+vr6+vr6+vr6+vr6+vr6+vr6+vr6+vr6+gEBAQAJCEBCDwAAAAAA";
+const T22_BURN_B64 =
+  "AQABAgkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJBt324e51j94YQl285GzN2rYa/E2DuQ0n/r35KNihi/z6+vr6+vr6+vr6+vr6+vr6+vr6+vr6+vr6+vr6+vr6+gEBAQAJCEBCDwAAAAAA";
+const SPL_BURNCHECKED_B64 =
+  "AQABAgkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJBt324ddloZPZy+FGzut5rBy0he1fWzeROoz1hX7/AKn6+vr6+vr6+vr6+vr6+vr6+vr6+vr6+vr6+vr6+vr6+gEBAQAKD0BCDwAAAAAABg==";
+const CREATE_ACCOUNT_WITH_SEED_B64 =
+  "AQABAwkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPr6+vr6+vr6+vr6+vr6+vr6+vr6+vr6+vr6+vr6+vr6AQICAAFgAwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAABzZWVkAPIFKgEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+
 describe("catalog coverage — dangerous shapes must never SIGN", () => {
   const cases: Array<[string, string, string?]> = [
     // [name, base64, expected catalog finding id (optional)]
@@ -62,6 +72,11 @@ describe("catalog coverage — dangerous shapes must never SIGN", () => {
     ["Token-2022 MintTo [F3]", msg(T22, [7]), "token2022-mint-to"],
     // CreateAccount funding 5 SOL -> over the 1 SOL threshold -> HOLD via outflow
     ["large System CreateAccount funding [F3]", msg(SYSTEM, [...u32le(0), ...u64le(5_000_000_000n), ...u64le(0n), ...new Array(32).fill(0)]), undefined],
+    // second-pass findings: Burn (value loss) + seed-funded drain (variable offset)
+    ["SPL Burn [2nd-pass]", SPL_BURN_B64, "spl-burn"],
+    ["Token-2022 Burn [2nd-pass]", T22_BURN_B64, "token2022-burn"],
+    ["SPL BurnChecked [2nd-pass]", SPL_BURNCHECKED_B64, "spl-burn"],
+    ["large System CreateAccountWithSeed funding [2nd-pass]", CREATE_ACCOUNT_WITH_SEED_B64, undefined],
   ];
 
   for (const [name, b64, findingId] of cases) {
