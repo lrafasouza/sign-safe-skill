@@ -208,6 +208,60 @@
       "mapsToLoss": "Irreversibly destroys Token-2022 tokens from the account; permanent loss of the signer's balance."
     },
     {
+      "id": "spl-withdraw-excess-lamports",
+      "label": "SPL Token WithdrawExcessLamports",
+      "program": "spl-token",
+      "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+      "detection": { "instructionType": "WithdrawExcessLamports", "discriminator": [38] },
+      "severity": "HOLD",
+      "mapsToLoss": "Sweeps lamports above rent-exemption out of a token-program-owned account to an arbitrary destination -- a direct SOL outflow via a less-obvious path than a plain Transfer."
+    },
+    {
+      "id": "token2022-withdraw-excess-lamports",
+      "label": "Token-2022 WithdrawExcessLamports",
+      "program": "token-2022",
+      "programId": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+      "detection": { "instructionType": "WithdrawExcessLamports", "discriminator": [38] },
+      "severity": "HOLD",
+      "mapsToLoss": "Sweeps lamports above rent-exemption out of a Token-2022-owned account to an arbitrary destination -- a direct SOL outflow."
+    },
+    {
+      "id": "spl-unwrap-lamports",
+      "label": "SPL Token UnwrapLamports",
+      "program": "spl-token",
+      "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+      "detection": { "instructionType": "UnwrapLamports", "discriminator": [45] },
+      "severity": "HOLD",
+      "mapsToLoss": "Transfers lamports out of a native (wrapped-SOL) account to a destination that may be attacker-controlled -- a direct SOL outflow."
+    },
+    {
+      "id": "token2022-unwrap-lamports",
+      "label": "Token-2022 UnwrapLamports",
+      "program": "token-2022",
+      "programId": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+      "detection": { "instructionType": "UnwrapLamports", "discriminator": [45] },
+      "severity": "HOLD",
+      "mapsToLoss": "Transfers lamports out of a native (wrapped-SOL) Token-2022 account to a destination that may be attacker-controlled -- a direct SOL outflow."
+    },
+    {
+      "id": "spl-batch",
+      "label": "SPL Token Batch",
+      "program": "spl-token",
+      "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+      "detection": { "instructionType": "Batch", "discriminator": [255] },
+      "severity": "HOLD",
+      "mapsToLoss": "Executes a sequence of batched sub-instructions that are NOT individually decoded here; any of them could be a danger primitive -- review the batch contents before signing."
+    },
+    {
+      "id": "token2022-batch",
+      "label": "Token-2022 Batch",
+      "program": "token-2022",
+      "programId": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+      "detection": { "instructionType": "Batch", "discriminator": [255] },
+      "severity": "HOLD",
+      "mapsToLoss": "Executes a sequence of batched sub-instructions that are NOT individually decoded here; any of them could be a danger primitive -- review the batch contents before signing."
+    },
+    {
       "id": "system-withdraw-nonce",
       "label": "System: WithdrawNonceAccount",
       "program": "system",

@@ -77,6 +77,13 @@ describe("catalog coverage — dangerous shapes must never SIGN", () => {
     ["Token-2022 Burn [2nd-pass]", T22_BURN_B64, "token2022-burn"],
     ["SPL BurnChecked [2nd-pass]", SPL_BURNCHECKED_B64, "spl-burn"],
     ["large System CreateAccountWithSeed funding [2nd-pass]", CREATE_ACCOUNT_WITH_SEED_B64, undefined],
+    // 3rd-pass: Token-2022 + SPL lamport-sweep extension instructions and Batch
+    ["SPL WithdrawExcessLamports (38)", msg(SPL, [38]), "spl-withdraw-excess-lamports"],
+    ["Token-2022 WithdrawExcessLamports (38)", msg(T22, [38]), "token2022-withdraw-excess-lamports"],
+    ["SPL UnwrapLamports (45)", msg(SPL, [45]), "spl-unwrap-lamports"],
+    ["Token-2022 UnwrapLamports (45)", msg(T22, [45]), "token2022-unwrap-lamports"],
+    ["SPL Batch (255) — undecoded sub-instructions", msg(SPL, [255]), "spl-batch"],
+    ["Token-2022 Batch (255) — undecoded sub-instructions", msg(T22, [255]), "token2022-batch"],
   ];
 
   for (const [name, b64, findingId] of cases) {

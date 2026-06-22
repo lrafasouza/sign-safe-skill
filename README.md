@@ -37,7 +37,7 @@ Given a base64 message (legacy or v0), the deterministic core:
    modes; Address-Lookup-Table accounts keep their real writable/readonly role
    but are marked `addressVerified: false` (their concrete address is unknown
    offline),
-3. **classifies** each instruction against a 24-entry danger catalog covering
+3. **classifies** each instruction against a 30-entry danger catalog covering
    **both SPL Token and Token-2022** (authority/ownership handoffs, program
    upgrade/close, durable nonces incl. nonce withdrawals, delegate/approve
    grants, account closes & freezes, mint/supply changes, token burns, large
@@ -74,7 +74,7 @@ in this blob is recognized as dangerous," never "this is safe."
   dependency-free wire parser.
 - Deriving signer / writable / readonly roles and flagging every
   Address-Lookup-Table reference as `unverified`.
-- Classifying instructions against a 24-entry danger-primitive catalog
+- Classifying instructions against a 30-entry danger-primitive catalog
   (authority handoffs, program upgrades, durable nonces, delegate grants,
   account closes, large transfers) plus a pure Token-2022 TLV extension walker.
 - Computing the statically-declared signer outflow (lamports + SPL transfers).
@@ -108,13 +108,17 @@ instruction must be added to the catalog as the protocol ships it (the catalog i
 versioned JSON, so this is a one-line data change), and for full economic-effect
 coverage you pair sign-safe with simulation. This is the deliberate scope line of
 static analysis, not a defect — and danger coverage across the catalogued
-programs is regression-tested in `catalog-coverage.test.ts`.
+programs is regression-tested in `catalog-coverage.test.ts`. (One related case:
+a token `Batch` instruction, tag 255, packs sub-instructions that are not
+individually decoded, so it is flagged **HOLD** wholesale — it can never silently
+SIGN; recursively decoding a batch to escalate an inner REJECT-class primitive is
+a planned enhancement.)
 
 ## Why this skill is different: it actually runs, and it is tested
 
 Most skills are prose. This one ships a small, **pure-function** TypeScript core
 with a deterministic, fully **offline** test suite (`vitest` + `fast-check`),
-**168 checks across 10 files** (`npm test`, see exact counts below):
+**174 checks across 10 files** (`npm test`, see exact counts below):
 
 - **10 synthetic golden fixtures** -- serialized messages built with
   `@solana/web3.js`, decoded by *our own* parser, verdicts deep-equal-checked
@@ -290,7 +294,7 @@ checked and hands intent verification back to the human. CLI exit codes mirror
 the verdict so scripts and agents can gate on them: **`0 = SIGN`, `10 = HOLD`,
 `20 = REJECT`**.
 
-## The danger catalog (24 primitives)
+## The danger catalog (30 primitives)
 
 | id | program | detection | severity | maps to loss |
 |----|---------|-----------|----------|--------------|
@@ -316,6 +320,12 @@ the verdict so scripts and agents can gate on them: **`0 = SIGN`, `10 = HOLD`,
 | `token2022-mint-to` | Token-2022 | MintTo/MintToChecked (7/14) | HOLD | supply inflation -> dilute / dump |
 | `spl-burn` | SPL Token | Burn/BurnChecked (8/15) | HOLD | irreversible loss of the signer's tokens |
 | `token2022-burn` | Token-2022 | Burn/BurnChecked (8/15) | HOLD | irreversible loss of the signer's tokens |
+| `spl-withdraw-excess-lamports` | SPL Token | WithdrawExcessLamports (38) | HOLD | sweeps excess SOL from a token account |
+| `token2022-withdraw-excess-lamports` | Token-2022 | WithdrawExcessLamports (38) | HOLD | sweeps excess SOL from a token account |
+| `spl-unwrap-lamports` | SPL Token | UnwrapLamports (45) | HOLD | SOL outflow from a wrapped-SOL account |
+| `token2022-unwrap-lamports` | Token-2022 | UnwrapLamports (45) | HOLD | SOL outflow from a wrapped-SOL account |
+| `spl-batch` | SPL Token | Batch (255) | HOLD | batched sub-instructions not individually decoded |
+| `token2022-batch` | Token-2022 | Batch (255) | HOLD | batched sub-instructions not individually decoded |
 | `system-withdraw-nonce` | System | WithdrawNonceAccount (5) | HOLD | SOL drain from a nonce account |
 | `system-large-transfer` | System | Transfer (2) over threshold | HOLD | direct SOL outflow above threshold |
 
@@ -331,7 +341,7 @@ $ npm test            # vitest run -- the full suite (exits nonzero on any fail)
  ✓ skill/test/decode.test.ts        (25 tests)   compact-u16 vectors/rejection, D19, versions, fail-closed
  ✓ skill/test/roles.test.ts         (13 tests)   is_writable_index + demotion goldens, multi-lookup, reserved
  ✓ skill/test/classify.test.ts        (21 tests)   Transfer/TransferChecked, SetAuthority, TLV, loader, routing
- ✓ skill/test/catalog-coverage.test.ts (14 tests)   dangerous shapes never SIGN (Token-2022 Approve/Close/Freeze/MintTo, Burn, WithdrawNonce, CreateAccount[WithSeed])
+ ✓ skill/test/catalog-coverage.test.ts (20 tests)   dangerous shapes never SIGN (SPL+T22 Approve/Close/Freeze/MintTo/Burn/WithdrawExcess/Unwrap/Batch, WithdrawNonce, CreateAccount[WithSeed])
  ✓ skill/test/verdict.test.ts         (12 tests)   durable nonce ix0 gate, Drift composite, prompt-injection, V2
  ✓ skill/test/pbt.test.ts             ( 7 tests)   round-trip, fail-closed, no-trailing, compact-u16 (fast-check)
  ✓ skill/test/fixtures.test.ts        (52 tests)   golden + web3.js + kit differential + disagreement + no-network
@@ -340,7 +350,7 @@ $ npm test            # vitest run -- the full suite (exits nonzero on any fail)
  ✓ skill/test/legacy-runner.test.ts   ( 1 test )   runs the standalone node smoke runner
 
  Test Files  10 passed (10)
-      Tests  168 passed (168)
+      Tests  174 passed (174)
 ```
 
 There are two entry points: `npm test` (vitest, the full suite) and
@@ -382,14 +392,14 @@ commands and no network access at test time:
 ```bash
 npm install            # deps for generation + cross-validation only (no postinstall, no curl)
 npm run gen-fixtures   # rebuild the 10 synthetic .b64 from @solana/web3.js (deterministic, byte-identical)
-npm test               # 168 checks, 10 files, fully offline; exits nonzero on any failure
+npm test               # 174 checks, 10 files, fully offline; exits nonzero on any failure
 ```
 
-Expected: `Tests  168 passed (168)`, and `git status` clean afterward (the
+Expected: `Tests  174 passed (174)`, and `git status` clean afterward (the
 deterministic generator reproduces the committed `.b64` byte-for-byte). To also
 confirm the type contract: `npx tsc --noEmit` (exit 0).
 
-What those 168 checks actually validate:
+What those 174 checks actually validate:
 
 | Coverage area | Where | What it proves |
 |---|---|---|

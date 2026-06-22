@@ -122,8 +122,28 @@ review; **INFO** = noted, never escalates on its own.
 - **Program:** System
 - **Maps to loss:** Withdraws lamports out of a nonce account to an arbitrary
   recipient — a direct SOL drain via a path even less obvious than `TransferWithSeed`.
-  (Outflow accounting also widened to count `CreateAccount` funding so a large
+  (Outflow accounting also widened to count `CreateAccount` (tag 0) and
+  `CreateAccountWithSeed` (tag 3, variable-offset lamports) funding so a large
   account-creation can trip the threshold.)
+
+### `spl-withdraw-excess-lamports` / `token2022-withdraw-excess-lamports` — `WithdrawExcessLamports` (disc 38) (HOLD)
+- **Program:** SPL Token AND Token-2022 (both expose tag 38)
+- **Maps to loss:** Sweeps lamports above rent-exemption out of a token-program-
+  owned account to an arbitrary destination — a direct SOL outflow on a single
+  signature, via a far less-obvious path than a plain Transfer.
+
+### `spl-unwrap-lamports` / `token2022-unwrap-lamports` — `UnwrapLamports` (disc 45) (HOLD)
+- **Program:** SPL Token AND Token-2022
+- **Maps to loss:** Transfers lamports out of a native (wrapped-SOL) account to a
+  destination that may be attacker-controlled — a direct SOL outflow.
+
+### `spl-batch` / `token2022-batch` — `Batch` (disc 255) (HOLD)
+- **Program:** SPL Token AND Token-2022
+- **Maps to loss:** Executes a sequence of packed sub-instructions. sign-safe does
+  NOT yet decode the inner instructions individually, so a Batch is flagged HOLD
+  **wholesale** — it can never silently SIGN, and the operator is told to review
+  the batched contents. (Recursive sub-instruction decoding is a planned
+  enhancement; HOLD is the fail-closed minimum.)
 
 ## Freeze & supply control (HOLD)
 
