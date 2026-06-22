@@ -136,6 +136,69 @@
       "mapsToLoss": "Closes a token account and sweeps its rent lamports to a destination that may be attacker-controlled."
     },
     {
+      "id": "token2022-approve-delegate",
+      "label": "Token-2022 Approve / ApproveChecked",
+      "program": "token-2022",
+      "programId": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+      "detection": { "instructionType": "Approve", "discriminator": [4, 13] },
+      "severity": "HOLD",
+      "mapsToLoss": "Grants a delegate authority to spend tokens from a Token-2022 account; a malicious delegate can silently drain it afterward."
+    },
+    {
+      "id": "token2022-close-account",
+      "label": "Token-2022 CloseAccount",
+      "program": "token-2022",
+      "programId": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+      "detection": { "instructionType": "CloseAccount", "discriminator": [9] },
+      "severity": "HOLD",
+      "mapsToLoss": "Closes a Token-2022 account and sweeps its rent lamports to a destination that may be attacker-controlled."
+    },
+    {
+      "id": "spl-freeze-account",
+      "label": "SPL Token FreezeAccount",
+      "program": "spl-token",
+      "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+      "detection": { "instructionType": "FreezeAccount", "discriminator": [10] },
+      "severity": "HOLD",
+      "mapsToLoss": "Freezes a holder's token account (the freeze authority's power); used to build sell-side honeypots and to deny transfers."
+    },
+    {
+      "id": "token2022-freeze-account",
+      "label": "Token-2022 FreezeAccount",
+      "program": "token-2022",
+      "programId": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+      "detection": { "instructionType": "FreezeAccount", "discriminator": [10] },
+      "severity": "HOLD",
+      "mapsToLoss": "Freezes a holder's Token-2022 account; used to build sell-side honeypots and to deny transfers."
+    },
+    {
+      "id": "spl-mint-to",
+      "label": "SPL Token MintTo / MintToChecked",
+      "program": "spl-token",
+      "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+      "detection": { "instructionType": "MintTo", "discriminator": [7, 14] },
+      "severity": "HOLD",
+      "mapsToLoss": "Mints new tokens (the mint authority's power); unexpected supply inflation can dilute or drain pools and dump on holders."
+    },
+    {
+      "id": "token2022-mint-to",
+      "label": "Token-2022 MintTo / MintToChecked",
+      "program": "token-2022",
+      "programId": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+      "detection": { "instructionType": "MintTo", "discriminator": [7, 14] },
+      "severity": "HOLD",
+      "mapsToLoss": "Mints new Token-2022 tokens; unexpected supply inflation can dilute or drain pools and dump on holders."
+    },
+    {
+      "id": "system-withdraw-nonce",
+      "label": "System: WithdrawNonceAccount",
+      "program": "system",
+      "programId": "11111111111111111111111111111111",
+      "detection": { "instructionType": "WithdrawNonceAccount", "discriminator": [5] },
+      "severity": "HOLD",
+      "mapsToLoss": "Withdraws lamports out of a nonce account to an arbitrary recipient -- a direct SOL outflow via a less-obvious path than a plain Transfer."
+    },
+    {
       "id": "system-large-transfer",
       "label": "System Transfer above threshold",
       "program": "system",

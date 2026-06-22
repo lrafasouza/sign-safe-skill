@@ -50,11 +50,21 @@ export function computeOutflow(
 
   msg.instructions.forEach((ix, instructionIndex) => {
     if (ix.programId === SYSTEM_PROGRAM) {
-      // System Transfer: account[0] is the funding source.
-      if (ix.data.length >= 12 && readU32LE(ix.data, 0) === 2) {
-        const fundingIndex = ix.accountIndexes[0];
-        if (fundingIndex !== undefined && signerIndexes.has(fundingIndex)) {
-          lamports += readU64LE(ix.data, 4);
+      // System Transfer (tag 2) AND CreateAccount (tag 0) both fund from
+      // account[0] with the lamport amount as a u64-LE at offset 4. Count both
+      // toward signer outflow when account[0] is a signer of this message, so a
+      // large CreateAccount funding (not just a Transfer) trips the threshold.
+      // WithdrawNonceAccount / TransferWithSeed also move SOL but from a
+      // non-signer / seed-derived source, so they are flagged by the catalog
+      // (system-withdraw-nonce / system-transfer-with-seed) rather than counted
+      // here, to avoid mis-attributing them to the signer's own balance.
+      if (ix.data.length >= 12) {
+        const tag = readU32LE(ix.data, 0);
+        if (tag === 2 || tag === 0) {
+          const fundingIndex = ix.accountIndexes[0];
+          if (fundingIndex !== undefined && signerIndexes.has(fundingIndex)) {
+            lamports += readU64LE(ix.data, 4);
+          }
         }
       }
       return;

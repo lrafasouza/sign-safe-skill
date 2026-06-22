@@ -171,6 +171,12 @@ const DISCRIMINATOR_NAMES: Record<string, string> = {
   "durable-nonce-initialize:7": "AuthorizeNonceAccount",
   "spl-approve-delegate:4": "Approve",
   "spl-approve-delegate:13": "ApproveChecked",
+  "token2022-approve-delegate:4": "Approve",
+  "token2022-approve-delegate:13": "ApproveChecked",
+  "spl-mint-to:7": "MintTo",
+  "spl-mint-to:14": "MintToChecked",
+  "token2022-mint-to:7": "MintTo",
+  "token2022-mint-to:14": "MintToChecked",
   "bpf-set-upgrade-authority:4": "SetAuthority",
 };
 

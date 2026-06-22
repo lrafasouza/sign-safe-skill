@@ -9,17 +9,21 @@ REJECT** verdict plus a machine-readable `verdict.json` for autonomous-agent gat
 > -- core Solana development (programs, frontend, testing, security). sign-safe
 > layers a signing-time gate on top; it does not duplicate the core skill.
 
-## The problem (Drift, April 2026)
+## The problem (Drift, 2026)
 
-In April 2026, roughly **$285M** was drained after signers approved an opaque
-transaction whose framing relied on **durable nonces** and **blind signing**: the
-signed transaction had no blockhash expiry, so it could be held and replayed
-under conditions the signers never intended. The signers saw an inscrutable
-base64 blob and a wallet "Approve" button -- and no decode, no danger
-classification, no outflow accounting between the blob and their signature.
+In late March 2026, signers on Drift's security multisig **blind-signed**
+**durable-nonce** transactions that looked routine but transferred administrative
+control. A durable-nonce message has no blockhash expiry, so the signed payloads
+stayed valid until they were executed on **April 1, 2026** to drain roughly
+**$285M** -- a governance/signing compromise, not a smart-contract bug. The
+signers saw an inscrutable base64 blob and an "Approve" button: no decode, no
+danger classification, no outflow accounting between the blob and their signature.
 
 sign-safe is the missing layer: a deterministic, offline gate that sits between
-the bytes and the signature.
+the bytes and the signature. It is **complementary to** transaction simulation
+(Blowfish / Phantom-style) -- static decoding flags authority/ownership and
+danger-primitive shapes (which simulation has been shown to miss), while
+simulation catches economic/oracle outcomes that static decoding cannot. Use both.
 
 ## What it does
 
@@ -33,10 +37,11 @@ Given a base64 message (legacy or v0), the deterministic core:
    modes; Address-Lookup-Table accounts keep their real writable/readonly role
    but are marked `addressVerified: false` (their concrete address is unknown
    offline),
-3. **classifies** each instruction against a 15-entry danger catalog
-   (authority/ownership handoffs, program upgrade/close, durable nonces, delegate
-   grants, account closes, large transfers) plus a pure Token-2022 TLV
-   extension walker,
+3. **classifies** each instruction against a 22-entry danger catalog covering
+   **both SPL Token and Token-2022** (authority/ownership handoffs, program
+   upgrade/close, durable nonces incl. nonce withdrawals, delegate/approve
+   grants, account closes & freezes, mint/supply changes, large transfers) plus
+   a pure Token-2022 TLV extension walker,
 4. **computes** the statically-declared signer outflow,
 5. **emits** a `SIGN / HOLD / REJECT` verdict + `verdict.json`, escalating the
    Drift composite (durable-nonce marker at ix0 + authority change) to REJECT.
@@ -69,7 +74,7 @@ in this blob is recognized as dangerous," never "this is safe."
   dependency-free wire parser.
 - Deriving signer / writable / readonly roles and flagging every
   Address-Lookup-Table reference as `unverified`.
-- Classifying instructions against a 15-entry danger-primitive catalog
+- Classifying instructions against a 22-entry danger-primitive catalog
   (authority handoffs, program upgrades, durable nonces, delegate grants,
   account closes, large transfers) plus a pure Token-2022 TLV extension walker.
 - Computing the statically-declared signer outflow (lamports + SPL transfers).
@@ -95,7 +100,7 @@ is what you *meant*.
 
 Most skills are prose. This one ships a small, **pure-function** TypeScript core
 with a deterministic, fully **offline** test suite (`vitest` + `fast-check`),
-**154 checks across 9 files** (`npm test`, see exact counts below):
+**164 checks across 10 files** (`npm test`, see exact counts below):
 
 - **10 synthetic golden fixtures** -- serialized messages built with
   `@solana/web3.js`, decoded by *our own* parser, verdicts deep-equal-checked
@@ -135,7 +140,7 @@ submodule, then commit the pointer:
 
 ```bash
 # from the root of your fork of solanabr/solana-ai-kit
-git submodule add https://github.com/<you>/sign-safe-skill skills/sign-safe
+git submodule add https://github.com/lrafasouza/sign-safe-skill .claude/skills/ext/sign-safe
 git commit -m "feat: add sign-safe signing-time safety gate as a submodule"
 
 # anyone cloning the kit then pulls the skill in with:
@@ -144,16 +149,17 @@ git clone --recurse-submodules https://github.com/solanabr/solana-ai-kit
 git submodule update --init --recursive
 ```
 
-The kit picks up `skills/sign-safe/skill/SKILL.md`, the `/sign-review` command,
-and the signing-output rule automatically. The skill references the core
-`solana-dev-skill` **by name** only (never by a relative path or a nested
-submodule), so it composes with the rest of the kit without creating a second,
-conflicting dependency graph.
+The kit picks up `.claude/skills/ext/sign-safe/skill/SKILL.md` (add a routing row
+to the hub `.claude/skills/SKILL.md`), the `/sign-review` command, and the
+signing-output rule. The skill references the core `solana-dev-skill` **by name**
+only (never by a relative path or a nested submodule), so it composes with the
+rest of the kit without creating a second, conflicting dependency graph. (This is
+exactly what PR solanabr/solana-ai-kit#34 does.)
 
 ### Standalone (clone and run the gate locally)
 
 ```bash
-git clone https://github.com/<you>/sign-safe-skill sign-safe
+git clone https://github.com/lrafasouza/sign-safe-skill sign-safe
 cd sign-safe
 npm install
 npm run gen-fixtures   # (re)generate the 10 synthetic .b64 fixtures from @solana/web3.js
@@ -270,7 +276,7 @@ checked and hands intent verification back to the human. CLI exit codes mirror
 the verdict so scripts and agents can gate on them: **`0 = SIGN`, `10 = HOLD`,
 `20 = REJECT`**.
 
-## The danger catalog (15 primitives)
+## The danger catalog (22 primitives)
 
 | id | program | detection | severity | maps to loss |
 |----|---------|-----------|----------|--------------|
@@ -288,6 +294,13 @@ the verdict so scripts and agents can gate on them: **`0 = SIGN`, `10 = HOLD`,
 | `durable-nonce-initialize` | System | Initialize/Authorize Nonce (6/7) | HOLD | sets/redirects nonce authority |
 | `spl-approve-delegate` | SPL Token | Approve/ApproveChecked (4/13) | HOLD | delegate spend -> silent drain |
 | `spl-close-account` | SPL Token | CloseAccount (9) | HOLD | sweeps lamports to a destination |
+| `token2022-approve-delegate` | Token-2022 | Approve/ApproveChecked (4/13) | HOLD | delegate spend -> silent drain |
+| `token2022-close-account` | Token-2022 | CloseAccount (9) | HOLD | sweeps lamports to a destination |
+| `spl-freeze-account` | SPL Token | FreezeAccount (10) | HOLD | freezes a holder -> honeypot / denial |
+| `token2022-freeze-account` | Token-2022 | FreezeAccount (10) | HOLD | freezes a holder -> honeypot / denial |
+| `spl-mint-to` | SPL Token | MintTo/MintToChecked (7/14) | HOLD | supply inflation -> dilute / dump |
+| `token2022-mint-to` | Token-2022 | MintTo/MintToChecked (7/14) | HOLD | supply inflation -> dilute / dump |
+| `system-withdraw-nonce` | System | WithdrawNonceAccount (5) | HOLD | SOL drain from a nonce account |
 | `system-large-transfer` | System | Transfer (2) over threshold | HOLD | direct SOL outflow above threshold |
 
 See [skill/references/danger-catalog.md](skill/references/danger-catalog.md) for
@@ -301,16 +314,17 @@ $ npm test            # vitest run -- the full suite (exits nonzero on any fail)
 
  ✓ skill/test/decode.test.ts        (25 tests)   compact-u16 vectors/rejection, D19, versions, fail-closed
  ✓ skill/test/roles.test.ts         (13 tests)   is_writable_index + demotion goldens, multi-lookup, reserved
- ✓ skill/test/classify.test.ts      (21 tests)   Transfer/TransferChecked, SetAuthority, TLV, loader, routing
- ✓ skill/test/verdict.test.ts       (12 tests)   durable nonce ix0 gate, Drift composite, prompt-injection, V2
- ✓ skill/test/pbt.test.ts           ( 7 tests)   round-trip, fail-closed, no-trailing, compact-u16 (fast-check)
- ✓ skill/test/fixtures.test.ts      (52 tests)   golden + web3.js + kit differential + disagreement + no-network
- ✓ skill/test/real-fixtures.test.ts (14 tests)   REAL mainnet txs decoded offline + cross-validated
- ✓ skill/test/fulltx.test.ts        ( 9 tests)   full signed-tx input stripped + fail-closed (W011 §7)
- ✓ skill/test/legacy-runner.test.ts ( 1 test )   runs the standalone node smoke runner
+ ✓ skill/test/classify.test.ts        (21 tests)   Transfer/TransferChecked, SetAuthority, TLV, loader, routing
+ ✓ skill/test/catalog-coverage.test.ts (10 tests)   dangerous shapes never SIGN (Token-2022 Approve/Close/Freeze/MintTo, WithdrawNonce, CreateAccount)
+ ✓ skill/test/verdict.test.ts         (12 tests)   durable nonce ix0 gate, Drift composite, prompt-injection, V2
+ ✓ skill/test/pbt.test.ts             ( 7 tests)   round-trip, fail-closed, no-trailing, compact-u16 (fast-check)
+ ✓ skill/test/fixtures.test.ts        (52 tests)   golden + web3.js + kit differential + disagreement + no-network
+ ✓ skill/test/real-fixtures.test.ts   (14 tests)   REAL mainnet txs decoded offline + cross-validated
+ ✓ skill/test/fulltx.test.ts          ( 9 tests)   full signed-tx input stripped + fail-closed (W011 §7)
+ ✓ skill/test/legacy-runner.test.ts   ( 1 test )   runs the standalone node smoke runner
 
- Test Files  9 passed (9)
-      Tests  154 passed (154)
+ Test Files  10 passed (10)
+      Tests  164 passed (164)
 ```
 
 There are two entry points: `npm test` (vitest, the full suite) and
@@ -352,14 +366,14 @@ commands and no network access at test time:
 ```bash
 npm install            # deps for generation + cross-validation only (no postinstall, no curl)
 npm run gen-fixtures   # rebuild the 10 synthetic .b64 from @solana/web3.js (deterministic, byte-identical)
-npm test               # 154 checks, 9 files, fully offline; exits nonzero on any failure
+npm test               # 164 checks, 10 files, fully offline; exits nonzero on any failure
 ```
 
-Expected: `Tests  154 passed (154)`, and `git status` clean afterward (the
+Expected: `Tests  164 passed (164)`, and `git status` clean afterward (the
 deterministic generator reproduces the committed `.b64` byte-for-byte). To also
 confirm the type contract: `npx tsc --noEmit` (exit 0).
 
-What those 154 checks actually validate:
+What those 164 checks actually validate:
 
 | Coverage area | Where | What it proves |
 |---|---|---|
@@ -369,9 +383,16 @@ What those 154 checks actually validate:
 | **Real mainnet fixtures** | `real-fixtures.test.ts` | 5 frozen mainnet txs (legacy System, SPL-Token, Token-2022, v0 no-ALT, v0 with-ALT) decoded **offline** and cross-validated; each carries a `*.meta.json` with signature, slot, cluster, and capture date for provenance. |
 | **SDK role / demotion goldens** | `roles.test.ts` | Two-layer writability against SDK semantics: `is_writable_index` partition, runtime program-id demotion flip (SIMD-0105), multi-lookup ordering, reserved-key set vs Incinerator, ALT accounts marked `addressVerified: false`. |
 | **Full-tx input + untrusted data (W011)** | `fulltx.test.ts` | A full signed transaction (signatures + message) is detected, its signatures stripped (never verified), and the inner message reaches the same verdict as the bare message; a mismatched signature count or non-canonical garbage fails closed; decoded on-chain strings are surfaced as data, never obeyed. |
+| **Catalog coverage (never false-SIGN)** | `catalog-coverage.test.ts` | The dangerous shapes most easily missed — Token-2022 `Approve`/`CloseAccount`/`Freeze`/`MintTo`, System `WithdrawNonceAccount`, and a large `CreateAccount` funding — must **never** return SIGN; small/benign equivalents still SIGN (no over-flagging). Closes the SPL-vs-Token-2022 asymmetry. |
 | **Fail-closed / adversarial** | `decode.test.ts`, `verdict.test.ts` | Truncation, trailing garbage, out-of-range index, unsupported version `0x81`, empty/single-byte → REJECT; unresolved ALT can never SIGN; unknown program writing a value-bearing account → REJECT; cross-oracle disagreement ⇒ fail-closed (V10); prompt-injection (decoded data never interpolated, V8); banned reassurance phrases fail loud. |
 | **Determinism** | `run.ts` + CI | The standalone node runner's output is byte-identical across two runs (no timing/nondeterminism in the core). |
 | **No-network** | `fixtures.test.ts` | Core modules import no `http`/`https`/`net`/`fetch`; the suite makes zero network calls at run time. |
+
+> **On `npm audit`:** any advisories come exclusively from **dev** dependencies
+> (the `vitest`/`vite`/`esbuild` toolchain and `@solana/web3.js`'s transitive
+> deps used only for fixture generation + cross-validation). The shipped runtime
+> core has **zero** dependencies (`"dependencies": {}`), so none of these reach a
+> consumer of the skill.
 
 CI (`.github/workflows/ci.yml`) runs exactly this on every push and PR across
 Node 20 and 22, plus a determinism gate (two byte-identical runner runs) and a

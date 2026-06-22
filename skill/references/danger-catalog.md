@@ -87,6 +87,18 @@ review; **INFO** = noted, never escalates on its own.
   destination that may be attacker-controlled. Combined with a prior transfer it
   is a clean-out pattern.
 
+### `token2022-approve-delegate` -- Token-2022 `Approve` / `ApproveChecked` (disc 4/13)
+- **Program:** Token-2022
+- **Maps to loss:** Identical seizure vector to the SPL Token version, on a
+  Token-2022 mint. Token-2022 reuses the base instruction tags (C2), so Approve
+  must be catalogued for **both** program ids — otherwise a Token-2022 delegate
+  grant would slip through as a clean SIGN.
+
+### `token2022-close-account` -- Token-2022 `CloseAccount` (disc 9)
+- **Program:** Token-2022
+- **Maps to loss:** Same clean-out / lamport-sweep pattern as the SPL Token
+  version, on a Token-2022 account.
+
 ### `token2022-permanent-delegate` -- Token-2022 PermanentDelegate (disc 35) (HOLD)
 - **Program:** Token-2022
 - **Maps to loss:** A **permanent delegate** can move or burn tokens from *any*
@@ -105,6 +117,28 @@ review; **INFO** = noted, never escalates on its own.
 - **Program:** System
 - **Maps to loss:** Transfers lamports out of a seed-derived account the signer
   controls — direct SOL outflow via a less obvious path than a plain Transfer.
+
+### `system-withdraw-nonce` -- System `WithdrawNonceAccount` (disc 5) (HOLD)
+- **Program:** System
+- **Maps to loss:** Withdraws lamports out of a nonce account to an arbitrary
+  recipient — a direct SOL drain via a path even less obvious than `TransferWithSeed`.
+  (Outflow accounting also widened to count `CreateAccount` funding so a large
+  account-creation can trip the threshold.)
+
+## Freeze & supply control (HOLD)
+
+These are mint/freeze-authority powers. A signer being asked to authorize one is
+either the legitimate authority performing an admin action or a victim of a
+sneaked-in instruction — either way it warrants review, never a silent SIGN.
+Catalogued for **both** SPL Token and Token-2022 (C2).
+
+### `spl-freeze-account` / `token2022-freeze-account` -- `FreezeAccount` (disc 10)
+- **Maps to loss:** Freezes a holder's token account (the freeze authority's
+  power) — the building block of sell-side **honeypots** and transfer denial.
+
+### `spl-mint-to` / `token2022-mint-to` -- `MintTo` / `MintToChecked` (disc 7/14)
+- **Maps to loss:** Mints new tokens (the mint authority's power). Unexpected
+  **supply inflation** can dilute holders or drain pools and dump on the market.
 
 ## Token-2022 TLV extensions (surfaced even on a byte-identical plain Transfer)
 
