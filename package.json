@@ -4,6 +4,31 @@
   "description": "Signing-time safety gate for Solana transactions: decode, classify danger primitives, compute signer outflow, and emit a SIGN/HOLD/REJECT verdict. Offline, deterministic, tested.",
   "type": "module",
   "license": "MIT",
+  "author": "lrafasouza",
+  "homepage": "https://github.com/lrafasouza/sign-safe-skill#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lrafasouza/sign-safe-skill.git"
+  },
+  "bugs": {
+    "url": "https://github.com/lrafasouza/sign-safe-skill/issues"
+  },
+  "keywords": [
+    "solana",
+    "security",
+    "transaction",
+    "signing",
+    "blind-signing",
+    "durable-nonce",
+    "token-2022",
+    "verdict",
+    "claude-skill",
+    "solana-ai-kit",
+    "ai-agent"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
@@ -13,11 +38,11 @@
     "gen-goldens": "node --import tsx skill/fixtures/gen-goldens.ts",
     "cli": "node --import tsx skill/src/cli.ts"
   },
-  "dependencies": {
-    "@solana/kit": "^2.1.0",
-    "@solana/web3.js": "^1.95.3"
-  },
+  "comment:dependencies": "The deterministic core (skill/src/) imports NOTHING external. @solana/web3.js and @solana/kit are dev-only: used by fixture generation, the standalone runner, and the dual-reference cross-validation tests. Keeping them out of runtime dependencies is intentional and is asserted by the no-network test.",
+  "dependencies": {},
   "devDependencies": {
+    "@solana/kit": "^2.1.0",
+    "@solana/web3.js": "^1.95.3",
     "@types/node": "^22.5.0",
     "fast-check": "^3.23.2",
     "tsx": "^4.19.0",
