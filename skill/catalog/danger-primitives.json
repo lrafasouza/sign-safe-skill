@@ -1,0 +1,103 @@
+{
+  "$schema": "sign-safe/danger-catalog@1",
+  "description": "Machine-readable catalog of signing-time danger primitives. Each entry matches by canonical mainnet programId plus a leading instruction discriminator byte. Severity drives the verdict: any REJECT entry forces REJECT; any HOLD entry forces at-least HOLD. mapsToLoss is the concrete real-world loss the primitive enables. See ../references/danger-catalog.md for rationale.",
+  "knownPrograms": {
+    "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA": "spl-token",
+    "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb": "token-2022",
+    "BPFLoaderUpgradeab1e11111111111111111111111": "bpf-loader-upgradeable",
+    "11111111111111111111111111111111": "system",
+    "ComputeBudget111111111111111111111111111111": "compute-budget"
+  },
+  "entries": [
+    {
+      "id": "spl-set-authority",
+      "label": "SPL Token SetAuthority",
+      "program": "spl-token",
+      "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+      "detection": { "instructionType": "SetAuthority", "discriminator": [6] },
+      "severity": "REJECT",
+      "mapsToLoss": "Hands mint/freeze/owner authority to an attacker, who can then mint, freeze, or seize at will."
+    },
+    {
+      "id": "token2022-set-authority",
+      "label": "Token-2022 SetAuthority",
+      "program": "token-2022",
+      "programId": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+      "detection": { "instructionType": "SetAuthority", "discriminator": [6] },
+      "severity": "REJECT",
+      "mapsToLoss": "Same as SPL SetAuthority plus control of Token-2022 extension authorities (transfer hook, fee config, etc.)."
+    },
+    {
+      "id": "token2022-permanent-delegate",
+      "label": "Token-2022 PermanentDelegate (configure/use)",
+      "program": "token-2022",
+      "programId": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+      "detection": { "instructionType": "PermanentDelegate", "discriminator": [35] },
+      "severity": "HOLD",
+      "mapsToLoss": "A permanent delegate can move or burn tokens from any holder irrevocably; configuring or exercising it is a seizure vector."
+    },
+    {
+      "id": "bpf-upgrade",
+      "label": "BPF Loader Upgradeable: Upgrade",
+      "program": "bpf-loader-upgradeable",
+      "programId": "BPFLoaderUpgradeab1e11111111111111111111111",
+      "detection": { "instructionType": "Upgrade", "discriminator": [3] },
+      "severity": "REJECT",
+      "mapsToLoss": "Replaces a program's executable bytecode; an attacker can swap in a draining program instantly (instant rug)."
+    },
+    {
+      "id": "bpf-set-upgrade-authority",
+      "label": "BPF Loader Upgradeable: SetAuthority",
+      "program": "bpf-loader-upgradeable",
+      "programId": "BPFLoaderUpgradeab1e11111111111111111111111",
+      "detection": { "instructionType": "SetAuthority", "discriminator": [4] },
+      "severity": "REJECT",
+      "mapsToLoss": "Transfers a program's upgrade authority, enabling a later upgrade-rug under attacker control."
+    },
+    {
+      "id": "durable-nonce-advance",
+      "label": "System: AdvanceNonceAccount (durable nonce)",
+      "program": "system",
+      "programId": "11111111111111111111111111111111",
+      "detection": { "instructionType": "AdvanceNonceAccount", "discriminator": [4] },
+      "severity": "HOLD",
+      "mapsToLoss": "Durable nonces remove blockhash expiry, so a signed transaction can be held and replayed later -- the core enabling vector of the Drift 2026 blind-signing incident."
+    },
+    {
+      "id": "durable-nonce-initialize",
+      "label": "System: Initialize/Authorize NonceAccount",
+      "program": "system",
+      "programId": "11111111111111111111111111111111",
+      "detection": { "instructionType": "InitializeOrAuthorizeNonce", "discriminator": [6, 7] },
+      "severity": "HOLD",
+      "mapsToLoss": "Initializes a nonce account or redirects its authority, setting up or hijacking a durable-nonce hold/replay vector."
+    },
+    {
+      "id": "spl-approve-delegate",
+      "label": "SPL Token Approve / ApproveChecked",
+      "program": "spl-token",
+      "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+      "detection": { "instructionType": "Approve", "discriminator": [4, 13] },
+      "severity": "HOLD",
+      "mapsToLoss": "Grants a delegate authority to spend tokens from the account; a malicious delegate can silently drain it afterward."
+    },
+    {
+      "id": "spl-close-account",
+      "label": "SPL Token CloseAccount",
+      "program": "spl-token",
+      "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+      "detection": { "instructionType": "CloseAccount", "discriminator": [9] },
+      "severity": "HOLD",
+      "mapsToLoss": "Closes a token account and sweeps its rent lamports to a destination that may be attacker-controlled."
+    },
+    {
+      "id": "system-large-transfer",
+      "label": "System Transfer above threshold",
+      "program": "system",
+      "programId": "11111111111111111111111111111111",
+      "detection": { "instructionType": "Transfer", "discriminator": [2] },
+      "severity": "HOLD",
+      "mapsToLoss": "Direct SOL outflow from the signer above the configured threshold (default 1 SOL = 1,000,000,000 lamports)."
+    }
+  ]
+}

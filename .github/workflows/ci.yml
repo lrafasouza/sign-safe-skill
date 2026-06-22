@@ -1,0 +1,61 @@
+name: ci
+
+# Reproducible, offline verification of the deterministic signing gate.
+# Runs the full test suite (golden + cross-validation against @solana/web3.js +
+# determinism + fail-closed + banned-phrase + behavioral guards) on a clean
+# install. No network calls are made by the core or the tests themselves.
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [20.x, 22.x]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      # Clean, lockfile-faithful install -- the reproducible entry a fresh
+      # reviewer uses. Fails if package-lock.json and package.json disagree.
+      - name: Install (clean)
+        run: npm ci
+
+      # Type-check the whole project (strict, NodeNext) -- catches contract
+      # drift (e.g. the lamports number->string change) at compile time.
+      - name: Type-check
+        run: npm run build
+
+      # The deterministic test suite. Exit code is the gate.
+      - name: Test
+        run: npm test
+
+      # Determinism gate: the suite must be byte-for-byte identical across two
+      # runs. A non-deterministic core would silently break golden review.
+      - name: Determinism (two runs, byte-identical)
+        run: |
+          npm test > /tmp/run1.txt
+          npm test > /tmp/run2.txt
+          diff /tmp/run1.txt /tmp/run2.txt
+
+      # Guard against blind golden regeneration: regenerating the fixtures from
+      # @solana/web3.js must NOT change any committed .b64 (the generator is
+      # deterministic). If it does, the fixtures and goldens are drifting
+      # together and the cross-check would be meaningless.
+      - name: Fixtures are reproducible (no silent drift)
+        run: |
+          npm run gen-fixtures
+          if ! git diff --quiet -- skill/fixtures; then
+            echo "ERROR: gen-fixtures changed committed fixtures; goldens may have been regenerated blindly." >&2
+            git --no-pager diff -- skill/fixtures
+            exit 1
+          fi

@@ -1,0 +1,22 @@
+{
+  "schema": "sign-safe/verdict@1",
+  "decision": "REJECT",
+  "reason": "An unknown (uncatalogued) program writes to a value-bearing account; effect cannot be bounded.",
+  "messageVersion": "legacy",
+  "worstSeverity": "INFO",
+  "findings": [],
+  "outflow": {
+    "lamports": "0",
+    "splTransfers": [],
+    "exceedsLamportThreshold": false
+  },
+  "flags": {
+    "unknownProgramPresent": true,
+    "altLookupsPresent": false,
+    "rolesUnverified": false,
+    "decodeFailed": false
+  },
+  "unknownPrograms": [
+    "CJfRUQxyonG6B5mnztsNUqxknbFT89DJdrdrzV9F96mU"
+  ]
+}

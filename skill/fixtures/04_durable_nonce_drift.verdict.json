@@ -1,0 +1,39 @@
+{
+  "schema": "sign-safe/verdict@1",
+  "decision": "REJECT",
+  "reason": "Contains a REJECT-class danger primitive: SPL Token SetAuthority.",
+  "messageVersion": "legacy",
+  "worstSeverity": "REJECT",
+  "findings": [
+    {
+      "id": "durable-nonce-advance",
+      "label": "System: AdvanceNonceAccount (durable nonce)",
+      "severity": "HOLD",
+      "instructionIndex": 0,
+      "programId": "11111111111111111111111111111111",
+      "detail": "Matched AdvanceNonceAccount on system.",
+      "mapsToLoss": "Durable nonces remove blockhash expiry, so a signed transaction can be held and replayed later -- the core enabling vector of the Drift 2026 blind-signing incident."
+    },
+    {
+      "id": "spl-set-authority",
+      "label": "SPL Token SetAuthority",
+      "severity": "REJECT",
+      "instructionIndex": 1,
+      "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+      "detail": "Matched SetAuthority on spl-token.",
+      "mapsToLoss": "Hands mint/freeze/owner authority to an attacker, who can then mint, freeze, or seize at will."
+    }
+  ],
+  "outflow": {
+    "lamports": "0",
+    "splTransfers": [],
+    "exceedsLamportThreshold": false
+  },
+  "flags": {
+    "unknownProgramPresent": false,
+    "altLookupsPresent": false,
+    "rolesUnverified": false,
+    "decodeFailed": false
+  },
+  "unknownPrograms": []
+}

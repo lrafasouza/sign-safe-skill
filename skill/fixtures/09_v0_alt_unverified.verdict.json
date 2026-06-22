@@ -1,0 +1,20 @@
+{
+  "schema": "sign-safe/verdict@1",
+  "decision": "HOLD",
+  "reason": "Manual review required: address-lookup-table references are unresolved, so some account roles are unverified.",
+  "messageVersion": 0,
+  "worstSeverity": "INFO",
+  "findings": [],
+  "outflow": {
+    "lamports": "10000000",
+    "splTransfers": [],
+    "exceedsLamportThreshold": false
+  },
+  "flags": {
+    "unknownProgramPresent": false,
+    "altLookupsPresent": true,
+    "rolesUnverified": true,
+    "decodeFailed": false
+  },
+  "unknownPrograms": []
+}

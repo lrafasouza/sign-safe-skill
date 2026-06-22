@@ -1,0 +1,30 @@
+{
+  "schema": "sign-safe/verdict@1",
+  "decision": "HOLD",
+  "reason": "Manual review required: HOLD-class primitive(s): SPL Token CloseAccount.",
+  "messageVersion": "legacy",
+  "worstSeverity": "HOLD",
+  "findings": [
+    {
+      "id": "spl-close-account",
+      "label": "SPL Token CloseAccount",
+      "severity": "HOLD",
+      "instructionIndex": 0,
+      "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+      "detail": "Matched CloseAccount on spl-token.",
+      "mapsToLoss": "Closes a token account and sweeps its rent lamports to a destination that may be attacker-controlled."
+    }
+  ],
+  "outflow": {
+    "lamports": "0",
+    "splTransfers": [],
+    "exceedsLamportThreshold": false
+  },
+  "flags": {
+    "unknownProgramPresent": false,
+    "altLookupsPresent": false,
+    "rolesUnverified": false,
+    "decodeFailed": false
+  },
+  "unknownPrograms": []
+}

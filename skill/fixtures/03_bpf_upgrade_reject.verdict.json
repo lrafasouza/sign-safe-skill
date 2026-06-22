@@ -1,0 +1,30 @@
+{
+  "schema": "sign-safe/verdict@1",
+  "decision": "REJECT",
+  "reason": "Contains a REJECT-class danger primitive: BPF Loader Upgradeable: Upgrade.",
+  "messageVersion": "legacy",
+  "worstSeverity": "REJECT",
+  "findings": [
+    {
+      "id": "bpf-upgrade",
+      "label": "BPF Loader Upgradeable: Upgrade",
+      "severity": "REJECT",
+      "instructionIndex": 0,
+      "programId": "BPFLoaderUpgradeab1e11111111111111111111111",
+      "detail": "Matched Upgrade on bpf-loader-upgradeable.",
+      "mapsToLoss": "Replaces a program's executable bytecode; an attacker can swap in a draining program instantly (instant rug)."
+    }
+  ],
+  "outflow": {
+    "lamports": "0",
+    "splTransfers": [],
+    "exceedsLamportThreshold": false
+  },
+  "flags": {
+    "unknownProgramPresent": false,
+    "altLookupsPresent": false,
+    "rolesUnverified": false,
+    "decodeFailed": false
+  },
+  "unknownPrograms": []
+}

@@ -1,0 +1,30 @@
+{
+  "schema": "sign-safe/verdict@1",
+  "decision": "HOLD",
+  "reason": "Manual review required: HOLD-class primitive(s): System Transfer above threshold; declared SOL outflow 5000000000 lamports exceeds threshold.",
+  "messageVersion": "legacy",
+  "worstSeverity": "HOLD",
+  "findings": [
+    {
+      "id": "system-large-transfer",
+      "label": "System Transfer above threshold",
+      "severity": "HOLD",
+      "instructionIndex": 0,
+      "programId": "11111111111111111111111111111111",
+      "detail": "System Transfer of 5000000000 lamports exceeds threshold 1000000000.",
+      "mapsToLoss": "Direct SOL outflow from the signer above the configured threshold (default 1 SOL = 1,000,000,000 lamports)."
+    }
+  ],
+  "outflow": {
+    "lamports": "5000000000",
+    "splTransfers": [],
+    "exceedsLamportThreshold": true
+  },
+  "flags": {
+    "unknownProgramPresent": false,
+    "altLookupsPresent": false,
+    "rolesUnverified": false,
+    "decodeFailed": false
+  },
+  "unknownPrograms": []
+}

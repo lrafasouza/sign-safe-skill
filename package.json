@@ -1,0 +1,22 @@
+{
+  "name": "sign-safe-skill",
+  "version": "0.1.0",
+  "description": "Signing-time safety gate for Solana transactions: decode, classify danger primitives, compute signer outflow, and emit a SIGN/HOLD/REJECT verdict. Offline, deterministic, tested.",
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc",
+    "test": "node --import tsx skill/test/run.ts",
+    "gen-fixtures": "node --import tsx skill/fixtures/generate.ts",
+    "cli": "node --import tsx skill/src/cli.ts"
+  },
+  "dependencies": {
+    "@solana/kit": "^2.1.0",
+    "@solana/web3.js": "^1.95.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.5.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}

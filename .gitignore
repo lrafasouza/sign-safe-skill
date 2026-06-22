@@ -1,0 +1,22 @@
+# Dependencies / build
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Secrets and keys (a signing-safety tool must never commit these)
+.env
+.env.local
+.env.*.local
+*.env
+.secrets
+*.pem
+*.key
+keypair*.json
+*-keypair.json
+id_rsa*
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.log

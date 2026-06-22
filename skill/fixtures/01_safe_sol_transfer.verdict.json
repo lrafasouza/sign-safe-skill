@@ -1,0 +1,20 @@
+{
+  "schema": "sign-safe/verdict@1",
+  "decision": "SIGN",
+  "reason": "Recognized instructions within thresholds; no danger primitives, unknown programs, or unverified ALT references. Not a guarantee of intent -- verify the recipients and amounts yourself.",
+  "messageVersion": "legacy",
+  "worstSeverity": "INFO",
+  "findings": [],
+  "outflow": {
+    "lamports": "10000000",
+    "splTransfers": [],
+    "exceedsLamportThreshold": false
+  },
+  "flags": {
+    "unknownProgramPresent": false,
+    "altLookupsPresent": false,
+    "rolesUnverified": false,
+    "decodeFailed": false
+  },
+  "unknownPrograms": []
+}
