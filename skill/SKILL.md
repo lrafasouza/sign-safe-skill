@@ -41,12 +41,16 @@ no RPC, no simulation. Same bytes in, same JSON out:
 1. **decode** (`src/decode.ts`) -- base64 -> `DecodedMessage`. Our own wire-format
    parser for legacy and v0 messages (compact-u16 lengths, 32-byte pubkeys,
    header bytes, blockhash, compiled instructions, v0 addressTableLookups).
-2. **roles** (`src/roles.ts`) -- header math -> signer / writable / readonly for
-   static keys. ALT-referenced accounts are marked `unverified` (their concrete
-   identity cannot be known without an on-chain lookup).
+2. **roles** (`src/roles.ts`) -- two-layer writability: the positional partition
+   (`is_writable_index`) AND the runtime demotion layer (reserved-account-keys +
+   program-id demotion, SIMD-0105), both exposed. ALT-referenced accounts keep
+   their real writable/readonly role but are marked `addressVerified: false`
+   (their concrete identity cannot be known without an on-chain lookup).
 3. **classify** (`src/classify.ts`) -- each instruction x the danger catalog
    (`catalog/danger-primitives.json`) -> `Finding[]`, matched by programId +
-   discriminator.
+   discriminator. Plus `src/tlv.ts`, a pure Token-2022 mint/account TLV extension
+   walker (PermanentDelegate / TransferHook / fee / pausable, surfaced on a
+   byte-identical plain Transfer).
 4. **outflow** (`src/outflow.ts`) -- statically-declared signer outflow: System
    Transfer lamports (when the signer funds it) + SPL transfer/transferChecked
    amounts.

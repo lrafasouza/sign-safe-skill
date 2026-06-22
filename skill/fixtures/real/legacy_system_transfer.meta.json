@@ -1,0 +1,14 @@
+{
+  "signature": "4d5tdRgqVvLG51KZmCWnETViqXXUimQHC2B8pMy6tfWq17AcsX1AvLaFNLo788nFzSu2CxFsUJTAz9A4hZ7wKEwA",
+  "slot": 428126692,
+  "cluster": "mainnet-beta",
+  "capturedDate": "2026-06-22",
+  "source": "2ojv9BAi getSignaturesForAddress",
+  "version": "legacy",
+  "altCount": 0,
+  "numStaticKeys": 10,
+  "programIds": [
+    "11111111111111111111111111111111"
+  ],
+  "note": "Frozen offline. b64 is the SIGNED MESSAGE bytes (msg.serialize())."
+}

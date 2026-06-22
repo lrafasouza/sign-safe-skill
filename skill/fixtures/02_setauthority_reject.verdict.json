@@ -11,7 +11,7 @@
       "severity": "REJECT",
       "instructionIndex": 0,
       "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
-      "detail": "Matched SetAuthority on spl-token.",
+      "detail": "SetAuthority on spl-token: authority_type=0 (MintTokens), new_authority=AKkzLhjhyFtM9j7WAhbaqYpFe49cXeJBg2kzLRC2PnNa.",
       "mapsToLoss": "Hands mint/freeze/owner authority to an attacker, who can then mint, freeze, or seize at will."
     }
   ],

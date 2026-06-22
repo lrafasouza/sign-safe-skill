@@ -34,16 +34,39 @@ review; **INFO** = noted, never escalates on its own.
 - **Maps to loss:** Transfers a program's **upgrade authority**. The rug is not
   instant, but the attacker now holds the key to a later upgrade-rug.
 
-## Durable nonce vectors (HOLD)
+### `bpf-set-upgrade-authority-checked` -- BPF Loader Upgradeable `SetAuthorityChecked` (disc 7)
+- **Program:** BPF Loader Upgradeable
+- **Maps to loss:** The checked variant of the upgrade-authority transfer — same
+  loss class as `SetAuthority`. (C15/V4 require all four loader power
+  instructions to be caught.)
+
+### `bpf-close` -- BPF Loader Upgradeable `Close` (disc 5)
+- **Program:** BPF Loader Upgradeable
+- **Maps to loss:** Closes a buffer / programdata account and **drains its
+  lamports**; can destroy a program's upgrade data or sweep funds to an attacker.
+
+### `system-assign` -- System `Assign` (disc 1)  ·  `system-assign-with-seed` (disc 10)
+- **Program:** System (`11111111111111111111111111111111`)
+- **Maps to loss:** Reassigns an account's **owner program** to an arbitrary
+  program, handing it full control of the account's data and lamports. V4 treats
+  this ownership change as highest-severity.
+
+## Durable nonce vectors (HOLD) — non-expiry only at instruction index 0
 
 ### `durable-nonce-advance` -- System `AdvanceNonceAccount` (disc 4)
 - **Program:** System (`11111111111111111111111111111111`)
+- **Index gate (C17):** a transaction is durable-nonce-backed **only when this is
+  instruction index 0**. At index ≥ 1 it is a routine nonce advance and is
+  emitted as an INFO note (`nonce-advance-noninitial`), not a HOLD — raising the
+  non-expiry flag for a non-initial advance is a false positive.
 - **Maps to loss:** A durable nonce **removes blockhash expiry**. A transaction
   signed against a durable nonce does not go stale, so it can be **held and
   replayed later**, at a time of the attacker's choosing. This is the core
-  enabling vector of the **Drift April-2026 blind-signing incident**: signers
-  approved a transaction whose durable-nonce framing let it be executed under
-  conditions they never intended.
+  enabling vector of the **Drift April-2026 blind-signing incident**.
+- **Drift composite (V3):** a durable-nonce marker at ix0 **plus** any
+  authority/ownership change is escalated to **REJECT/CRITICAL** by the verdict
+  layer, regardless of the individual findings' severities — a held, non-expiring
+  transaction that also hands over authority is the exact Drift signature.
 
 ### `durable-nonce-initialize` -- System `Initialize/Authorize NonceAccount` (disc 6/7)
 - **Program:** System
@@ -78,9 +101,28 @@ review; **INFO** = noted, never escalates on its own.
   threshold (default **1 SOL = 1,000,000,000 lamports**). Small transfers are
   not flagged; large ones demand confirmation of the recipient and amount.
 
+### `system-transfer-with-seed` -- System `TransferWithSeed` (disc 11) (HOLD)
+- **Program:** System
+- **Maps to loss:** Transfers lamports out of a seed-derived account the signer
+  controls — direct SOL outflow via a less obvious path than a plain Transfer.
+
+## Token-2022 TLV extensions (surfaced even on a byte-identical plain Transfer)
+
+A transfer of a permanent-delegate / transfer-hook / fee token is byte-identical
+to a vanilla transfer at the instruction level (C9). The danger lives in the
+mint/account **TLV**, not the instruction stream. `src/tlv.ts` is a PURE walker
+over *already-fetched* account bytes (the fetch is the online `enrich.ts` hook);
+it surfaces PermanentDelegate (ext 12), TransferHook (14), TransferFeeConfig (1),
+NonTransferable (9), DefaultAccountState (6), InterestBearing (10),
+ScaledUiAmount (25) and Pausable (26) (V5), walks ALL entries, and fail-closes on
+a TLV length that runs past the buffer. A base-length (82-byte mint / 165-byte
+account) buffer has no account-type byte and no extensions — it is never
+over-read.
+
 ## Always benign
 
 ### ComputeBudget (`ComputeBudget111111111111111111111111111111`)
-- ComputeBudget instructions (set compute-unit limit/price) are **INFO** and
-  never treated as a danger or as an unknown program. They are transaction
-  metadata, not value-bearing operations.
+- ComputeBudget instructions (borsh, single `u8` tag at byte 0: set compute-unit
+  limit/price) are **INFO** and never treated as a danger or as an unknown
+  program. They are transaction metadata, not value-bearing operations. The
+  u32-LE-tag rule is never applied here (it is the System/BPF encoding).

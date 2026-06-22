@@ -55,6 +55,51 @@
       "mapsToLoss": "Transfers a program's upgrade authority, enabling a later upgrade-rug under attacker control."
     },
     {
+      "id": "bpf-set-upgrade-authority-checked",
+      "label": "BPF Loader Upgradeable: SetAuthorityChecked",
+      "program": "bpf-loader-upgradeable",
+      "programId": "BPFLoaderUpgradeab1e11111111111111111111111",
+      "detection": { "instructionType": "SetAuthorityChecked", "discriminator": [7] },
+      "severity": "REJECT",
+      "mapsToLoss": "Transfers a program's upgrade authority (checked variant), enabling a later upgrade-rug under attacker control."
+    },
+    {
+      "id": "bpf-close",
+      "label": "BPF Loader Upgradeable: Close",
+      "program": "bpf-loader-upgradeable",
+      "programId": "BPFLoaderUpgradeab1e11111111111111111111111",
+      "detection": { "instructionType": "Close", "discriminator": [5] },
+      "severity": "REJECT",
+      "mapsToLoss": "Closes a buffer/programdata account and drains its lamports; can destroy a program's upgrade data or sweep funds to an attacker."
+    },
+    {
+      "id": "system-assign",
+      "label": "System: Assign (ownership change)",
+      "program": "system",
+      "programId": "11111111111111111111111111111111",
+      "detection": { "instructionType": "Assign", "discriminator": [1] },
+      "severity": "REJECT",
+      "mapsToLoss": "Reassigns an account's owner program to an arbitrary program, handing it full control of the account's data and lamports."
+    },
+    {
+      "id": "system-assign-with-seed",
+      "label": "System: AssignWithSeed (ownership change)",
+      "program": "system",
+      "programId": "11111111111111111111111111111111",
+      "detection": { "instructionType": "AssignWithSeed", "discriminator": [10] },
+      "severity": "REJECT",
+      "mapsToLoss": "Reassigns a seed-derived account's owner program to an arbitrary program, handing over control of the account."
+    },
+    {
+      "id": "system-transfer-with-seed",
+      "label": "System: TransferWithSeed",
+      "program": "system",
+      "programId": "11111111111111111111111111111111",
+      "detection": { "instructionType": "TransferWithSeed", "discriminator": [11] },
+      "severity": "HOLD",
+      "mapsToLoss": "Transfers lamports out of a seed-derived account whose authority the signer controls; direct SOL outflow via a less-obvious path than a plain Transfer."
+    },
+    {
       "id": "durable-nonce-advance",
       "label": "System: AdvanceNonceAccount (durable nonce)",
       "program": "system",

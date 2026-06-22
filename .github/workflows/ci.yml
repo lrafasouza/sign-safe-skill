@@ -39,23 +39,26 @@ jobs:
       - name: Test
         run: npm test
 
-      # Determinism gate: the suite must be byte-for-byte identical across two
-      # runs. A non-deterministic core would silently break golden review.
+      # Determinism gate: the deterministic node runner's output must be
+      # byte-for-byte identical across two runs (it prints no timing, unlike
+      # vitest). A non-deterministic core would silently break golden review.
       - name: Determinism (two runs, byte-identical)
         run: |
-          npm test > /tmp/run1.txt
-          npm test > /tmp/run2.txt
+          npm run test:fixtures > /tmp/run1.txt
+          npm run test:fixtures > /tmp/run2.txt
           diff /tmp/run1.txt /tmp/run2.txt
 
       # Guard against blind golden regeneration: regenerating the fixtures from
       # @solana/web3.js must NOT change any committed .b64 (the generator is
-      # deterministic). If it does, the fixtures and goldens are drifting
-      # together and the cross-check would be meaningless.
+      # deterministic). gen-fixtures only writes .b64 (the goldens are written by
+      # the separate, reviewed `gen-goldens`), so the guard is scoped to .b64 --
+      # if the wire bytes drift, a fixture and its golden could be co-rewritten
+      # and the cross-check would be meaningless.
       - name: Fixtures are reproducible (no silent drift)
         run: |
           npm run gen-fixtures
-          if ! git diff --quiet -- skill/fixtures; then
-            echo "ERROR: gen-fixtures changed committed fixtures; goldens may have been regenerated blindly." >&2
-            git --no-pager diff -- skill/fixtures
+          if ! git diff --quiet -- 'skill/fixtures/*.b64'; then
+            echo "ERROR: gen-fixtures changed committed .b64 fixtures; the wire bytes are drifting." >&2
+            git --no-pager diff -- 'skill/fixtures/*.b64'
             exit 1
           fi

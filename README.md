@@ -26,14 +26,20 @@ the bytes and the signature.
 Given a base64 message (legacy or v0), the deterministic core:
 
 1. **decodes** the wire format with our own parser (no web3.js dependency in the
-   core),
-2. **derives roles** (signer / writable / readonly) from the header, marking any
-   Address-Lookup-Table reference as `unverified`,
-3. **classifies** each instruction against a 10-entry danger catalog
-   (authority handoffs, program upgrades, durable nonces, delegate grants,
-   account closes, large transfers),
+   core), enforcing the runtime sanitization invariants (D19),
+2. **derives roles** with a **two-layer writability model** — the positional
+   partition (`is_writable_index`) AND the runtime demotion layer
+   (reserved-account-keys + program-id demotion, SIMD-0105) — exposing both
+   modes; Address-Lookup-Table accounts keep their real writable/readonly role
+   but are marked `addressVerified: false` (their concrete address is unknown
+   offline),
+3. **classifies** each instruction against a 15-entry danger catalog
+   (authority/ownership handoffs, program upgrade/close, durable nonces, delegate
+   grants, account closes, large transfers) plus a pure Token-2022 TLV
+   extension walker,
 4. **computes** the statically-declared signer outflow,
-5. **emits** a `SIGN / HOLD / REJECT` verdict + `verdict.json`.
+5. **emits** a `SIGN / HOLD / REJECT` verdict + `verdict.json`, escalating the
+   Drift composite (durable-nonce marker at ix0 + authority change) to REJECT.
 
 **Fail-closed by construction:** malformed input -> REJECT; unresolved ALT
 references can never produce SIGN; unknown programs can never produce SIGN, and
@@ -63,9 +69,9 @@ in this blob is recognized as dangerous," never "this is safe."
   dependency-free wire parser.
 - Deriving signer / writable / readonly roles and flagging every
   Address-Lookup-Table reference as `unverified`.
-- Classifying instructions against a 10-entry danger-primitive catalog
+- Classifying instructions against a 15-entry danger-primitive catalog
   (authority handoffs, program upgrades, durable nonces, delegate grants,
-  account closes, large transfers).
+  account closes, large transfers) plus a pure Token-2022 TLV extension walker.
 - Computing the statically-declared signer outflow (lamports + SPL transfers).
 - Emitting a `SIGN / HOLD / REJECT` verdict and a machine-readable
   `verdict.json` with a verdict-mirroring exit code.
@@ -88,18 +94,33 @@ is what you *meant*.
 ## Why this skill is different: it actually runs, and it is tested
 
 Most skills are prose. This one ships a small, **pure-function** TypeScript core
-with a deterministic, fully **offline** test suite:
+with a deterministic, fully **offline** test suite (`vitest` + `fast-check`),
+**145 checks across 8 files** (`npm test`, see exact counts below):
 
-- **10 golden fixtures** -- real serialized messages built with `@solana/web3.js`,
-  decoded by *our own* parser, verdicts deep-equal-checked against committed
-  `verdict.json` goldens.
-- **Cross-validation** -- the same bytes are deserialized with `@solana/web3.js`
-  and we assert our decoded program ids, static keys, version, and ALT count
-  match. Two independent implementations agree, so the parser is *correct*, not
-  merely self-consistent.
-- **Determinism** -- every fixture is decoded twice and the JSON must be identical.
-- **Fail-closed** -- truncated / garbage / tampered input must yield REJECT and
-  never throw uncaught.
+- **10 synthetic golden fixtures** -- serialized messages built with
+  `@solana/web3.js`, decoded by *our own* parser, verdicts deep-equal-checked
+  against committed `verdict.json` goldens (regenerable, reviewed, with
+  `npm run gen-goldens`).
+- **5 REAL mainnet fixtures** (`skill/fixtures/real/`) -- captured once from
+  `api.mainnet-beta.solana.com` (located via `getSignaturesForAddress`, fetched
+  via `getTransaction`), frozen as base64 of the signed **message** bytes with
+  full provenance (signature, slot, cluster, capture date — see each
+  `*.meta.json`) and decoded **offline** at run time: a legacy System transfer,
+  an SPL-Token transfer, a Token-2022 transfer, a v0 tx WITHOUT ALTs, and a v0 tx
+  **WITH** ALTs (the most-broken path). No test makes a network call.
+- **Differential cross-validation** on EVERY fixture against **two** independent
+  references — `@solana/web3.js` (v1) and `@solana/kit` (v2) — on version, header,
+  static keys, blockhash, per-instruction program ids / account indexes / data,
+  and ALT count; plus a disagreement ⇒ fail-closed (V10) guard.
+- **Property-based** (fast-check, seed 42): round-trip identity
+  (`encode(decode(b)) === b`), fail-closed on arbitrary `uint8Array`, no
+  trailing-byte tolerance, and compact-u16 invariants over `[0, 65535]`.
+- **Role-derivation goldens** (SDK `test_is_writable_index` / `test_is_maybe_writable`,
+  program-id demotion flip, multi-lookup ordering, reserved-key vs Incinerator).
+- **Determinism**, **fail-closed** adversarial inputs (truncation, trailing
+  garbage, out-of-range index, unsupported version `0x81`, empty/single-byte),
+  **prompt-injection** (decoded data never interpolated, V8), and a
+  **no-network** assertion (core modules import no http/https/net/fetch).
 
 ## Install
 
@@ -135,9 +156,13 @@ conflicting dependency graph.
 git clone https://github.com/<you>/sign-safe-skill sign-safe
 cd sign-safe
 npm install
-npm run gen-fixtures   # (re)generate the 10 .b64 fixtures from @solana/web3.js
-npm test               # golden + cross-validation + determinism + fail-closed
+npm run gen-fixtures   # (re)generate the 10 synthetic .b64 fixtures from @solana/web3.js
+npm test               # vitest: golden + differential (web3.js + kit) + PBT + real fixtures + fail-closed
 ```
+
+The real mainnet fixtures under `skill/fixtures/real/` are committed (frozen
+bytes + provenance) and read offline; `gen-fixtures` does NOT touch them and no
+test makes a network call.
 
 You can also drop the `skill/`, `commands/`, and `rules/` directories directly
 under a Claude Code skills root (e.g. `~/.claude/skills/sign-safe/`) if you are
@@ -179,7 +204,7 @@ flags           : unknownProgram=false alt=false unverifiedRoles=false decodeFai
 
 findings (1):
   - [REJECT] ix#0 SPL Token SetAuthority
-      Matched SetAuthority on spl-token.
+      SetAuthority on spl-token: authority_type=0 (MintTokens), new_authority=<base58>.
       maps to loss: Hands mint/freeze/owner authority to an attacker, who can then mint, freeze, or seize at will.
 
 verdict.json:
@@ -196,7 +221,7 @@ verdict.json:
       "severity": "REJECT",
       "instructionIndex": 0,
       "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
-      "detail": "Matched SetAuthority on spl-token.",
+      "detail": "SetAuthority on spl-token: authority_type=0 (MintTokens), new_authority=<base58>.",
       "mapsToLoss": "Hands mint/freeze/owner authority to an attacker, who can then mint, freeze, or seize at will."
     }
   ],
@@ -245,7 +270,7 @@ checked and hands intent verification back to the human. CLI exit codes mirror
 the verdict so scripts and agents can gate on them: **`0 = SIGN`, `10 = HOLD`,
 `20 = REJECT`**.
 
-## The danger catalog (10 primitives)
+## The danger catalog (15 primitives)
 
 | id | program | detection | severity | maps to loss |
 |----|---------|-----------|----------|--------------|
@@ -254,7 +279,12 @@ the verdict so scripts and agents can gate on them: **`0 = SIGN`, `10 = HOLD`,
 | `token2022-permanent-delegate` | Token-2022 | PermanentDelegate (35) | HOLD | irrevocable seizure of any holder's tokens |
 | `bpf-upgrade` | BPF Loader Upgradeable | Upgrade (3) | REJECT | bytecode replacement -> instant rug |
 | `bpf-set-upgrade-authority` | BPF Loader Upgradeable | SetAuthority (4) | REJECT | upgrade-authority handoff -> later rug |
-| `durable-nonce-advance` | System | AdvanceNonceAccount (4) | HOLD | replay/hold vector (Drift 2026) |
+| `bpf-set-upgrade-authority-checked` | BPF Loader Upgradeable | SetAuthorityChecked (7) | REJECT | upgrade-authority handoff (checked) |
+| `bpf-close` | BPF Loader Upgradeable | Close (5) | REJECT | destroys/drains buffer/programdata account |
+| `system-assign` | System | Assign (1) | REJECT | reassigns account owner to arbitrary program |
+| `system-assign-with-seed` | System | AssignWithSeed (10) | REJECT | seed-account ownership change |
+| `system-transfer-with-seed` | System | TransferWithSeed (11) | HOLD | SOL outflow from a seed-derived account |
+| `durable-nonce-advance` | System | AdvanceNonceAccount (4) **at ix0 only** | HOLD | replay/hold vector (Drift 2026); + authority change ⇒ REJECT |
 | `durable-nonce-initialize` | System | Initialize/Authorize Nonce (6/7) | HOLD | sets/redirects nonce authority |
 | `spl-approve-delegate` | SPL Token | Approve/ApproveChecked (4/13) | HOLD | delegate spend -> silent drain |
 | `spl-close-account` | SPL Token | CloseAccount (9) | HOLD | sweeps lamports to a destination |
@@ -267,25 +297,35 @@ for the machine-readable source.
 ## How it is tested
 
 ```
-$ npm test
-sign-safe test suite -- 10 fixtures
+$ npm test            # vitest run -- the full suite (exits nonzero on any fail)
 
-[1]  Golden verdicts (our core vs committed verdict.json)  -- 10 PASS
-[2]  Cross-validation (our parser vs @solana/web3.js)       -- 10 PASS  (all fixtures)
-[2b] Cross-validation (our parser vs @solana/kit, modern)   -- 10 PASS  (all fixtures)
-[3]  Determinism (same bytes -> identical JSON, twice)      -- 10 PASS
-[4]  Fail-closed (malformed input -> REJECT, never throws)  --  6 PASS
-[5]  Banned-phrase enforcement (no reassurance in verdicts) -- 11 PASS
-[6]  Behavioral guards (decoder & verdict fail-closed)      --  8 PASS
+ ✓ skill/test/decode.test.ts        (25 tests)   compact-u16 vectors/rejection, D19, versions, fail-closed
+ ✓ skill/test/roles.test.ts         (13 tests)   is_writable_index + demotion goldens, multi-lookup, reserved
+ ✓ skill/test/classify.test.ts      (21 tests)   Transfer/TransferChecked, SetAuthority, TLV, loader, routing
+ ✓ skill/test/verdict.test.ts       (12 tests)   durable nonce ix0 gate, Drift composite, prompt-injection, V2
+ ✓ skill/test/pbt.test.ts           ( 7 tests)   round-trip, fail-closed, no-trailing, compact-u16 (fast-check)
+ ✓ skill/test/fixtures.test.ts      (52 tests)   golden + web3.js + kit differential + disagreement + no-network
+ ✓ skill/test/real-fixtures.test.ts (14 tests)   REAL mainnet txs decoded offline + cross-validated
+ ✓ skill/test/legacy-runner.test.ts ( 1 test )   runs the standalone node smoke runner
 
-PASS 65   FAIL 0
-RESULT: ALL GREEN
+ Test Files  8 passed (8)
+      Tests  145 passed (145)
 ```
+
+There are two entry points: `npm test` (vitest, the full suite) and
+`npm run test:fixtures` (the dependency-light standalone node runner, usable in a
+minimal checkout and used as the CI determinism oracle). `npm run gen-goldens`
+regenerates the committed golden `verdict.json` from the current core (only after
+reviewing each decision — the goldens are a security contract).
 
 Run in CI on every push/PR via `.github/workflows/ci.yml` (`npm ci` +
 type-check + `npm test`), across Node 20 and 22, with a determinism gate (two
-runs must be byte-identical) and a fixture-drift guard (`npm run gen-fixtures`
-must not change any committed `.b64`).
+runs of the node runner must be byte-identical) and a fixture-drift guard
+(`npm run gen-fixtures` must not change any committed `.b64`).
+
+The real fixtures are captured ONCE and committed; the suite reads the frozen
+bytes and makes **no network calls at run time**. Re-capturing is a manual,
+out-of-band step (see `skill/fixtures/real/*.meta.json` for provenance).
 
 Solana libraries are used **only** for fixture generation and cross-validation,
 never by the core. The cross-check now covers **all 10 fixtures** against **two
@@ -302,6 +342,40 @@ The banned-reassurance-phrase contract is **executable**, not just prose:
 `src/banned.ts` is run over every verdict's narrative fields inside
 `buildVerdict`/`rejectVerdict`, so any reason or finding string that reintroduces
 "safe" / "no risk" / etc. fails loud (and the gate fails closed to REJECT).
+
+## Validation
+
+A reviewer can reproduce the entire result from a clean clone with three
+commands and no network access at test time:
+
+```bash
+npm install            # deps for generation + cross-validation only (no postinstall, no curl)
+npm run gen-fixtures   # rebuild the 10 synthetic .b64 from @solana/web3.js (deterministic, byte-identical)
+npm test               # 145 checks, 8 files, fully offline; exits nonzero on any failure
+```
+
+Expected: `Tests  145 passed (145)`, and `git status` clean afterward (the
+deterministic generator reproduces the committed `.b64` byte-for-byte). To also
+confirm the type contract: `npx tsc --noEmit` (exit 0).
+
+What those 145 checks actually validate:
+
+| Coverage area | Where | What it proves |
+|---|---|---|
+| **Golden verdicts** | `fixtures.test.ts` | All 10 synthetic fixtures' verdicts deep-equal committed `verdict.json` goldens (the SIGN/HOLD/REJECT contract is frozen). |
+| **Dual-reference cross-validation** | `fixtures.test.ts`, `real-fixtures.test.ts` | Our dependency-free decoder agrees with **both** `@solana/web3.js` (v1) and `@solana/kit` (v2) on version, header, static keys, blockhash, per-ix program id/accounts/data, and ALT count — on every fixture. |
+| **Property-based** | `pbt.test.ts` | fast-check (seed 42): `encode(decode(b)) === b` round-trip, fail-closed on arbitrary `Uint8Array`, no trailing-byte tolerance, compact-u16 invariants over `[0, 65535]`. |
+| **Real mainnet fixtures** | `real-fixtures.test.ts` | 5 frozen mainnet txs (legacy System, SPL-Token, Token-2022, v0 no-ALT, v0 with-ALT) decoded **offline** and cross-validated; each carries a `*.meta.json` with signature, slot, cluster, and capture date for provenance. |
+| **SDK role / demotion goldens** | `roles.test.ts` | Two-layer writability against SDK semantics: `is_writable_index` partition, runtime program-id demotion flip (SIMD-0105), multi-lookup ordering, reserved-key set vs Incinerator, ALT accounts marked `addressVerified: false`. |
+| **Fail-closed / adversarial** | `decode.test.ts`, `verdict.test.ts` | Truncation, trailing garbage, out-of-range index, unsupported version `0x81`, empty/single-byte → REJECT; unresolved ALT can never SIGN; unknown program writing a value-bearing account → REJECT; cross-oracle disagreement ⇒ fail-closed (V10); prompt-injection (decoded data never interpolated, V8); banned reassurance phrases fail loud. |
+| **Determinism** | `run.ts` + CI | The standalone node runner's output is byte-identical across two runs (no timing/nondeterminism in the core). |
+| **No-network** | `fixtures.test.ts` | Core modules import no `http`/`https`/`net`/`fetch`; the suite makes zero network calls at run time. |
+
+CI (`.github/workflows/ci.yml`) runs exactly this on every push and PR across
+Node 20 and 22, plus a determinism gate (two byte-identical runner runs) and a
+fixture-drift guard (`gen-fixtures` must not change any committed `.b64`). The
+real fixtures are committed, so CI never depends on the network — it just decodes
+the frozen bytes.
 
 ## Repository structure
 
@@ -325,21 +399,33 @@ sign-safe-skill/
     ├── catalog/
     │   └── danger-primitives.json
     ├── src/
-    │   ├── types.ts        # the shared contract
-    │   ├── decode.ts       # PURE base64 -> DecodedMessage (legacy + v0)
-    │   ├── roles.ts        # PURE header math -> roles, ALT -> unverified
+    │   ├── types.ts        # the shared contract (two-layer role model)
+    │   ├── decode.ts       # PURE base64 -> DecodedMessage (legacy + v0) + re-encoder
+    │   ├── roles.ts        # PURE two-layer writability (partition + demotion) + reserved set
     │   ├── classify.ts     # PURE instruction x catalog -> Finding[]
     │   ├── outflow.ts      # PURE statically-declared signer outflow
+    │   ├── tlv.ts          # PURE Token-2022 mint/account TLV extension walker
     │   ├── banned.ts       # PURE banned-reassurance-phrase enforcement
-    │   ├── verdict.ts      # PURE Finding[] -> Verdict + verdict.json
+    │   ├── verdict.ts      # PURE Finding[] -> Verdict + verdict.json (Drift composite)
     │   ├── enrich.ts       # IMPURE runtime hooks (NEVER imported by core/tests)
     │   └── cli.ts          # thin CLI wrapper
     ├── fixtures/
-    │   ├── generate.ts     # builds the .b64 fixtures with @solana/web3.js
-    │   ├── NN_*.b64        # 10 serialized messages
-    │   └── NN_*.verdict.json   # 10 golden verdicts
+    │   ├── generate.ts     # builds the synthetic .b64 fixtures with @solana/web3.js
+    │   ├── gen-goldens.ts  # regenerates the golden verdict.json from the core
+    │   ├── NN_*.b64        # 10 synthetic serialized messages
+    │   ├── NN_*.verdict.json   # 10 golden verdicts
+    │   └── real/           # REAL mainnet fixtures (frozen .b64 + .meta.json provenance)
     └── test/
-        └── run.ts          # golden + cross-validation + determinism + fail-closed
+        ├── helpers.ts          # offline message-byte builders + fixture loaders
+        ├── decode.test.ts      # wire-format / compact-u16 / sanitization / fail-closed
+        ├── roles.test.ts       # role-derivation goldens (partition + demotion)
+        ├── classify.test.ts    # instruction classification + TLV
+        ├── verdict.test.ts     # durable nonce / Drift composite / prompt-injection
+        ├── pbt.test.ts         # fast-check property-based tests (seed 42)
+        ├── fixtures.test.ts    # golden + web3.js/kit differential + no-network
+        ├── real-fixtures.test.ts # real mainnet txs decoded offline + cross-validated
+        ├── legacy-runner.test.ts  # wraps run.ts so it is part of `npm test`
+        └── run.ts              # standalone node smoke runner (npm run test:fixtures)
 ```
 
 ## License

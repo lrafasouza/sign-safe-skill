@@ -45,8 +45,28 @@ v0:
 Array lengths are encoded as a little-endian base-128 varint capped at 3 bytes /
 16 bits. We reject:
 - continuation past 3 bytes,
-- values above `0xFFFF`,
-- non-minimal encodings (a trailing zero continuation byte).
+- values above `0xFFFF` (3rd byte > `0x03`),
+- non-minimal / alias encodings (a trailing zero continuation byte),
+- truncation (a continuation bit with no following byte).
+
+The exact rejection set (`[0x80,0x00]`, `[0xff,0x00]`, `[0x80,0x80,0x00]`,
+`[0x81,0x80,0x00]`, `[0x80]`, `[0x80,0x80,0x80,0x00]`, `[0x80,0x80,0x04]`,
+`[0x80,0x80,0x06]`) and the canonical encode vectors are pinned in
+`skill/test/decode.test.ts` and exercised by a fast-check property over the full
+`[0, 65535]` range (`skill/test/pbt.test.ts`).
+
+### Sanitization invariants (enforced at decode)
+
+Beyond key-count consistency, the decoder rejects messages that the runtime/Squads
+sanitize logic also rejects:
+- `numRequiredSignatures >= 1` (there is always a fee payer),
+- `numReadonlySignedAccounts < numRequiredSignatures` (**strict** — index 0 is
+  always a *writable* signer / fee payer; equality would mean no writable fee
+  payer and is invalid),
+- `numRequiredSignatures + numReadonlyUnsignedAccounts <= numStaticKeys`,
+- no duplicate keys in the static account list. (The full combined-list duplicate
+  check, including ALT-resolved addresses, is online-only and deferred to the
+  resolver.)
 
 ### Trailing bytes => reject
 
@@ -54,21 +74,37 @@ A well-formed message consumes **all** of its bytes. If any bytes remain after
 parsing, we refuse to trust the partial parse and raise a decode error (which the
 verdict layer turns into REJECT). This is what catches truncation and tampering.
 
-## Header role math
+## Header role math — TWO LAYERS (partition + demotion)
 
-Static account roles are derived purely from the three header counts and the
-canonical key ordering (signers first, writable before readonly within each
-group). With `N = numStaticKeys`:
+`roles.ts` reproduces the runtime's two-stage writability decision and exposes
+BOTH on every `AccountRole` (`writablePartition` and `writableRuntime`), so the
+output is reproducible whether or not a reserved set was supplied.
+
+**Layer 1 — partition (`is_writable_index`, == `is_maybe_writable(i, None)`).**
+Pure positional math over the header counts and the combined-list ordering. With
+`K = numStaticKeys`, `S = numRequiredSignatures`, `Rs = numReadonlySignedAccounts`,
+`Ru = numReadonlyUnsignedAccounts`, `W = Σ writable ALT indexes`:
 
 ```
-[ 0 .. numRequiredSignatures - numReadonlySignedAccounts )   signer + writable
-[ .. numRequiredSignatures )                                 signer + readonly
-[ numRequiredSignatures .. N - numReadonlyUnsignedAccounts ) writable
-[ .. N )                                                     readonly
+[ 0 .. S-Rs )       signer + writable        (static)
+[ S-Rs .. S )       signer + readonly        (static)
+[ S .. K-Ru )       writable non-signer      (static)
+[ K-Ru .. K )       readonly non-signer      (static)
+loaded i >= K:      writable iff (i-K) < W   (ALT)
 ```
 
-We also sanity-check that the header counts are consistent with the key count;
-inconsistent headers are a decode error.
+**Layer 2 — demotion (`is_writable_internal` / `demote_program_id`).** Even when
+the partition layer says writable, the account is READONLY at runtime if EITHER
+(a) its key is in the **reserved-account-keys** set (SIMD-0105), OR (b) it is used
+as a `programIdIndex` by any instruction AND the upgradeable BPF loader is NOT
+present in the combined list. The verdict consumes the demoted (runtime) mode;
+`deriveRoles(msg, { reservedAccountKeys })` applies it, while `deriveRoles(msg)`
+returns the raw partition mode (the runtime's `None` behaviour). The
+reserved set is the SIMD-0105 active set (native programs + sysvars); the
+**Incinerator is explicitly NOT reserved** and stays writable.
+
+We also sanity-check that the header counts are consistent with the key count
+(see the sanitization invariants above); inconsistent headers are a decode error.
 
 ## ALT conservatism (the key safety choice)
 
@@ -77,10 +113,14 @@ on-chain Address Lookup Table*. Resolving an index to a concrete address
 requires fetching the table account over RPC -- a **network** operation the core
 never performs. Therefore:
 
-- every ALT-referenced account is emitted with role `unverified` and
-  `verified: false`;
-- the verdict layer treats the presence of *any* unverified role as a hard bar
-  against `SIGN`.
+- every ALT-referenced account is emitted with `addressVerified: false` and a
+  synthetic `alt:<table>#wN/#rN` address — but it keeps a REAL `writable` /
+  `readonly` role, because the writable-vs-readonly distinction is fully
+  determined by message ordering (the writable-region `[K, K+W)` vs the
+  readonly-region `[K+W, K+W+R)`) and needs no network. Only the concrete
+  *address* is unknown offline, not the writability;
+- the verdict layer treats the presence of *any* account with
+  `addressVerified: false` as a hard bar against `SIGN` (`hasUnverifiedRoles`).
 
 A malicious transaction cannot hide a dangerous account behind an ALT and earn a
 SIGN: the unresolved reference alone caps the verdict at HOLD. And if an
@@ -94,9 +134,9 @@ produce a better deterministic pass) is a documented runtime hook in
 
 ### Synthetic ALT role ordering (canonical two-pass)
 
-When `roles.ts` appends synthetic `unverified` entries for ALT-referenced
-indexes, it follows Solana's canonical resolution order so a synthetic role's
-index matches the real runtime account index:
+When `roles.ts` appends synthetic entries (`addressVerified: false`) for
+ALT-referenced indexes, it follows Solana's canonical resolution order so a
+synthetic role's index matches the real runtime account index:
 
 ```
 [ static keys ]
@@ -119,13 +159,33 @@ key set), so a program-id index outside the static keys is a decode error.
   identify their instruction by a leading tag:
   - SPL Token / Token-2022: a single `u8` discriminator (e.g. `SetAuthority = 6`,
     `Approve = 4`, `CloseAccount = 9`, `Transfer = 3`, `TransferChecked = 12`).
-  - System / BPF Loader Upgradeable: a 4-byte little-endian `u32` enum index
-    (e.g. System `Transfer = 2`, `AdvanceNonceAccount = 4`; BPF `Upgrade = 3`,
-    `SetAuthority = 4`). We read the **full `u32`** for *both* of these programs
+  - System / BPF Loader Upgradeable: a 4-byte little-endian `u32` **bincode**
+    discriminant (bincode serializes a Rust enum tag as a 4-byte LE u32; the
+    `#[repr(u8)]` on the loader enum is a red herring). System: `Assign = 1`,
+    `Transfer = 2`, `AssignWithSeed = 10`, `TransferWithSeed = 11`,
+    `AdvanceNonceAccount = 4`. BPF Loader Upgradeable: `Upgrade = 3`,
+    `SetAuthority = 4`, `Close = 5`, `SetAuthorityChecked = 7` — all four are
+    high-impact (code replacement / authority handoff / account destruction) and
+    are catalogued REJECT. We read the **full `u32`** for *both* programs
     (`classify.ts` keys this off a `U32_TAG_PROGRAMS` set), so a crafted payload
-    like `[3,1,0,0]` cannot masquerade as tag `3` — only `[3,0,0,0]` (u32 = 3)
-    matches. Matching only `byte[0]` would have let non-zero high bytes spoof a
-    danger tag; the BPF Loader path previously did exactly that and is now fixed.
+    like `[3,1,0,0]` (u32 = 259) cannot masquerade as tag `3` — only `[3,0,0,0]`
+    (u32 = 3) matches.
+  - **Compute Budget is the odd one out**: borsh, a single `u8` tag at byte 0
+    (`SetComputeUnitLimit = 2`, `SetComputeUnitPrice = 3`, …), fields at offset 1.
+    It only sets execution params (cannot move funds or change ownership), so it
+    is treated as benign; the u32-LE rule is NEVER applied to it. This is also why
+    the program id, not the data shape, drives the decoder: bytes `02 00 00 00 …`
+    are a System Transfer under System but `SetComputeUnitLimit` under Compute
+    Budget.
+  - **SetAuthority decode (C4/C5):** for SPL/Token-2022 `SetAuthority` (tag 6) the
+    finding detail decodes `authority_type` (byte 1) and the `COption` new
+    authority (byte 2 flag; 32-byte pubkey when `Some`), names the AuthorityType,
+    and flags an AuthorityType 4–17 used on classic SPL Token as invalid.
+  - **Durable-nonce gate (C17):** a transaction is durable-nonce-backed IFF
+    instruction **index 0** is a System `AdvanceNonceAccount`. At index ≥ 1 it is
+    a routine nonce advance (an INFO note), NOT the non-expiry marker. A
+    durable-nonce marker at ix0 **plus** any authority/ownership change escalates
+    to REJECT (the Drift signature, V3).
   - For multi-variant catalog entries (more than one accepted discriminator,
     e.g. `durable-nonce-initialize` = `{6: InitializeNonceAccount,
     7: AuthorizeNonceAccount}` and `spl-approve-delegate` =

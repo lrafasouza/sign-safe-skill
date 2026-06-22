@@ -62,17 +62,21 @@ export function computeOutflow(
 
     if (ix.programId === SPL_TOKEN || ix.programId === TOKEN_2022) {
       const disc = ix.data.length > 0 ? (ix.data[0] as number) : -1;
-      // Transfer:        [u8 3][u64 amount]
-      // TransferChecked: [u8 12][u64 amount][u8 decimals]
-      if (
-        (disc === SPL_TRANSFER_DISC || disc === SPL_TRANSFER_CHECKED_DISC) &&
-        ix.data.length >= 9
-      ) {
+      // Transfer (C3):        [u8 3][u64 amount]            -> total 9 bytes
+      // TransferChecked (C3): [u8 12][u64 amount][u8 dec]   -> total 10 bytes
+      // The amount is u64-LE at offset 1 for BOTH, but the lengths and account
+      // lists differ (TransferChecked adds the mint), so we validate the length
+      // per discriminator and never conflate the two (C3, common bug #8).
+      const isTransfer = disc === SPL_TRANSFER_DISC && ix.data.length >= 9;
+      const isTransferChecked =
+        disc === SPL_TRANSFER_CHECKED_DISC && ix.data.length >= 10;
+      if (isTransfer || isTransferChecked) {
         const amount = readU64LE(ix.data, 1);
         splTransfers.push({
           instructionIndex,
           programId: ix.programId,
           amount: amount.toString(),
+          ...(isTransferChecked ? { decimals: ix.data[9] as number } : {}),
         });
       }
     }

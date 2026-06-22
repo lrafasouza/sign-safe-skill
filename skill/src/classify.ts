@@ -32,6 +32,7 @@ import type {
   VerdictContext,
 } from "./types.ts";
 import { isWritable } from "./roles.ts";
+import { base58Encode } from "./decode.ts";
 
 const ENTRIES = catalog.entries as CatalogEntry[];
 const KNOWN_PROGRAMS = catalog.knownPrograms as Record<string, string>;
@@ -42,11 +43,16 @@ const BPF_LOADER_UPGRADEABLE = "BPFLoaderUpgradeab1e11111111111111111111111";
 
 /**
  * Programs whose instruction discriminator is a 4-byte little-endian u32 enum
- * index (Borsh-serialized Rust enum tag), NOT a single leading byte. Both the
- * System program and the BPF Loader Upgradeable program use this encoding, so
- * we must read the FULL u32 and validate the trailing 3 bytes are zero. Reading
- * only byte[0] would let a crafted payload (e.g. tag bytes [3, 1, 0, 0]) match
- * "Upgrade" (3) when it is actually a different/invalid instruction.
+ * discriminant, NOT a single leading byte. The System program and the BPF
+ * Loader Upgradeable program serialize with BINCODE: bincode writes a Rust enum
+ * discriminant as a 4-byte u32 LITTLE-ENDIAN value (the `#[repr(u8)]` on the
+ * loader enum is a red herring -- bincode ignores it). So we read the FULL u32
+ * and match on it; reading only byte[0] would let a crafted payload (e.g. tag
+ * bytes [3, 1, 0, 0] = 259) masquerade as "Upgrade" (3).
+ *
+ * Compute Budget is the ODD ONE OUT: it is borsh with a single u8 tag at byte 0
+ * (handled separately and treated as benign), so the u32-LE rule must NEVER be
+ * applied to it.
  */
 const U32_TAG_PROGRAMS = new Set<string>([SYSTEM_PROGRAM, BPF_LOADER_UPGRADEABLE]);
 
@@ -76,15 +82,82 @@ function readU32LE(data: Uint8Array, offset: number): number {
 }
 
 /**
- * Read a 4-byte little-endian u32 enum-index discriminator (used by the System
+ * Read a 4-byte little-endian u32 bincode enum discriminant (used by the System
  * program and the BPF Loader Upgradeable program). For Transfer that index is
- * 2, AdvanceNonceAccount is 4, BPF Upgrade is 3, BPF SetAuthority is 4, etc.
- * We read the full u32 so a small tag is never confused with a stray high byte.
- * Returns null if there are fewer than 4 bytes of data.
+ * 2, AdvanceNonceAccount is 4, BPF Upgrade is 3, BPF SetAuthority is 4, Close is
+ * 5, SetAuthorityChecked is 7, System Assign is 1, etc. We read the full u32 so
+ * a small tag is never confused with a stray high byte. Returns null if there
+ * are fewer than 4 bytes of data.
  */
 function u32TagDiscriminator(data: Uint8Array): number | null {
   if (data.length < 4) return null;
   return readU32LE(data, 0);
+}
+
+/**
+ * SPL Token / Token-2022 AuthorityType names by u8 value (C5). Values 0-3 are
+ * valid on classic SPL Token (Tokenkeg); 4-17 are Token-2022 additions and are
+ * INVALID on a Tokenkeg-owned account. Values > 17 are "unknown".
+ */
+const AUTHORITY_TYPE_NAMES: Record<number, string> = {
+  0: "MintTokens",
+  1: "FreezeAccount",
+  2: "AccountOwner",
+  3: "CloseAccount",
+  4: "TransferFeeConfig",
+  5: "WithheldWithdraw",
+  6: "CloseMint",
+  7: "InterestRate",
+  8: "PermanentDelegate",
+  9: "ConfidentialTransferMint",
+  10: "TransferHookProgramId",
+  11: "ConfidentialTransferFeeConfig",
+  12: "MetadataPointer",
+  13: "GroupPointer",
+  14: "GroupMemberPointer",
+  15: "ScaledUiAmount",
+  16: "Pause",
+  17: "PermissionedBurn",
+};
+
+const SPL_TOKEN = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+
+/**
+ * Decode a SPL/Token-2022 SetAuthority (tag 6) detail (C4/C5/V1): byte1 =
+ * authority_type, byte2 = COption presence flag (0=None, 1=Some), bytes 3..35 =
+ * new_authority pubkey iff flag==1. Valid lengths are 3 (None) or 35 (Some).
+ * Surfaces the AuthorityType name and the new authority (or "cleared"), and
+ * flags an AuthorityType 4-17 seen on a Tokenkeg-owned program as invalid.
+ */
+function buildSetAuthorityDetail(
+  programLabel: string,
+  programId: string,
+  data: Uint8Array,
+): string {
+  if (data.length < 3) {
+    return `SetAuthority on ${programLabel}; truncated instruction data (cannot read authority type).`;
+  }
+  const authType = data[1] as number;
+  const optionFlag = data[2] as number;
+  const typeName = AUTHORITY_TYPE_NAMES[authType] ?? "unknown authority type";
+
+  let newAuthority: string;
+  if (optionFlag === 0) {
+    newAuthority = "cleared (None)";
+  } else if (optionFlag === 1 && data.length >= 35) {
+    newAuthority = base58Encode(data.subarray(3, 35));
+  } else {
+    newAuthority = "malformed new_authority option";
+  }
+
+  const isClassicSplToken = programId === SPL_TOKEN;
+  const invalidOnClassic =
+    isClassicSplToken && authType >= 4 && authType <= 17;
+  const invalidNote = invalidOnClassic
+    ? ` -- AuthorityType ${authType} (${typeName}) is INVALID on classic SPL Token (only 0-3 valid)`
+    : "";
+
+  return `SetAuthority on ${programLabel}: authority_type=${authType} (${typeName}), new_authority=${newAuthority}${invalidNote}.`;
 }
 
 /**
@@ -100,6 +173,10 @@ const DISCRIMINATOR_NAMES: Record<string, string> = {
   "spl-approve-delegate:13": "ApproveChecked",
   "bpf-set-upgrade-authority:4": "SetAuthority",
 };
+
+/** System Program program id; the durable-nonce marker only counts under it. */
+const NONCED_TX_MARKER_IX_INDEX = 0;
+const SYSTEM_ADVANCE_NONCE_TAG = 4;
 
 /**
  * Build the factual `detail` string for a catalog finding. For multi-variant
@@ -129,7 +206,32 @@ export interface ClassifyResult {
   unknownPrograms: string[];
   /** True if an unknown program touches a writable account (value-bearing). */
   unknownProgramWritable: boolean;
+  /**
+   * True iff instruction index 0 is a System AdvanceNonceAccount (C17): the
+   * durable-nonce marker. Computed independently of catalog matching so the
+   * verdict's Drift-composite rule (V3) is robust.
+   */
+  durableNonceMarker: boolean;
+  /**
+   * True iff any finding represents an authority/ownership change (V4): SPL/
+   * Token-2022 SetAuthority, BPF Loader Upgrade/SetAuthority/SetAuthorityChecked/
+   * Close, System Assign/AssignWithSeed. The durable-nonce + authority-change
+   * composite is the Drift signature and must escalate to REJECT (V3).
+   */
+  authorityOrOwnershipChange: boolean;
 }
+
+/** Catalog ids that constitute an authority/ownership change (V4). */
+const AUTHORITY_CHANGE_FINDING_IDS: ReadonlySet<string> = new Set<string>([
+  "spl-set-authority",
+  "token2022-set-authority",
+  "bpf-upgrade",
+  "bpf-set-upgrade-authority",
+  "bpf-set-upgrade-authority-checked",
+  "bpf-close",
+  "system-assign",
+  "system-assign-with-seed",
+]);
 
 export function classify(
   msg: DecodedMessage,
@@ -139,6 +241,16 @@ export function classify(
   const findings: Finding[] = [];
   const unknownPrograms = new Set<string>();
   let unknownProgramWritable = false;
+
+  // C17 durable-nonce marker: ix index 0 is System AdvanceNonceAccount. Computed
+  // directly from bytes (System programId + u32-LE tag 4), independent of the
+  // catalog, so the Drift-composite escalation (V3) cannot be bypassed.
+  const ix0 = msg.instructions[NONCED_TX_MARKER_IX_INDEX];
+  const durableNonceMarker =
+    ix0 !== undefined &&
+    ix0.programId === SYSTEM_PROGRAM &&
+    ix0.data.length >= 4 &&
+    readU32LE(ix0.data, 0) === SYSTEM_ADVANCE_NONCE_TAG;
 
   msg.instructions.forEach((ix, instructionIndex) => {
     const pid = ix.programId;
@@ -209,6 +321,55 @@ export function classify(
         continue;
       }
 
+      // Durable-nonce marker (C17): a transaction is durable-nonce-backed IFF
+      // instruction index 0 is a System AdvanceNonceAccount. AdvanceNonceAccount
+      // at index >= 1 is NOT a durable nonce -- raising the non-expiry HOLD there
+      // is a false positive. At index >= 1 we emit only an INFO note (routine
+      // nonce advance), so the genuine "does not expire" property stays tied to
+      // the index-0 marker.
+      if (entry.id === "durable-nonce-advance") {
+        if (instructionIndex === NONCED_TX_MARKER_IX_INDEX) {
+          findings.push({
+            id: entry.id,
+            label: entry.label,
+            severity: entry.severity, // HOLD
+            instructionIndex,
+            programId: pid,
+            detail:
+              "Instruction index 0 is System AdvanceNonceAccount: this transaction is durable-nonce-backed and does not expire (its blockhash is the stored nonce value, not a fresh cluster blockhash), so it can be held and replayed until the nonce is advanced.",
+            mapsToLoss: entry.mapsToLoss,
+          });
+        } else {
+          findings.push({
+            id: "nonce-advance-noninitial",
+            label: "System: AdvanceNonceAccount (not at index 0)",
+            severity: "INFO",
+            instructionIndex,
+            programId: pid,
+            detail: `AdvanceNonceAccount at instruction index ${instructionIndex} (not index 0): this is a routine nonce advance, NOT the durable-nonce marker, so it does not by itself make the transaction non-expiring.`,
+            mapsToLoss:
+              "None on its own; the durable-nonce non-expiry property requires AdvanceNonceAccount at instruction index 0.",
+          });
+        }
+        continue;
+      }
+
+      // SetAuthority (C4/C5/V1): decode authority_type + new_authority into the
+      // detail so the operator sees WHICH authority is being handed over (and we
+      // flag an invalid Token-2022 AuthorityType used on classic SPL Token).
+      if (entry.id === "spl-set-authority" || entry.id === "token2022-set-authority") {
+        findings.push({
+          id: entry.id,
+          label: entry.label,
+          severity: entry.severity,
+          instructionIndex,
+          programId: pid,
+          detail: buildSetAuthorityDetail(KNOWN_PROGRAMS[pid] as string, pid, ix.data),
+          mapsToLoss: entry.mapsToLoss,
+        });
+        continue;
+      }
+
       findings.push({
         id: entry.id,
         label: entry.label,
@@ -221,10 +382,16 @@ export function classify(
     }
   });
 
+  const authorityOrOwnershipChange = findings.some((f) =>
+    AUTHORITY_CHANGE_FINDING_IDS.has(f.id),
+  );
+
   return {
     findings,
     unknownPrograms: [...unknownPrograms],
     unknownProgramWritable,
+    durableNonceMarker,
+    authorityOrOwnershipChange,
   };
 }
 

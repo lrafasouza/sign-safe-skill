@@ -20,28 +20,60 @@ export type Decision = "SIGN" | "HOLD" | "REJECT";
 /** Finding severity. INFO never escalates a verdict on its own. */
 export type Severity = "INFO" | "HOLD" | "REJECT";
 
-/** How an account participates in the transaction, from the message header. */
+/**
+ * How an account participates in the transaction.
+ *
+ * IMPORTANT: this is the *writability* axis, and for ALT-loaded accounts it IS
+ * determinable offline from message ordering (R1/R4/R11 in the spec): the v0
+ * writable_indexes-vs-readonly_indexes placement decides it with no per-account
+ * flag and no network. Only the concrete ADDRESS of an ALT account is unknown
+ * offline -- that is tracked separately by `addressVerified`, NOT by collapsing
+ * the role to a single "unverified" bucket. Conflating "address unknown" with
+ * "role unknown" loses information the runtime determines purely from ordering.
+ */
 export type RoleKind =
   | "signer-writable"
   | "signer-readonly"
   | "writable"
-  | "readonly"
-  /**
-   * The account is only referenced through an Address Lookup Table. Its
-   * writable/signer status cannot be determined from the message bytes alone
-   * (it requires resolving the on-chain ALT), so we conservatively mark it
-   * "unverified". The presence of any unverified role forbids a SIGN verdict.
-   */
-  | "unverified";
+  | "readonly";
 
 /** A single account in the message, with its statically-derived role. */
 export interface AccountRole {
   /** Base58 program/account address, or a synthetic "alt:<table>#<index>" id. */
   address: string;
   index: number;
+  /**
+   * The runtime writability class. For ALT-loaded accounts this reflects the
+   * writable/readonly region the index falls in (writable region => "writable",
+   * readonly region => "readonly"), which IS known offline.
+   */
   role: RoleKind;
+  /**
+   * Raw partition writability: `is_writable_index(i)` == `is_maybe_writable(i,
+   * None)`. The header/ordering math BEFORE demotion (R4/R6). Always known
+   * offline (even for ALT accounts).
+   */
+  writablePartition: boolean;
+  /**
+   * Runtime writability AFTER demotion (R5/R6): partition writability AND NOT a
+   * reserved key AND NOT (called-as-program with the upgradeable loader absent).
+   * Equal to `writablePartition` when no reserved set is supplied. For ALT
+   * accounts we cannot know the concrete key, so program-id demotion never
+   * applies to them and reserved-key demotion cannot be evaluated; their
+   * runtime writability equals their partition writability.
+   */
+  writableRuntime: boolean;
+  /** True iff `writablePartition && !writableRuntime` (R5 demoted this index). */
+  demotedToReadonly: boolean;
   /** True only for static header keys; ALT-sourced keys are never trusted. */
   verified: boolean;
+  /**
+   * Whether the CONCRETE on-chain address at this index is known offline. True
+   * for static keys; false for ALT-loaded accounts (their address requires
+   * fetching the on-chain table). The SIGN bar keys on this (R10/V7), not on
+   * writability being unknown -- because writability is NOT unknown.
+   */
+  addressVerified: boolean;
 }
 
 /** One compiled instruction, with indices resolved to base58 addresses. */
@@ -121,6 +153,11 @@ export interface SplTransferOutflow {
   programId: string;
   /** Raw base-unit amount from the instruction data. */
   amount: string;
+  /**
+   * Decimals u8 from a TransferChecked (disc 12) instruction. Present only for
+   * TransferChecked (a plain Transfer carries no decimals in its data). (C3.)
+   */
+  decimals?: number;
 }
 
 /** The machine-readable verdict. This is the verdict.json contract. */

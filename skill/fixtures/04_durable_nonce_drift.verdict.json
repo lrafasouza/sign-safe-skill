@@ -1,7 +1,7 @@
 {
   "schema": "sign-safe/verdict@1",
   "decision": "REJECT",
-  "reason": "Contains a REJECT-class danger primitive: SPL Token SetAuthority.",
+  "reason": "Durable-nonce carrier (non-expiring transaction) combined with an authority/ownership change -- the Drift blind-signing attack class. A signed message like this can be held and replayed to seize control later.",
   "messageVersion": "legacy",
   "worstSeverity": "REJECT",
   "findings": [
@@ -11,7 +11,7 @@
       "severity": "HOLD",
       "instructionIndex": 0,
       "programId": "11111111111111111111111111111111",
-      "detail": "Matched AdvanceNonceAccount on system.",
+      "detail": "Instruction index 0 is System AdvanceNonceAccount: this transaction is durable-nonce-backed and does not expire (its blockhash is the stored nonce value, not a fresh cluster blockhash), so it can be held and replayed until the nonce is advanced.",
       "mapsToLoss": "Durable nonces remove blockhash expiry, so a signed transaction can be held and replayed later -- the core enabling vector of the Drift 2026 blind-signing incident."
     },
     {
@@ -20,7 +20,7 @@
       "severity": "REJECT",
       "instructionIndex": 1,
       "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
-      "detail": "Matched SetAuthority on spl-token.",
+      "detail": "SetAuthority on spl-token: authority_type=0 (MintTokens), new_authority=AKkzLhjhyFtM9j7WAhbaqYpFe49cXeJBg2kzLRC2PnNa.",
       "mapsToLoss": "Hands mint/freeze/owner authority to an attacker, who can then mint, freeze, or seize at will."
     }
   ],

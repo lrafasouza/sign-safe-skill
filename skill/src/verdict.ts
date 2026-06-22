@@ -27,7 +27,7 @@
  */
 
 import { DecodeError, decodeBase64Message } from "./decode.ts";
-import { deriveRoles, hasUnverifiedRoles } from "./roles.ts";
+import { deriveRoles, hasUnverifiedRoles, RESERVED_ACCOUNT_KEYS } from "./roles.ts";
 import { classify } from "./classify.ts";
 import { computeOutflow } from "./outflow.ts";
 import { assertNoBannedPhrase, findBannedPhrase } from "./banned.ts";
@@ -80,6 +80,10 @@ export function buildVerdict(args: {
   unknownProgramWritable: boolean;
   altLookupsPresent: boolean;
   rolesUnverified: boolean;
+  /** ix index 0 is System AdvanceNonceAccount (C17 durable-nonce marker). */
+  durableNonceMarker?: boolean;
+  /** Any authority/ownership-changing finding is present (V4). */
+  authorityOrOwnershipChange?: boolean;
 }): Verdict {
   const {
     messageVersion,
@@ -89,17 +93,29 @@ export function buildVerdict(args: {
     unknownProgramWritable,
     altLookupsPresent,
     rolesUnverified,
+    durableNonceMarker = false,
+    authorityOrOwnershipChange = false,
   } = args;
 
   const worst = worstSeverity(findings);
   const unknownProgramPresent = unknownPrograms.length > 0;
 
+  // V3 (the Drift signature): a durable-nonce carrier (marker at ix0) PLUS an
+  // authority/ownership change is BLOCK/CRITICAL, independent of the individual
+  // findings' severities. A held, non-expiring transaction that also hands over
+  // authority is the exact ~$285M Drift blind-signing class -- it must REJECT
+  // even when each piece in isolation would only be a HOLD.
+  const driftComposite = durableNonceMarker && authorityOrOwnershipChange;
+
   let decision: Decision;
   let reason: string;
 
-  if (worst === "REJECT" || unknownProgramWritable) {
+  if (worst === "REJECT" || unknownProgramWritable || driftComposite) {
     decision = "REJECT";
-    if (worst === "REJECT" && unknownProgramWritable) {
+    if (driftComposite) {
+      reason =
+        "Durable-nonce carrier (non-expiring transaction) combined with an authority/ownership change -- the Drift blind-signing attack class. A signed message like this can be held and replayed to seize control later.";
+    } else if (worst === "REJECT" && unknownProgramWritable) {
       reason =
         "Contains a REJECT-class danger primitive and an unknown program writing to a value-bearing account.";
     } else if (worst === "REJECT") {
@@ -200,7 +216,10 @@ export function reviewBase64(
 ): Verdict {
   try {
     const msg = decodeBase64Message(b64);
-    const roles = deriveRoles(msg);
+    // Runtime-accurate writability: apply the SIMD-0105 reserved-account-keys
+    // demotion (R5/R6). Both partition and runtime writability are exposed on
+    // each role; the verdict consumes the runtime (demoted) mode.
+    const roles = deriveRoles(msg, { reservedAccountKeys: RESERVED_ACCOUNT_KEYS });
     const cls = classify(msg, roles, ctx);
     const outflow = computeOutflow(msg, roles, ctx);
     return buildVerdict({
@@ -211,6 +230,8 @@ export function reviewBase64(
       unknownProgramWritable: cls.unknownProgramWritable,
       altLookupsPresent: msg.altLookupsPresent,
       rolesUnverified: hasUnverifiedRoles(roles),
+      durableNonceMarker: cls.durableNonceMarker,
+      authorityOrOwnershipChange: cls.authorityOrOwnershipChange,
     });
   } catch (err) {
     const msg = err instanceof DecodeError ? err.message : String(err);

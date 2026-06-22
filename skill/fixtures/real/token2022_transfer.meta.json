@@ -1,0 +1,16 @@
+{
+  "signature": "4L4b9AMwfm33DhX1iULTwdkus1nShKBmMXEiTYxvsRfZgBX2gG9gzH5haQzuC1RWjiby4sYobGFXipq8XbwaaBPh",
+  "slot": 428154719,
+  "cluster": "mainnet-beta",
+  "capturedDate": "2026-06-22",
+  "source": "token-2022 getSignaturesForAddress",
+  "version": 0,
+  "altCount": 0,
+  "numStaticKeys": 20,
+  "programIds": [
+    "ComputeBudget111111111111111111111111111111",
+    "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+    "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+  ],
+  "note": "Frozen offline. b64 is the SIGNED MESSAGE bytes (msg.serialize()), the input our decoder consumes (signatures stripped)."
+}

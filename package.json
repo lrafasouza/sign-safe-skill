@@ -6,8 +6,11 @@
   "license": "MIT",
   "scripts": {
     "build": "tsc",
-    "test": "node --import tsx skill/test/run.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:fixtures": "node --import tsx skill/test/run.ts",
     "gen-fixtures": "node --import tsx skill/fixtures/generate.ts",
+    "gen-goldens": "node --import tsx skill/fixtures/gen-goldens.ts",
     "cli": "node --import tsx skill/src/cli.ts"
   },
   "dependencies": {
@@ -16,7 +19,9 @@
   },
   "devDependencies": {
     "@types/node": "^22.5.0",
+    "fast-check": "^3.23.2",
     "tsx": "^4.19.0",
-    "typescript": "^5.6.0"
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.9"
   }
 }
