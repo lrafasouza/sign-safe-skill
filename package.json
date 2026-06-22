@@ -4,7 +4,7 @@
   "description": "Signing-time safety gate for Solana transactions: decode, classify danger primitives, compute signer outflow, and emit a SIGN/HOLD/REJECT verdict. Offline, deterministic, tested.",
   "type": "module",
   "license": "MIT",
-  "author": "lrafasouza",
+  "author": "Raffx <rafinha-lima1@live.com> (https://github.com/lrafasouza)",
   "homepage": "https://github.com/lrafasouza/sign-safe-skill#readme",
   "repository": {
     "type": "git",
