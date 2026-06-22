@@ -170,6 +170,20 @@ interface enums.)
   harvest/enable/disable sub-instructions (37, sub 3/4/5) are permissionless or
   config and correctly stay SIGN.
 
+### `token2022-permissioned-burn` — `PermissionedBurn::Burn` (tag 46, sub 1/2/3) (HOLD)
+- **Maps to loss:** Irreversibly burns tokens under the permissioned-burn
+  extension — Burn (sub 1), BurnChecked (sub 2), ConfidentialBurn (sub 3) — the
+  same permanent-loss class as plain `Burn`. `InitializePermissionedBurn` (46,
+  sub 0) is config and correctly stays SIGN.
+
+> Coverage note: with this entry, every Token-2022 extension tag (25–46) and the
+> Batch tag (255) has been individually verified against the canonical
+> `solana-program` interface enums — each is either catalogued (if any
+> sub-instruction moves value/authority/freeze/mint/burn) or confirmed
+> config/init that stays SIGN. Together with the base token tags (0–24), the
+> System program (0–12), and the BPF Loader Upgradeable program (0–7), the
+> catalog covers the complete native-program instruction surface.
+
 ## Freeze & supply control (HOLD)
 
 These are mint/freeze-authority powers. A signer being asked to authorize one is

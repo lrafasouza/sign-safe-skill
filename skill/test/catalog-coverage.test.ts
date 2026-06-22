@@ -90,6 +90,10 @@ describe("catalog coverage — dangerous shapes must never SIGN", () => {
     ["Token-2022 TransferFee::WithdrawWithheldFromMint (26,2)", msg(T22, [26, 2]), "token2022-withdraw-withheld-fees"],
     ["Token-2022 TransferFee::WithdrawWithheldFromAccounts (26,3)", msg(T22, [26, 3]), "token2022-withdraw-withheld-fees"],
     ["Token-2022 ConfidentialTransferFee::WithdrawWithheld (37,1)", msg(T22, [37, 1]), "token2022-confidential-withdraw-withheld-fees"],
+    // 5th-pass: PermissionedBurn extension burn sub-instructions
+    ["Token-2022 PermissionedBurn::Burn (46,1)", msg(T22, [46, 1]), "token2022-permissioned-burn"],
+    ["Token-2022 PermissionedBurn::BurnChecked (46,2)", msg(T22, [46, 2]), "token2022-permissioned-burn"],
+    ["Token-2022 PermissionedBurn::ConfidentialBurn (46,3)", msg(T22, [46, 3]), "token2022-permissioned-burn"],
   ];
 
   for (const [name, b64, findingId] of cases) {
@@ -120,5 +124,7 @@ describe("catalog coverage — dangerous shapes must never SIGN", () => {
     expect(reviewBase64(msg(T22, [26, 1])).decision).toBe("SIGN");
     // TransferFee::HarvestWithheldTokensToMint (26,4) is permissionless consolidation -> SIGN
     expect(reviewBase64(msg(T22, [26, 4])).decision).toBe("SIGN");
+    // PermissionedBurn::Initialize (46,0) is config -> SIGN
+    expect(reviewBase64(msg(T22, [46, 0])).decision).toBe("SIGN");
   });
 });

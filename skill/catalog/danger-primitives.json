@@ -298,6 +298,15 @@
       "mapsToLoss": "Confidential variant of the withheld-fee token outflow (extension tag 37, sub 1/2) -- moves withheld tokens out under the withdraw-withheld authority."
     },
     {
+      "id": "token2022-permissioned-burn",
+      "label": "Token-2022 PermissionedBurn: Burn/BurnChecked/ConfidentialBurn",
+      "program": "token-2022",
+      "programId": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+      "detection": { "instructionType": "PermissionedBurn::Burn", "discriminator": [46], "subDiscriminator": [1, 2, 3] },
+      "severity": "HOLD",
+      "mapsToLoss": "Irreversibly burns tokens from the account under the permissioned-burn extension (extension tag 46, sub 1/2/3) -- same permanent-loss class as Burn; InitializePermissionedBurn (46, sub 0) is config and stays SIGN."
+    },
+    {
       "id": "system-withdraw-nonce",
       "label": "System: WithdrawNonceAccount",
       "program": "system",
