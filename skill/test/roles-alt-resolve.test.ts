@@ -236,3 +236,103 @@ describe("T_A2.5 reviewBase64 end-to-end: HOLD->SIGN with fully resolved ALT", (
     expect(v.flags.rolesUnverified).toBe(true);
   });
 });
+
+// ---------------------------------------------------------------------------
+// T_A2.6 — Multi-table ALT: two distinct tables; partial resolution is fail-closed
+// ---------------------------------------------------------------------------
+
+describe("T_A2.6 multi-table ALT: two distinct tables, partial resolution stays HOLD", () => {
+  // Build a v0 message with TWO distinct ALTs:
+  //   TABLE_A (byte 0x50): writable index 0
+  //   TABLE_B (byte 0x60): writable index 0
+  // The message uses ALT-sourced account at slot 1 (from TABLE_A) and slot 2 (from TABLE_B).
+
+  const TABLE_A_BYTE = 0x50;
+  const TABLE_B_BYTE = 0x60;
+  const TABLE_A_BYTES = new Uint8Array(32).fill(TABLE_A_BYTE);
+  const TABLE_B_BYTES = new Uint8Array(32).fill(TABLE_B_BYTE);
+  const TABLE_A_B58 = base58Encode(TABLE_A_BYTES);
+  const TABLE_B_B58 = base58Encode(TABLE_B_BYTES);
+
+  const RESOLVED_A0_BYTES = new Uint8Array(32).fill(0x1a);
+  const RESOLVED_A0_B58 = base58Encode(RESOLVED_A0_BYTES);
+  const RESOLVED_B0_BYTES = new Uint8Array(32).fill(0x1b);
+  const RESOLVED_B0_B58 = base58Encode(RESOLVED_B0_BYTES);
+
+  function buildV0TwoTables(): Uint8Array {
+    return v0Bytes(
+      [1, 0, 0],       // 1 signer, 0 readonly signers, 0 readonly unsigned
+      [1],             // single static key: fee payer
+      [],              // no instructions
+      [
+        { table: TABLE_A_BYTE, writable: [0], readonly: [] }, // ALT A: slot 0 writable
+        { table: TABLE_B_BYTE, writable: [0], readonly: [] }, // ALT B: slot 0 writable
+      ],
+    );
+  }
+
+  const msgBytes = buildV0TwoTables();
+  const msg = decodeMessageBytes(msgBytes);
+
+  it("message has 2 address table lookups", () => {
+    expect(msg.addressTableLookups.length).toBe(2);
+    expect(msg.addressTableLookups[0]!.accountKey).toBe(TABLE_A_B58);
+    expect(msg.addressTableLookups[1]!.accountKey).toBe(TABLE_B_B58);
+  });
+
+  it("with BOTH tables resolved → all ALT roles are addressVerified=true", () => {
+    const resolvedAltTables = new Map<string, readonly string[]>([
+      [TABLE_A_B58, [RESOLVED_A0_B58]],
+      [TABLE_B_B58, [RESOLVED_B0_B58]],
+    ]);
+    const roles = deriveRoles(msg, {
+      reservedAccountKeys: RESERVED_ACCOUNT_KEYS,
+      resolvedAltTables,
+    });
+    const altRoles = roles.filter((r) => !r.verified); // ALT-sourced roles are not verified
+    expect(altRoles.every((r) => r.addressVerified)).toBe(true);
+    expect(hasUnverifiedRoles(roles)).toBe(false);
+  });
+
+  it("with ONLY table A resolved → table B role stays unverified (HOLD) — fail-closed per-table", () => {
+    const resolvedAltTables = new Map<string, readonly string[]>([
+      [TABLE_A_B58, [RESOLVED_A0_B58]],
+      // TABLE_B intentionally omitted
+    ]);
+    const roles = deriveRoles(msg, {
+      reservedAccountKeys: RESERVED_ACCOUNT_KEYS,
+      resolvedAltTables,
+    });
+    // Table A role should be verified
+    const tableARole = roles.find((r) => r.address === RESOLVED_A0_B58);
+    expect(tableARole).toBeDefined();
+    expect(tableARole!.addressVerified).toBe(true);
+    // Table B role should remain unverified
+    const tableBRole = roles.find((r) => r.address.startsWith("alt:") && r.address.includes(TABLE_B_B58));
+    expect(tableBRole).toBeDefined();
+    expect(tableBRole!.addressVerified).toBe(false);
+    // Overall: still has unverified roles → HOLD
+    expect(hasUnverifiedRoles(roles)).toBe(true);
+  });
+
+  it("end-to-end: both tables resolved → reviewBase64 can reach SIGN", () => {
+    const b64 = toB64(msgBytes);
+    const resolvedAltTables = new Map<string, readonly string[]>([
+      [TABLE_A_B58, [RESOLVED_A0_B58]],
+      [TABLE_B_B58, [RESOLVED_B0_B58]],
+    ]);
+    const v = reviewBase64(b64, { lamportThreshold: 1_000_000_000, resolvedAltTables });
+    expect(v.flags.rolesUnverified).toBe(false);
+    expect(v.decision).toBe("SIGN");
+  });
+
+  it("end-to-end: only table A resolved → remains HOLD (table B still unverified)", () => {
+    const b64 = toB64(msgBytes);
+    const resolvedAltTables = new Map<string, readonly string[]>([
+      [TABLE_A_B58, [RESOLVED_A0_B58]],
+    ]);
+    const v = reviewBase64(b64, { lamportThreshold: 1_000_000_000, resolvedAltTables });
+    expect(v.flags.rolesUnverified).toBe(true);
+    expect(v.decision).toBe("HOLD");
+  });
+});

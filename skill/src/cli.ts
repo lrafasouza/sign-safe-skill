@@ -57,6 +57,38 @@ export interface ParsedArgs {
   strict?: boolean;
 }
 
+/**
+ * Build a fetcher that redirects lookups for `vtAddr` to the pre-fetched bytes
+ * of the operator-supplied `vaultPdaAddr`. This is the testable pure-ish helper
+ * extracted from the --vault-pda CLI path.
+ *
+ * When either `vtAddr` or `vaultPdaAccount` is null/undefined, the baseFetcher
+ * is returned unchanged (the override is a no-op — the auto-extracted vtAddr
+ * was null, meaning there is no Squads ix, or the PDA account was not found).
+ *
+ * @param b64              Base64 message to scan for the Squads vaultTx address.
+ * @param vaultPdaAddr     The operator-supplied vault PDA address (--vault-pda).
+ * @param vaultPdaAccount  Pre-fetched account for vaultPdaAddr (may be null).
+ * @param vtAddr           Auto-extracted vault tx address from the message (may be null).
+ * @param baseFetcher      The underlying real fetcher to delegate non-vtAddr queries to.
+ * @returns                Wrapped fetcher (or baseFetcher when override is no-op).
+ */
+export function buildVaultPdaFetcher(
+  vtAddr: string | null,
+  vaultPdaAccount: { data: Uint8Array } | null,
+  baseFetcher: (pubkey: string) => Promise<{ data: Uint8Array } | null>,
+): (pubkey: string) => Promise<{ data: Uint8Array } | null> {
+  if (vtAddr === null || vaultPdaAccount === null) {
+    // No Squads ix or PDA account not found — override is a no-op.
+    return baseFetcher;
+  }
+  const vaultBytes = vaultPdaAccount.data;
+  return async (pubkey: string) => {
+    if (pubkey === vtAddr) return { data: vaultBytes };
+    return baseFetcher(pubkey);
+  };
+}
+
 export function parseArgs(argv: string[]): ParsedArgs {
   let file: string | undefined;
   let threshold = DEFAULT_CONTEXT.lamportThreshold;
@@ -237,14 +269,7 @@ async function main(): Promise<void> {
             const decoded = decodeInput(b64);
             const vtAddr = extractVaultTransactionAddress(decoded.message);
             const vaultPdaAccount = await fetcher(vaultPdaAddr);
-            if (vaultPdaAccount !== null && vtAddr !== null) {
-              const vaultBytes = vaultPdaAccount.data;
-              const innerFetcher = fetcher;
-              activeFetcher = async (pubkey: string) => {
-                if (pubkey === vtAddr) return { data: vaultBytes };
-                return innerFetcher(pubkey);
-              };
-            }
+            activeFetcher = buildVaultPdaFetcher(vtAddr, vaultPdaAccount, fetcher);
           } catch {
             // If decode fails, review-online handles it gracefully (fail-closed).
           }

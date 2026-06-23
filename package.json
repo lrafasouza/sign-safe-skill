@@ -1,7 +1,7 @@
 {
   "name": "sign-safe-skill",
   "version": "0.4.0",
-  "description": "Signing-time safety gate for Solana transactions: decode, classify danger primitives, compute signer outflow, and emit a SIGN/HOLD/REJECT verdict. Offline, deterministic, tested.",
+  "description": "v0.4 signing-time gate for Solana: decode any base64 tx offline, classify 35 danger primitives + 12-program DeFi/NFT registry, resolve ALTs and Squads proposals with --rpc, and emit a SIGN/HOLD/REJECT verdict — deterministic, fail-closed, 607 tests.",
   "type": "module",
   "license": "MIT",
   "author": "Raffx <rafinha-lima1@live.com> (https://github.com/lrafasouza)",

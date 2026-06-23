@@ -548,6 +548,77 @@ describe("S6: strict-vs-default monotone invariant", () => {
 });
 
 // ---------------------------------------------------------------------------
+// S6b: strict + governanceContext composed — both independently cause REJECT
+//      and together they also REJECT; the combination is coherent
+// ---------------------------------------------------------------------------
+
+describe("S6b: strict + governanceContext combined on durable-nonce + HOLD-class-only", () => {
+  /**
+   * Build a legacy message with:
+   *   ix0 = AdvanceNonceAccount (durable-nonce marker)
+   *   ix1 = Jupiter unknown instruction (HOLD-class only, not REJECT)
+   *
+   * This composite is:
+   *   - HOLD in DEFAULT mode (nonce + HOLD-only finding → HOLD)
+   *   - REJECT in STRICT mode (broad driftCompositeStrict)
+   *   - REJECT in governanceContext alone (bare nonce → governance reject)
+   *   - REJECT in STRICT + governanceContext together (both escalate)
+   */
+  const JUPITER_V6 = "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4";
+
+  function buildNoncePlusJupiter(): Uint8Array {
+    const unknownJupDisc = [0xaa, 0xbb, 0xcc, 0xdd, 0x11, 0x22, 0x33, 0x44];
+    return buildMessage(
+      [1, 0, 1],
+      [1, SYSTEM, JUPITER_V6, 3],
+      [
+        { prog: 1, accts: [3, 0], data: u32le(4) },        // ix0: AdvanceNonce
+        { prog: 2, accts: [0, 3], data: unknownJupDisc },  // ix1: Jupiter HOLD-only
+      ],
+    );
+  }
+
+  it("S6b.1 DEFAULT: durable-nonce + HOLD-only → HOLD (baseline)", () => {
+    const v = reviewBase64(toB64(buildNoncePlusJupiter()), DEFAULT_CTX);
+    expect(v.decision).toBe("HOLD");
+  });
+
+  it("S6b.2 STRICT alone: durable-nonce + HOLD-only → REJECT", () => {
+    const v = reviewBase64(toB64(buildNoncePlusJupiter()), STRICT_CTX);
+    expect(v.decision).toBe("REJECT");
+  });
+
+  it("S6b.3 governanceContext alone: durable-nonce → REJECT (governance policy)", () => {
+    const ctx: VerdictContext = { ...DEFAULT_CTX, governanceContext: true };
+    const v = reviewBase64(toB64(buildNoncePlusJupiter()), ctx);
+    expect(v.decision).toBe("REJECT");
+    expect(v.reason.toLowerCase()).toMatch(/governance|policy/);
+  });
+
+  it("S6b.4 STRICT + governanceContext together: durable-nonce + HOLD-only → REJECT (composed)", () => {
+    const ctx: VerdictContext = { ...STRICT_CTX, governanceContext: true };
+    const v = reviewBase64(toB64(buildNoncePlusJupiter()), ctx);
+    expect(v.decision).toBe("REJECT");
+  });
+
+  it("S6b.5 strict+governance produces REJECT at least as severe as each alone", () => {
+    const strictOnly: VerdictContext = { ...DEFAULT_CTX, strict: true };
+    const govOnly: VerdictContext = { ...DEFAULT_CTX, governanceContext: true };
+    const both: VerdictContext = { ...DEFAULT_CTX, strict: true, governanceContext: true };
+    const ORDER: Record<string, number> = { SIGN: 0, HOLD: 1, REJECT: 2 };
+
+    const vStrict = reviewBase64(toB64(buildNoncePlusJupiter()), strictOnly);
+    const vGov = reviewBase64(toB64(buildNoncePlusJupiter()), govOnly);
+    const vBoth = reviewBase64(toB64(buildNoncePlusJupiter()), both);
+
+    // Combined must be >= strict alone
+    expect(ORDER[vBoth.decision]!).toBeGreaterThanOrEqual(ORDER[vStrict.decision]!);
+    // Combined must be >= governance alone
+    expect(ORDER[vBoth.decision]!).toBeGreaterThanOrEqual(ORDER[vGov.decision]!);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // S7: HOLD reason string content in DEFAULT mode
 // ---------------------------------------------------------------------------
 

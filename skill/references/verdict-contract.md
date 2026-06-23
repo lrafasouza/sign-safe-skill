@@ -44,23 +44,45 @@ which is a **pure function** of the decoded message and a tunable context.
 
 ## Decision rules (deterministic, worst-severity wins)
 
+v0.4 operates in a **two-tier posture by default** (calibrated against 100 real
+benign mainnet transactions, 0 false-REJECTs). Pass `--strict` / `ctx.strict`
+to restore the aggressive single-tier behavior.
+
 Evaluated in this exact order:
 
 1. **REJECT** if **any** of:
    - any `Finding.severity === "REJECT"`, or
    - decode failed (malformed / truncated / trailing bytes / unsupported version), or
-   - an **unknown program is writable on a value-bearing account**.
+   - a blocklist-matched recipient, delegate, or new-authority (`"blocklisted-recipient"`), or
+   - an explicit Anchor authority-mutation discriminator matched on an inner instruction
+     (e.g. `update_admin`, `set_admin`, `transfer_ownership` — REJECT-class entries in
+     `catalog/anchor-danger.json`), or
+   - a **real authority/ownership change** alongside a durable-nonce advance at ix0
+     (the "Drift composite": `driftComposite = true`), or
+   - `governanceContext` is true and a durable-nonce advance is present (bare nonce →
+     REJECT in governance mode regardless of other findings), or
+   - **`--strict` mode** and an **unknown program is writable on a value-bearing account**.
 
 2. else **HOLD** if **any** of:
    - any `Finding.severity === "HOLD"`, or
-   - any unknown program is present, or
+   - any unknown program is present (default mode: unknown writable → HOLD, not REJECT), or
    - (`altLookupsPresent` **and** `rolesUnverified`), or
-   - `outflow.lamports` exceeds the configured threshold (default 1 SOL = `1_000_000_000` lamports).
+   - `outflow.lamports` exceeds the configured threshold (default 1 SOL = `1_000_000_000` lamports), or
+   - a durable-nonce advance at ix0 with no REJECT-class companion (bare nonce in default mode).
 
 3. else **SIGN** -- only when there are **zero** non-INFO findings, **zero**
    unknown programs, and **no** unverified ALT roles.
 
 `worstSeverity` is the maximum severity across all findings (`INFO < HOLD < REJECT`).
+
+### Default vs `--strict` summary
+
+| Condition | Default | `--strict` |
+|-----------|---------|-----------|
+| Unknown program, writable, value-bearing | HOLD | REJECT |
+| Durable nonce + any non-INFO finding | REJECT only if REJECT-class companion | REJECT on any non-INFO finding |
+| Bare durable nonce, no other findings | HOLD | HOLD |
+| `governanceContext` + bare nonce | REJECT | REJECT |
 
 ### SIGN is always qualified
 

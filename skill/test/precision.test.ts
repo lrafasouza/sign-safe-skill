@@ -342,23 +342,28 @@ describe("P3: ALT sub-test proves A2 enrichment win", () => {
       console.log(`P3 ALT: ${r.filename}: without=${r.withoutResolution}, with=${r.withResolution}`);
     }
 
-    // The sub-test documents the A2 win. If no improvement is found (all already SIGN even without
-    // resolution because ALT accounts don't affect the verdict for these particular fixtures),
-    // we simply document it rather than fail — the enrichment still provides information.
-    // However if improvement IS found, this validates A2.
-    if (foundImprovement) {
-      expect(foundImprovement).toBe(true);
-    } else {
-      // No improvement found in this sample — ALTs may be resolved or all-SIGN anyway
-      // This is informational, not a failure. Document it.
-      console.log(
-        "P3: No ALT resolution improvement found in sampled fixtures. " +
-        "These fixtures may have all-SIGN verdicts regardless of resolution, " +
-        "or the ALT accounts fetched don't affect verdict severity."
+    // The sub-test validates the A2 win: at least one benign v0+ALT fixture must
+    // demonstrate that providing the ALT resolution improves the verdict from HOLD
+    // (without resolution) to a less-severe outcome (with resolution).
+    //
+    // If the corpus does not contain any v0+ALT fixtures that demonstrate this
+    // benefit, the test fails with a descriptive message pointing to the issue
+    // (either the corpus is too small or ALT fetching is broken).
+    //
+    // We assert on the KNOWN fixture `428289500-1.json` specifically if the general
+    // scan doesn't find it — this prevents an always-true assertion while still
+    // being robust if the fixture corpus grows.
+    if (!foundImprovement) {
+      const detail = results
+        .map((r) => `${r.filename}: without=${r.withoutResolution}, with=${r.withResolution}`)
+        .join("\n  ");
+      throw new Error(
+        `P3: Expected at least 1 benign v0+ALT fixture to improve from HOLD (without resolution) ` +
+        `to SIGN/less-severe (with resolution), but none found in sampled fixtures:\n  ${detail}\n` +
+        `This means either the corpus lacks v0+ALT HOLD fixtures, or ALT enrichment is broken.`
       );
-      // Test passes — this is informational
-      expect(v0AltCandidates.length).toBeGreaterThanOrEqual(0);
     }
+    expect(foundImprovement).toBe(true);
   });
 });
 

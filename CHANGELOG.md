@@ -51,7 +51,7 @@ access is isolated to `src/rpc.ts` + `src/cli.ts` behind injectable fetchers.
 
 ### Tests
 
-- 292 -> **561** checks (26 files): ALT decoder, resolvedAlt channel, mint TLV, RPC fetcher,
+- 292 -> **607** checks (29 files): ALT decoder, resolvedAlt channel, mint TLV, RPC fetcher,
   enrichment orchestration, strict-mode gate, self-verifying discriminators, and the
   offline precision harness.
 

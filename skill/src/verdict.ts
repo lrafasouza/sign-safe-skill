@@ -696,7 +696,14 @@ export function reviewBase64(
       // Build the set of static account addresses for O(1) membership checks.
       const staticKeySet = new Set(msg.staticAccountKeys);
 
-      for (const [mintAddr, exts] of mintExtMap) {
+      // Iterate in deterministic (sorted) order so findings are insertion-order
+      // independent. Without sorting, Map iteration order (insertion order) can
+      // produce different findings arrays for maps with the same entries.
+      const sortedMintEntries = [...mintExtMap.entries()].sort(([a], [b]) =>
+        a < b ? -1 : a > b ? 1 : 0,
+      );
+
+      for (const [mintAddr, exts] of sortedMintEntries) {
         if (!staticKeySet.has(mintAddr)) continue; // mint not referenced in this tx
 
         if (exts.permanentDelegate !== undefined) {

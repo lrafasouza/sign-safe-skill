@@ -434,3 +434,94 @@ describe("L: fail-closed: Squads execute never SIGN", () => {
     expect(v.findings.some((f) => f.id === "squads-execute-unverified")).toBe(true);
   });
 });
+
+// ---------------------------------------------------------------------------
+// M: Squads inner instruction whose programIdIndex falls in ALT space
+//    → specific "unresolved-inner" finding (not swept into a generic bucket)
+// ---------------------------------------------------------------------------
+
+describe("M: Squads inner ALT-sourced program → squads-inner-unresolved HOLD finding", () => {
+  /**
+   * Build a VaultTransaction where the inner instruction's programIdIndex
+   * is >= accountKeys.length (ALT lookup space). This means the inner program
+   * ID cannot be resolved offline and must yield a specific HOLD finding with
+   * id "squads-inner-unresolved".
+   *
+   * The goal is to confirm:
+   *   1. The verdict is HOLD (not SIGN), because the inner program is unknown.
+   *   2. The finding id is "squads-inner-unresolved" (the specific per-class reason),
+   *      NOT a generic "squads-execute-unverified" (which would indicate decode failed
+   *      or no bytes provided at all, not the ALT-space case).
+   */
+  function buildTopLevelMessage(): Uint8Array {
+    // Static keys: [0]=feePayer(0x01), [1]=Squads program, [2]=VaultTxPDA(0xaa)
+    const squadsKeyBytes = Array.from(base58ToBytes(SQUADS_V4));
+    const out: number[] = [];
+    out.push(1, 0, 1); // header: 1 signer, 0 ro-signed, 1 ro-unsigned
+    out.push(3); // 3 static keys
+    out.push(...new Array(32).fill(0x01)); // [0] feePayer
+    out.push(...squadsKeyBytes);            // [1] SquadsV4
+    out.push(...new Array(32).fill(0xaa)); // [2] VaultTxPDA
+    out.push(...new Array(32).fill(0xfa)); // blockhash
+    out.push(1); // 1 instruction
+    out.push(1); // prog index = 1 (SquadsV4)
+    out.push(3, 0, 0, 2); // 3 accounts: [0, 0, 2]
+    out.push(8, ...VAULT_TX_EXECUTE_DISC); // data len=8 + discriminator
+    return Uint8Array.from(out);
+  }
+
+  /**
+   * VaultTransaction with 3 accountKeys but the inner instruction has
+   * programIdIndex=5 (>= 3), placing it in ALT space. decodeVaultTransaction
+   * will return { programId: null, hasUnresolvedPrograms: true }.
+   */
+  function buildAltSpaceVaultTx(): Uint8Array {
+    return buildSyntheticVaultTx({
+      numKeys: 3,
+      instrProgramIdIndex: 5, // 5 >= 3 → ALT space, programId = null
+      instrData: [0xde, 0xad, 0xbe, 0xef, 0x00, 0x00, 0x00, 0x00],
+    });
+  }
+
+  it("M1 inner instruction with ALT-sourced programId → squads-inner-unresolved HOLD (not generic)", () => {
+    const msg = buildTopLevelMessage();
+    const vaultTxBytes = buildAltSpaceVaultTx();
+    const v = reviewBase64(toB64(msg), { lamportThreshold: 1_000_000_000 }, vaultTxBytes);
+
+    // Must not be SIGN — an ALT-sourced inner program is unresolvable offline.
+    expect(v.decision).not.toBe("SIGN");
+
+    // The specific finding for ALT-space inner programs must be present.
+    const altFinding = v.findings.find((f) => f.id === "squads-inner-unresolved");
+    expect(altFinding).toBeDefined();
+    expect(altFinding!.severity).toBe("HOLD");
+
+    // The "bytes not provided" finding must NOT be present — we DID provide bytes
+    // and they decoded successfully; the HOLD is the per-class ALT-space reason.
+    expect(v.findings.some((f) => f.id === "squads-execute-unverified")).toBe(false);
+  });
+
+  it("M2 inner instruction with ALT-sourced programId → decision is HOLD (not REJECT)", () => {
+    // The ALT-unresolved finding is HOLD, not REJECT. The top-level message has
+    // no durable-nonce marker and no REJECT-class findings, so HOLD is the result.
+    const msg = buildTopLevelMessage();
+    const vaultTxBytes = buildAltSpaceVaultTx();
+    const v = reviewBase64(toB64(msg), { lamportThreshold: 1_000_000_000 }, vaultTxBytes);
+    expect(v.decision).toBe("HOLD");
+  });
+
+  it("M3 inner instruction in ALT space is distinct from squads-execute-unverified (bytes-not-provided case)", () => {
+    // Contrast: when NO vaultTransactionBytes are provided at all, we get
+    // squads-execute-unverified (the bytes-missing case), not squads-inner-unresolved.
+    const msg = buildTopLevelMessage();
+    const vNoBytes = reviewBase64(toB64(msg), { lamportThreshold: 1_000_000_000 });
+    expect(vNoBytes.findings.some((f) => f.id === "squads-execute-unverified")).toBe(true);
+    expect(vNoBytes.findings.some((f) => f.id === "squads-inner-unresolved")).toBe(false);
+
+    // Contrast: when bytes are provided but inner prog is in ALT space, we get
+    // squads-inner-unresolved, not squads-execute-unverified.
+    const vWithBytes = reviewBase64(toB64(msg), { lamportThreshold: 1_000_000_000 }, buildAltSpaceVaultTx());
+    expect(vWithBytes.findings.some((f) => f.id === "squads-inner-unresolved")).toBe(true);
+    expect(vWithBytes.findings.some((f) => f.id === "squads-execute-unverified")).toBe(false);
+  });
+});

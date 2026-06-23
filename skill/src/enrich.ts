@@ -36,6 +36,8 @@
  */
 
 import type { AddressTableLookup, Verdict } from "./types.ts";
+import { decodeAddressLookupTable, resolveAltIndexes } from "./alt.ts";
+import { decodeMintDangerExtensions } from "./tlv.ts";
 
 // ---------------------------------------------------------------------------
 // Shared fetcher callback types
@@ -92,12 +94,17 @@ export async function enrichAlt(
   if (account === null) {
     throw new Error(`enrichAlt: account ${lookup.accountKey} not found`);
   }
-  // TODO: decode ALT account format and resolve writable/readonly indexes.
-  // Until implemented, throw to prevent silent empty resolution.
-  void account; // consumed above; silence unused-var lint
-  throw new Error(
-    "enrichAlt: ALT account decoding not yet implemented. Supply a decoded ALT resolver or use the @solana-program/address-lookup-table client.",
-  );
+  // Decode the on-chain ALT account using the pure decoder.
+  const decoded = decodeAddressLookupTable(account.data);
+  // Resolve the writable and readonly indexes into concrete base58 addresses.
+  // resolveAltIndexes returns null for out-of-range indexes (fail-closed).
+  const writableResolved = resolveAltIndexes(decoded.addresses, lookup.writableIndexes);
+  const readonlyResolved = resolveAltIndexes(decoded.addresses, lookup.readonlyIndexes);
+  return {
+    table: lookup.accountKey,
+    writable: writableResolved.filter((a): a is string => a !== null),
+    readonly: readonlyResolved.filter((a): a is string => a !== null),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -267,11 +274,15 @@ export async function confirmMintExtensions(
   if (account === null) {
     throw new Error(`confirmMintExtensions: mint account ${mint} not found`);
   }
-  // TODO: decode Token-2022 extension TLV.
-  void account; // consumed above
-  throw new Error(
-    "confirmMintExtensions: Token-2022 extension decoding not yet implemented. Use the @solana-program/token-2022 client.",
-  );
+  // Decode using the pure danger-extension decoder from tlv.ts.
+  const exts = decodeMintDangerExtensions(account.data);
+  return {
+    mint,
+    isToken2022: account.data.length > 82, // Token-2022 mints are larger than base 82-byte SPL mints
+    hasPermanentDelegate: exts.permanentDelegate !== undefined,
+    hasTransferHook: exts.transferHook !== undefined,
+    permanentDelegate: exts.permanentDelegate,
+  };
 }
 
 // ---------------------------------------------------------------------------

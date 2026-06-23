@@ -60,3 +60,44 @@ describe("A5c: CLI parseArgs with --rpc and --vault-pda", () => {
     expect(() => parseArgs(["--vault-pda"])).toThrow();
   });
 });
+
+// ---------------------------------------------------------------------------
+// C_STRICT: --strict flag parsing
+// ---------------------------------------------------------------------------
+
+describe("C_STRICT: parseArgs --strict flag", () => {
+  it("C9 --strict alone sets strict:true", () => {
+    const result = parseArgs(["--strict"]);
+    expect(result.strict).toBe(true);
+  });
+
+  it("C10 --strict with --rpc composes correctly", () => {
+    const result = parseArgs(["--strict", "--rpc", "https://mainnet.example.com"]);
+    expect(result.strict).toBe(true);
+    expect(result.rpcUrl).toBe("https://mainnet.example.com");
+  });
+
+  it("C11 --strict with --threshold composes correctly", () => {
+    const result = parseArgs(["--strict", "--threshold", "2000000000"]);
+    expect(result.strict).toBe(true);
+    expect(result.threshold).toBe(2_000_000_000);
+  });
+
+  it("C12 --strict with --rpc and --threshold all compose", () => {
+    const result = parseArgs([
+      "msg.b64",
+      "--strict",
+      "--rpc", "https://api.devnet.solana.com",
+      "--threshold", "500000000",
+    ]);
+    expect(result.file).toBe("msg.b64");
+    expect(result.strict).toBe(true);
+    expect(result.rpcUrl).toBe("https://api.devnet.solana.com");
+    expect(result.threshold).toBe(500_000_000);
+  });
+
+  it("C13 strict is undefined when --strict is not provided", () => {
+    const result = parseArgs(["msg.b64", "--rpc", "https://api.mainnet-beta.solana.com"]);
+    expect(result.strict).toBeUndefined();
+  });
+});

@@ -9,6 +9,7 @@ import { describe, it, expect } from "vitest";
 import { reviewBase64 } from "../src/verdict.ts";
 import { findBannedPhrase } from "../src/banned.ts";
 import { u32le, u64le, key, toB64 } from "./helpers.ts";
+import type { VerdictContext } from "../src/types.ts";
 
 const SYSTEM = "11111111111111111111111111111111";
 const SPL_TOKEN = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
@@ -368,5 +369,89 @@ describe("T_A4.8 FIX2: mintExtensions screening fires on non-TransferChecked pat
     });
     const delegateFindings = v.findings.filter((f) => f.id === "token2022-permanent-delegate");
     expect(delegateFindings).toHaveLength(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// T_A4.9 — Deterministic mint-finding order: Map insertion order must not
+//           affect findings array ordering (A4 hardening)
+// ---------------------------------------------------------------------------
+
+describe("T_A4.9 A4 hardening: mintExtensions findings order is insertion-order independent", () => {
+  // Build the same mint extensions map in two different insertion orders and
+  // confirm the findings array is identical regardless of insertion order.
+
+  function base58EncodeMini(fill: number): string {
+    const bytes = new Uint8Array(32).fill(fill);
+    const A = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+    let n = 0n;
+    for (const b of bytes) n = n * 256n + BigInt(b);
+    if (n === 0n) return "1".repeat(bytes.length);
+    let s = "";
+    while (n > 0n) { s = A[Number(n % 58n)]! + s; n /= 58n; }
+    return s; // no leading zeros since fill != 0
+  }
+
+  // Two distinct mints — we use alphabetic distance to ensure stable ordering.
+  const MINT_LO_B58 = base58EncodeMini(0x10); // lexicographically smaller base58
+  const MINT_HI_B58 = base58EncodeMini(0x90); // lexicographically larger base58
+
+  // Build a legacy message that references both mints in its static keys.
+  function buildMsgWithTwoMints(): Uint8Array {
+    const bytes: number[] = [];
+    bytes.push(1, 0, 2); // header: 1 signer, 0 ro-signed, 2 ro-unsigned
+    bytes.push(3);        // 3 static keys
+    bytes.push(...new Array(32).fill(0x01)); // [0] feePayer (signer-writable)
+    bytes.push(...new Array(32).fill(0x10)); // [1] MINT_LO (readonly)
+    bytes.push(...new Array(32).fill(0x90)); // [2] MINT_HI (readonly)
+    bytes.push(...new Array(32).fill(0xfa)); // blockhash
+    bytes.push(0); // 0 instructions
+    return Uint8Array.from(bytes);
+  }
+
+  const msgB64 = toB64(buildMsgWithTwoMints());
+  const ctx: VerdictContext = { lamportThreshold: 1_000_000_000 };
+
+  it("T_A4.9.1 insertion order [LO, HI] produces findings in sorted order", () => {
+    const mapLoHi = new Map([
+      [MINT_LO_B58, { permanentDelegate: base58EncodeMini(0xdd) }],
+      [MINT_HI_B58, { permanentDelegate: base58EncodeMini(0xee) }],
+    ]);
+    const v = reviewBase64(msgB64, { ...ctx, mintExtensions: mapLoHi });
+    const mintFindings = v.findings.filter((f) => f.id === "token2022-permanent-delegate");
+    expect(mintFindings).toHaveLength(2);
+    // Sorted by mint address, LO comes before HI
+    expect(mintFindings[0]!.label).toContain(MINT_LO_B58);
+    expect(mintFindings[1]!.label).toContain(MINT_HI_B58);
+  });
+
+  it("T_A4.9.2 insertion order [HI, LO] produces the SAME sorted findings", () => {
+    const mapHiLo = new Map([
+      [MINT_HI_B58, { permanentDelegate: base58EncodeMini(0xee) }],
+      [MINT_LO_B58, { permanentDelegate: base58EncodeMini(0xdd) }],
+    ]);
+    const v = reviewBase64(msgB64, { ...ctx, mintExtensions: mapHiLo });
+    const mintFindings = v.findings.filter((f) => f.id === "token2022-permanent-delegate");
+    expect(mintFindings).toHaveLength(2);
+    // Regardless of insertion order, sorted by mint address: LO first, HI second
+    expect(mintFindings[0]!.label).toContain(MINT_LO_B58);
+    expect(mintFindings[1]!.label).toContain(MINT_HI_B58);
+  });
+
+  it("T_A4.9.3 both insertion orders produce identical findings arrays", () => {
+    const mapLoHi = new Map([
+      [MINT_LO_B58, { permanentDelegate: base58EncodeMini(0xdd) }],
+      [MINT_HI_B58, { permanentDelegate: base58EncodeMini(0xee) }],
+    ]);
+    const mapHiLo = new Map([
+      [MINT_HI_B58, { permanentDelegate: base58EncodeMini(0xee) }],
+      [MINT_LO_B58, { permanentDelegate: base58EncodeMini(0xdd) }],
+    ]);
+    const vLoHi = reviewBase64(msgB64, { ...ctx, mintExtensions: mapLoHi });
+    const vHiLo = reviewBase64(msgB64, { ...ctx, mintExtensions: mapHiLo });
+    // Findings arrays must be identical regardless of insertion order
+    const labelsLoHi = vLoHi.findings.map((f) => f.label);
+    const labelsHiLo = vHiLo.findings.map((f) => f.label);
+    expect(labelsLoHi).toEqual(labelsHiLo);
   });
 });

@@ -1,6 +1,6 @@
 ---
 name: sign-safe
-description: Signing-time safety gate for Solana transactions. Decodes an opaque base64 transaction/message (legacy + v0 with Address Lookup Tables), classifies its instructions against a danger-primitive catalog (35 native-program entries + 11-entry Anchor authority-mutation registry + 12-program DeFi/NFT clear-signing registry with verified per-instruction safe/dangerous discriminators), surfaces transfer recipients and screens them against an injectable drainer blocklist, computes the signer-perspective statically-declared outflow, and emits a SIGN / HOLD / REJECT verdict plus a machine-readable verdict.json for autonomous-agent gating. With an optional --rpc endpoint it resolves Address Lookup Tables, clear-signs Squads v4 VaultTransaction proposals (decodes the inner CPI instruction), and screens Token-2022 mint extensions (PermanentDelegate / TransferHook) -- all fail-closed, with the deterministic core staying fully offline. Two-tier by default (an unknown program writing a value account -> HOLD); --strict restores reject-on-unknown for institutional signing. Trigger phrases include "is this transaction safe to sign", "review this tx before I sign", "what does this base64 transaction do", "blind signing", "sign-review", "squads proposal review". Offline, deterministic, and tested (561 checks, 26 files), with a precision study on real mainnet traffic (0 false-REJECTs, 100% recall on authority-transfer drainers). Motivated by the April-2026 Drift blind-signing / durable-nonce incident.
+description: Signing-time safety gate for Solana transactions. Decodes an opaque base64 transaction/message (legacy + v0 with Address Lookup Tables), classifies its instructions against a danger-primitive catalog (35 native-program entries + 11-entry Anchor authority-mutation registry + 12-program DeFi/NFT clear-signing registry with verified per-instruction safe/dangerous discriminators), surfaces transfer recipients and screens them against an injectable drainer blocklist, computes the signer-perspective statically-declared outflow, and emits a SIGN / HOLD / REJECT verdict plus a machine-readable verdict.json for autonomous-agent gating. With an optional --rpc endpoint it resolves Address Lookup Tables, clear-signs Squads v4 VaultTransaction proposals (decodes the inner CPI instruction), and screens Token-2022 mint extensions (PermanentDelegate / TransferHook) -- all fail-closed, with the deterministic core staying fully offline. Two-tier by default (an unknown program writing a value account -> HOLD); --strict restores reject-on-unknown for institutional signing. Trigger phrases include "is this transaction safe to sign", "review this tx before I sign", "what does this base64 transaction do", "blind signing", "sign-review", "squads proposal review". Offline, deterministic, and tested (607 checks, 29 files), with a precision study on real mainnet traffic (0 false-REJECTs, 100% recall on authority-transfer drainers). Motivated by the April-2026 Drift blind-signing / durable-nonce incident.
 user-invocable: true
 ---
 
@@ -31,8 +31,12 @@ bytes), and returns a **SIGN / HOLD / REJECT** verdict with a `verdict.json`.
 | A program source-code security audit | `/audit-solana` (program-level audit) |
 | A debugger for a transaction that already landed/failed | `/debug-user-tx` (landed-tx reproduction) |
 | A replacement for core Solana development knowledge | `solana-dev-skill` (core) |
+| A guard against post-sign state changes or TOCTOU | simulation (Blowfish / Phantom-style) + Lighthouse |
 
-This skill is purely a **pre-signature gate** over transaction *bytes*.
+This skill is purely a **pre-signature gate** over transaction *bytes*. It cannot
+detect post-sign state changes or time-of-check/time-of-use races where the on-chain
+state changes between the moment the gate runs and the moment the transaction lands.
+Pairing with simulation covers that gap.
 
 ## Deterministic core (offline)
 
@@ -50,13 +54,14 @@ no RPC, no simulation. Same bytes in, same JSON out:
 3. **classify** (`src/classify.ts` + `src/registry.ts`) -- each instruction x the
    danger catalog (`catalog/danger-primitives.json`, 35 entries) -> `Finding[]`,
    matched by programId + discriminator. Plus a DeFi/NFT registry tier
-   (`catalog/program-registry.json`, 5 programs: Metaplex Token Metadata,
-   Bubblegum cNFT, Jupiter v6, Orca Whirlpools, Raydium AMM v4): recognized
-   programs are named and never trigger the blank unknown-program REJECT; a
-   listed dangerous instruction (e.g. Metaplex Transfer NFT, Bubblegum Transfer
-   cNFT) is REJECT; any other instruction on a recognized program is HOLD (never
-   SIGN). Plus `src/tlv.ts`, a pure Token-2022 mint/account TLV extension walker
-   (PermanentDelegate / TransferHook / fee / pausable, surfaced on a
+   (`catalog/program-registry.json`, **12 programs**: Metaplex Token Metadata,
+   Metaplex Bubblegum, Jupiter v6, Orca Whirlpools, Raydium AMM v4, Pump.fun,
+   Pump AMM/PumpSwap, Raydium CLMM, Raydium CPMM, Drift, Kamino klend, Meteora
+   DLMM): recognized programs are named with a two-tier structure — safe
+   instructions SIGN, dangerous instructions are labeled at their configured
+   severity, and any unrecognized instruction on a recognized program is HOLD
+   (never SIGN). Plus `src/tlv.ts`, a pure Token-2022 mint/account TLV extension
+   walker (PermanentDelegate / TransferHook / fee / pausable, surfaced on a
    byte-identical plain Transfer).
 3b. **reputation** (`src/reputation.ts`) -- PURE address-reputation screening:
    when `ctx.recipientBlocklist` is provided, all transfer recipients, SPL
@@ -103,6 +108,59 @@ the listed severity; a Squads execute without PDA bytes injects a mandatory HOLD
 (`squads-execute-unverified`); a Squads execute with inner `update_admin`
 (discriminator matched by the Anchor registry) is REJECT; a Squads execute with
 zero inner instructions is treated as unverified (never SIGN an empty vault).
+
+## Two-tier posture (default vs `--strict`)
+
+### Default (two-tier)
+
+In v0.4 the gate operates in a two-tier posture calibrated against the precision
+study (100 real benign mainnet transactions, 0 false-REJECTs):
+
+- **Unknown program writing a value-bearing account → HOLD** (not REJECT). The
+  program is flagged in `unknownPrograms` and the verdict is HOLD, not REJECT,
+  because legitimate DeFi programs that are not yet in the registry would otherwise
+  be over-rejected at a rate that makes the gate unusable in practice.
+- **Durable-nonce "Drift composite" → REJECT only with a real danger.** A bare
+  durable-nonce advance at ix0 is HOLD. It only escalates to REJECT when paired
+  with a REJECT-class finding (authority/ownership change, program upgrade, blocklist
+  hit, decode failure, or explicit Anchor authority discriminator match).
+  `governanceContext` escalates even a bare nonce to REJECT.
+
+### `--strict` / `ctx.strict` (institutional)
+
+Pass `--strict` on the CLI or set `ctx.strict = true` in code to restore the
+aggressive v0.3 posture:
+
+- Unknown program writing a value-bearing account → **REJECT** (not HOLD).
+- Durable-nonce composite broadens: nonce + **any non-INFO finding** (including
+  delegate grants and recognized-program HOLD findings) → **REJECT**.
+
+Use `--strict` for institutional/multisig signing policies where the over-HOLD
+rate is acceptable and the priority is maximum caution.
+
+## Online enrichment (`--rpc`)
+
+With `--rpc <url>` the CLI performs one round of on-chain enrichment before the
+deterministic offline pass:
+
+- **ALT resolution**: fetches Address Lookup Table accounts and resolves
+  ALT-sourced account roles (marking them `addressVerified: true`). Without
+  `--rpc`, all ALT-sourced accounts are `addressVerified: false` → verdict is at
+  minimum HOLD.
+- **Squads VaultTransaction auto-fetch**: when the transaction calls
+  `vaultTransactionExecute` (discriminator `c208a15799a419ab`), the PDA at account
+  index 2 is fetched automatically. The offline core then borsh-decodes the inner
+  instructions and classifies them against the 11-entry Anchor authority-mutation
+  registry — naming e.g. `update_admin` explicitly. Without `--rpc`, a mandatory
+  HOLD finding (`squads-execute-unverified`) is injected instead.
+- **Token-2022 mint-extension screening**: for every Token-2022 mint touched by
+  the transaction, the mint account is fetched and the TLV extension chain is
+  decoded. PermanentDelegate and TransferHook extensions surface as HOLD findings.
+- `--vault-pda <pubkey>` overrides the auto-extracted PDA address (useful when the
+  PDA is at a non-standard account index).
+
+The offline core and all tests remain byte-identical without `--rpc`. Network
+access is strictly isolated to `src/rpc.ts` + `src/cli.ts`.
 
 Any MCP/network use (ALT resolution, Squads PDA fetch, live mint-extension
 confirmation) lives ONLY in `src/enrich.ts`, which is **never** imported by the
@@ -209,7 +267,7 @@ transfers when `holdOutboundTransfers` is set (HOLD).
 - [references/decode-notes.md](references/decode-notes.md) -- message parse details, header role math, ALT conservatism, discriminator notes
 - [catalog/danger-primitives.json](catalog/danger-primitives.json) -- the machine-readable catalog (35 native-program entries)
 - [catalog/anchor-danger.json](catalog/anchor-danger.json) -- Anchor authority-mutation registry (11 entries, 8-byte discriminators)
-- [catalog/program-registry.json](catalog/program-registry.json) -- DeFi/NFT program registry (5 programs, 15 dangerous instructions)
+- [catalog/program-registry.json](catalog/program-registry.json) -- DeFi/NFT program registry (12 programs, with safe + dangerous instruction tiers)
 
 ### Core Solana dev knowledge (from solana-dev-skill)
 
