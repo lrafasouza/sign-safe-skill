@@ -3,6 +3,58 @@
 All notable changes to sign-safe are documented here.
 Format: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-06-23
+
+End-to-end gate: real on-chain enrichment, data-driven precision calibration, and an
+expanded clear-signing registry. The deterministic core stays pure/offline; all network
+access is isolated to `src/rpc.ts` + `src/cli.ts` behind injectable fetchers.
+
+### Added
+
+- **Address Lookup Table resolution** (`src/alt.ts`, `VerdictContext.resolvedAltTables`):
+  pure bincode decoder for ALT accounts (fixed offset-56 layout). With `--rpc`, v0
+  transactions have their ALT-sourced account roles resolved and `addressVerified`, so
+  modern v0/ALT traffic is no longer blanket-held. Fail-closed: an unresolved or
+  partial table keeps the affected roles unverified (HOLD).
+- **Online enrichment wiring** (`src/rpc.ts`, `src/review-online.ts`, CLI `--rpc`,
+  `--vault-pda`): a JSON-RPC `getAccountInfo` fetcher + an orchestration layer that
+  resolves ALTs, fetches & clear-signs the Squads VaultTransaction PDA (auto-extracted
+  from account index 2 of `vaultTransactionExecute`), and screens Token-2022 mints.
+  Without `--rpc` the behavior is byte-identical and fully offline.
+- **Token-2022 mint-extension screening** (`src/tlv.ts` `decodeMintDangerExtensions`,
+  `VerdictContext.mintExtensions`): flags mints carrying a **PermanentDelegate** or
+  **TransferHook** (a holder's tokens can be moved/burned without their signature).
+  `OptionalNonZeroPubkey` all-zero is correctly treated as None.
+- **Clear-signing registry expansion** (5 -> **12 programs**) with a new recognized-**safe**
+  instruction tier alongside dangerous instructions: Pump.fun, Pump AMM, Raydium
+  CLMM/CPMM, Drift, Kamino klend, Meteora DLMM, plus expanded Jupiter v6 + Orca. Normal
+  swaps/LP/claims now SIGN instead of over-HOLD; authority/admin/withdraw instructions
+  are labeled HOLD/REJECT. Every anchor-8 discriminator stores its canonical
+  `ixName` and is **self-verifying** (`registry-discriminators.test.ts` recomputes
+  `sha256("global:"+ixName)[..8]`).
+- **`--strict` / `ctx.strict` mode**: restores the aggressive posture (unknown program
+  writing a value account -> REJECT, broad durable-nonce composite) for institutional
+  signing.
+- **Real-mainnet precision study** (`skill/corpus/`, `docs/precision-report.md`): a
+  frozen, offline corpus of 100 real benign mainnet transactions + 37 synthetic
+  malicious patterns across 7 families, with a confusion-matrix harness.
+
+### Changed
+
+- **Two-tier REJECT posture (default).** Driven by the precision study (the old gate
+  REJECTed 63% of real benign traffic): an unknown program writing a value account is now
+  **HOLD** (not REJECT) by default, and the durable-nonce "Drift composite" REJECTs only
+  when combined with a *real* danger (authority/ownership change or a REJECT-class
+  finding) rather than any soft HOLD. Result: benign false-REJECT 63% -> **0%**, malicious
+  recall stays **100%**, and nothing that was REJECT became SIGN (only -> HOLD). `--strict`
+  restores the previous behavior.
+
+### Tests
+
+- 292 -> **561** checks (26 files): ALT decoder, resolvedAlt channel, mint TLV, RPC fetcher,
+  enrichment orchestration, strict-mode gate, self-verifying discriminators, and the
+  offline precision harness.
+
 ## [0.3.0] - 2026-06-22
 
 ### Added
