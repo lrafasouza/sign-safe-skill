@@ -331,6 +331,27 @@ export interface VerdictContext {
     string,
     { permanentDelegate?: string; transferHook?: string; nonTransferable?: boolean }
   >;
+  /**
+   * When true, enables the maximal fail-closed posture for institutional or
+   * high-value signers. Default false (standard two-tier default mode).
+   *
+   * DEFAULT mode (strict !== true):
+   *   - Unknown program writing to a value-bearing account → HOLD (not REJECT).
+   *     Unknown ≠ proven-malicious; HOLD still never SIGNs.
+   *   - Drift composite: durable-nonce + (authority/ownership change OR a
+   *     REJECT-class catalog finding) → REJECT. Durable-nonce combined with
+   *     only a HOLD-class finding (unknown program, unknown instruction, etc.)
+   *     → HOLD, not REJECT.
+   *
+   * STRICT mode (strict === true):
+   *   - Unknown program writing to a value-bearing account → REJECT.
+   *   - Drift composite uses the broad formula: durable-nonce + any non-INFO
+   *     finding OR unknown program present → REJECT (today's aggressive posture).
+   *
+   * `strict` and `governanceContext` are independent flags; both can be set.
+   * HOLD is always the minimum for any potential danger (never SIGN on risk).
+   */
+  strict?: boolean;
 }
 
 export const DEFAULT_CONTEXT: VerdictContext = {

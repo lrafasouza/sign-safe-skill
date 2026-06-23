@@ -283,6 +283,11 @@ export function buildVerdict(args: {
    * non-expiring transactions are never acceptable. Default false.
    */
   governanceContext?: boolean;
+  /**
+   * When true, enables the maximal fail-closed posture (strict mode).
+   * See VerdictContext.strict for full documentation. Default false.
+   */
+  strict?: boolean;
 }): Verdict {
   const {
     messageVersion,
@@ -299,6 +304,7 @@ export function buildVerdict(args: {
     squadsExecuteWithoutInner = false,
     squadsInnerFindings = [],
     governanceContext = false,
+    strict = false,
   } = args;
 
   // Merge top-level findings with any decoded Squads inner findings.
@@ -340,35 +346,61 @@ export function buildVerdict(args: {
   const innerAuthorityChange = findings.some((f) => INNER_AUTHORITY_FINDING_IDS.has(f.id));
   const anyAuthorityChange = authorityOrOwnershipChange || innerAuthorityChange;
 
-  // V3 (the Drift signature): a durable-nonce carrier (marker at ix0) PLUS an
-  // authority/ownership change is BLOCK/CRITICAL, independent of the individual
-  // findings' severities. A held, non-expiring transaction that also hands over
-  // authority is the exact ~$285M Drift blind-signing class -- it must REJECT
-  // even when each piece in isolation would only be a HOLD.
+  // V3 (the Drift signature): a durable-nonce carrier (marker at ix0) PLUS a
+  // genuine danger triggers REJECT. Two modes differ in what "genuine danger" means:
   //
-  // BROADENED: durable-nonce marker AND any of:
-  //   - an authority/ownership change (top-level or inner), OR
-  //   - worst severity >= HOLD (any non-INFO finding alongside a durable nonce), OR
-  //   - an unknown program present (could hide any action)
-  // ...also yields REJECT (Drift-class). A TRULY BARE durable nonce (no other
-  // finding, no unknown program, no inner authority) stays HOLD unless
-  // governanceContext is set.
+  // STRICT mode (strict === true) — current broad formula:
+  //   durable-nonce + any non-INFO finding OR unknown program present => REJECT.
+  //   This is the maximal fail-closed posture for institutional/high-value signers.
+  //
+  // DEFAULT mode (strict !== true) — narrowed formula:
+  //   durable-nonce + (authority/ownership change OR a catalog REJECT-class finding
+  //   whose id is not "durable-nonce-advance") => REJECT (genuine Drift class).
+  //   durable-nonce + only HOLD-class findings (unknown program, unknown instruction,
+  //   registered-program-unknown-instruction, etc.) => HOLD, not REJECT.
+  //   This reduces the 4 Jupiter+nonce false-REJECTs to HOLD without sacrificing recall
+  //   on real authority-change attacks.
+  //
+  // A TRULY BARE durable nonce (no other finding, no unknown program) stays HOLD
+  // unless governanceContext is set (which escalates it to REJECT regardless of mode).
+
   const hasNonInfoFindingBeyondNonce = findings.some(
     (f) => f.id !== "durable-nonce-advance" && (f.severity === "HOLD" || f.severity === "REJECT"),
   );
-  const driftComposite =
+
+  // "REJECT-class finding beyond nonce" used in DEFAULT mode: only findings whose
+  // severity is REJECT AND that are not the durable-nonce marker itself.
+  const hasRejectClassFindingBeyondNonce = findings.some(
+    (f) => f.id !== "durable-nonce-advance" && f.severity === "REJECT",
+  );
+
+  // STRICT drift composite: broad formula (current / today's behavior).
+  const driftCompositeStrict =
     durableNonceMarker &&
     (anyAuthorityChange || hasNonInfoFindingBeyondNonce || unknownProgramPresent);
+
+  // DEFAULT drift composite: narrowed formula (only genuine Drift dangers).
+  const driftCompositeDefault =
+    durableNonceMarker &&
+    (anyAuthorityChange || hasRejectClassFindingBeyondNonce);
+
+  // Select the active drift composite based on mode.
+  const driftComposite = strict ? driftCompositeStrict : driftCompositeDefault;
 
   // Governance policy: bare durable nonce is also REJECT under governanceContext.
   const governanceNonceReject = durableNonceMarker && governanceContext;
 
+  // In DEFAULT mode, unknownProgramWritable → HOLD (not REJECT).
+  // In STRICT mode, unknownProgramWritable → REJECT (legacy behavior).
+  const unknownWritableReject = strict && unknownProgramWritable;
+  const unknownWritableHold = !strict && unknownProgramWritable;
+
   let decision: Decision;
   let reason: string;
 
-  if (worst === "REJECT" || unknownProgramWritable || driftComposite || governanceNonceReject) {
+  if (worst === "REJECT" || unknownWritableReject || driftComposite || governanceNonceReject) {
     decision = "REJECT";
-    if (governanceNonceReject && !driftComposite && worst !== "REJECT" && !unknownProgramWritable) {
+    if (governanceNonceReject && !driftComposite && worst !== "REJECT" && !unknownWritableReject) {
       reason =
         "Durable-nonce carrier (non-expiring transaction) rejected by governance policy: this signing context prohibits non-expiring transactions regardless of payload.";
     } else if (driftComposite) {
@@ -389,18 +421,20 @@ export function buildVerdict(args: {
         reason =
           "Durable-nonce carrier (non-expiring transaction) combined with an unverified or dangerous instruction -- the Drift blind-signing attack class. A held, non-expiring transaction can be replayed at any time.";
       }
-    } else if (worst === "REJECT" && unknownProgramWritable) {
+    } else if (worst === "REJECT" && unknownWritableReject) {
       reason =
         "Contains a REJECT-class danger primitive and an unknown program writing to a value-bearing account.";
     } else if (worst === "REJECT") {
       const rej = findings.find((f) => f.severity === "REJECT");
       reason = `Contains a REJECT-class danger primitive: ${rej?.label ?? "unknown"}.`;
     } else {
+      // strict && unknownProgramWritable, no other REJECT finding
       reason =
         "An unknown (uncatalogued) program writes to a value-bearing account; effect cannot be bounded.";
     }
   } else if (
     worst === "HOLD" ||
+    unknownWritableHold ||
     unknownProgramPresent ||
     (altLookupsPresent && rolesUnverified) ||
     outflow.exceedsLamportThreshold
@@ -411,7 +445,11 @@ export function buildVerdict(args: {
       const holds = findings.filter((f) => f.severity === "HOLD").map((f) => f.label);
       reasons.push(`HOLD-class primitive(s): ${holds.join(", ")}`);
     }
-    if (unknownProgramPresent) {
+    if (unknownWritableHold) {
+      reasons.push(
+        `unknown program writing to a value-bearing account: ${unknownPrograms.join(", ")} (use --strict to reject)`,
+      );
+    } else if (unknownProgramPresent) {
       reasons.push(`unknown program(s) present: ${unknownPrograms.join(", ")}`);
     }
     if (altLookupsPresent && rolesUnverified) {
@@ -704,6 +742,7 @@ export function reviewBase64(
         (squadsInnerFindings === undefined || squadsInnerFindings.length === 0),
       squadsInnerFindings: squadsInnerFindings ?? [],
       governanceContext: ctx.governanceContext ?? false,
+      strict: ctx.strict ?? false,
     });
   } catch (err) {
     const msg = err instanceof DecodeError ? err.message : String(err);

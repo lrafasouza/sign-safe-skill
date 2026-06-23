@@ -1,7 +1,7 @@
 {
   "schema": "sign-safe/verdict@1",
-  "decision": "REJECT",
-  "reason": "An unknown (uncatalogued) program writes to a value-bearing account; effect cannot be bounded.",
+  "decision": "HOLD",
+  "reason": "Manual review required: unknown program writing to a value-bearing account: CJfRUQxyonG6B5mnztsNUqxknbFT89DJdrdrzV9F96mU (use --strict to reject).",
   "messageVersion": "legacy",
   "worstSeverity": "INFO",
   "findings": [],

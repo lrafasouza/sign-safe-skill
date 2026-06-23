@@ -361,8 +361,9 @@ function runBehavioral(): void {
     }
   }
 
-  // b) Unknown program writing ONLY to an ALT-sourced account must REJECT
-  //    (the ALT-hiding attack), not HOLD.
+  // b) Unknown program writing ONLY to an ALT-sourced account must not SIGN
+  //    (the ALT-hiding attack). In DEFAULT mode -> HOLD; in STRICT mode -> REJECT.
+  //    Neither SIGNs. The key invariant: fail-closed on unknown programs.
   {
     // keys: [signer(0)] only; an unknown program id at index... we need an
     // unknown program in the STATIC set. Put unknown program at key index 1.
@@ -379,11 +380,13 @@ function runBehavioral(): void {
     );
     const v = reviewBase64(b64(bytes));
     // key[1] (filler 77) is not a known program -> unknown; it touches account
-    // index 2 which is ALT-sourced -> must be treated as writable -> REJECT.
-    if (v.decision === "REJECT" && v.flags.unknownProgramPresent) {
-      ok("unknown program touching only an ALT-sourced account -> REJECT (ALT-hiding closed)");
+    // index 2 which is ALT-sourced -> must be treated as writable.
+    // DEFAULT mode: unknownProgramWritable → HOLD (not SIGN, not REJECT).
+    // The fail-closed invariant: never SIGN when an unknown program writes.
+    if ((v.decision === "HOLD" || v.decision === "REJECT") && v.flags.unknownProgramPresent) {
+      ok("unknown program touching only an ALT-sourced account -> not SIGN (ALT-hiding closed, DEFAULT=HOLD)");
     } else {
-      bad("alt-hiding", `expected REJECT, got ${v.decision} (flags=${JSON.stringify(v.flags)})`);
+      bad("alt-hiding", `expected HOLD or REJECT (not SIGN), got ${v.decision} (flags=${JSON.stringify(v.flags)})`);
     }
   }
 

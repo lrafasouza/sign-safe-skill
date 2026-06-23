@@ -258,8 +258,10 @@ describe("H: Squads vaultTransactionExecute verdict integration", () => {
 // ---------------------------------------------------------------------------
 
 describe("I: real-Drift shape (durable-nonce + Squads vaultTransactionExecute)", () => {
-  it("I1 durable-nonce + Squads execute WITHOUT inner -> REJECT (driftComposite)", () => {
+  it("I1 DEFAULT: durable-nonce + Squads execute WITHOUT inner -> HOLD (driftComposite default uses narrowed formula)", () => {
     // ix0 = AdvanceNonceAccount (System), ix1 = vaultTransactionExecute (Squads)
+    // In DEFAULT mode: durable-nonce + squads-execute-unverified (a HOLD-class finding) → HOLD.
+    // The narrowed driftCompositeDefault only REJECTs on authority/ownership change or REJECT-class findings.
     const msg = buildMessage(
       [1, 0, 1],
       [1, SYSTEM, SQUADS_V4, 3],
@@ -269,8 +271,24 @@ describe("I: real-Drift shape (durable-nonce + Squads vaultTransactionExecute)",
       ],
     );
     const v = reviewBase64(toB64(msg));
+    expect(v.decision).toBe("HOLD");
+    // squads-execute-unverified HOLD finding is still present
+    expect(v.findings.some((f) => f.id === "squads-execute-unverified")).toBe(true);
+  });
+
+  it("I1-strict: durable-nonce + Squads execute WITHOUT inner + strict=true -> REJECT (broad driftComposite)", () => {
+    // In STRICT mode, durable-nonce + any HOLD finding → REJECT.
+    const msg = buildMessage(
+      [1, 0, 1],
+      [1, SYSTEM, SQUADS_V4, 3],
+      [
+        { prog: 1, accts: [2, 0], data: u32le(4) },
+        { prog: 2, accts: [0], data: VAULT_TX_EXECUTE_DISC },
+      ],
+    );
+    const ctx: VerdictContext = { lamportThreshold: 1_000_000_000, strict: true };
+    const v = reviewBase64(toB64(msg), ctx);
     expect(v.decision).toBe("REJECT");
-    // The driftComposite path triggers because durable-nonce + HOLD finding (the injected squads-unverified)
     expect(v.findings.some((f) => f.id === "squads-execute-unverified")).toBe(true);
   });
 

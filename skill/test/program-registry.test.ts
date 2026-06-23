@@ -403,15 +403,13 @@ describe("Raydium AMM v4: recognized, all instructions HOLD", () => {
 });
 
 // =============================================================================
-// 6. Truly unknown program writing value -> still REJECT (unchanged path)
+// 6. Unknown program writing value: HOLD in default, REJECT in strict
 // =============================================================================
 
-describe("Truly unknown program: REJECT path unchanged", () => {
-  it("unregistered program writing a writable account -> REJECT (same as before)", () => {
+describe("Truly unknown program: two-tier behavior (default HOLD, strict REJECT)", () => {
+  function buildUnknownWritableMsg() {
     // Use a random program id that is not in the registry or native catalog.
     const unknownProg = "Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS";
-    // Build a message where the unknown program has a writable account reference.
-    // We use legacyBytes for more control:
     const unknownProgBytes = base58ToBytes(unknownProg);
     const out: number[] = [];
     // header: 1 signer, 0 readonly-signed, 0 readonly-unsigned.
@@ -426,7 +424,11 @@ describe("Truly unknown program: REJECT path unchanged", () => {
     out.push(2); // programIdIndex = idx2
     out.push(2); out.push(0); out.push(1); // 2 accts: idx0, idx1
     out.push(1, 0x99); // 1-byte data
-    const msgBytes = Uint8Array.from(out);
+    return { msgBytes: Uint8Array.from(out), unknownProg };
+  }
+
+  it("DEFAULT mode: unregistered program writing a writable account -> HOLD (not REJECT)", () => {
+    const { msgBytes, unknownProg } = buildUnknownWritableMsg();
     const msg = decodeMessageBytes(msgBytes);
     const roles = deriveRoles(msg, { reservedAccountKeys: RESERVED_ACCOUNT_KEYS });
     const cls = classify(msg, roles, DEFAULT_CONTEXT);
@@ -435,6 +437,7 @@ describe("Truly unknown program: REJECT path unchanged", () => {
     expect(cls.unknownPrograms).toContain(unknownProg);
     expect(cls.unknownProgramWritable).toBe(true);
 
+    // In DEFAULT mode (no strict flag), unknownProgramWritable → HOLD, not REJECT.
     const v = buildVerdict({
       messageVersion: msg.version,
       findings: cls.findings,
@@ -443,6 +446,31 @@ describe("Truly unknown program: REJECT path unchanged", () => {
       unknownProgramWritable: cls.unknownProgramWritable,
       altLookupsPresent: msg.altLookupsPresent,
       rolesUnverified: false,
+      // strict is not set (default false)
+    });
+    expect(v.decision).toBe("HOLD");
+    expect(v.reason).toContain("--strict");
+  });
+
+  it("STRICT mode: unregistered program writing a writable account -> REJECT", () => {
+    const { msgBytes, unknownProg } = buildUnknownWritableMsg();
+    const msg = decodeMessageBytes(msgBytes);
+    const roles = deriveRoles(msg, { reservedAccountKeys: RESERVED_ACCOUNT_KEYS });
+    const cls = classify(msg, roles, DEFAULT_CONTEXT);
+
+    expect(cls.unknownPrograms).toContain(unknownProg);
+    expect(cls.unknownProgramWritable).toBe(true);
+
+    // In STRICT mode, unknownProgramWritable → REJECT (legacy behavior).
+    const v = buildVerdict({
+      messageVersion: msg.version,
+      findings: cls.findings,
+      outflow: computeOutflow(msg, roles, DEFAULT_CONTEXT),
+      unknownPrograms: cls.unknownPrograms,
+      unknownProgramWritable: cls.unknownProgramWritable,
+      altLookupsPresent: msg.altLookupsPresent,
+      rolesUnverified: false,
+      strict: true,
     });
     expect(v.decision).toBe("REJECT");
   });

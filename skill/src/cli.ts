@@ -48,6 +48,13 @@ export interface ParsedArgs {
    * one auto-extracted from the message. Silently ignored without --rpc.
    */
   vaultPda?: string;
+  /**
+   * When true, enables the maximal fail-closed posture (strict mode).
+   * Unknown programs writing to writable accounts REJECT (not HOLD).
+   * Drift composite uses the broad formula (durable-nonce + any HOLD finding).
+   * Suitable for institutional or high-value signers who prefer fail-closed.
+   */
+  strict?: boolean;
 }
 
 export function parseArgs(argv: string[]): ParsedArgs {
@@ -57,6 +64,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
   let digestOnly = false;
   let rpcUrl: string | undefined;
   let vaultPda: string | undefined;
+  let strict: boolean | undefined;
 
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -64,6 +72,8 @@ export function parseArgs(argv: string[]): ParsedArgs {
       jsonOnly = true;
     } else if (a === "--digest") {
       digestOnly = true;
+    } else if (a === "--strict") {
+      strict = true;
     } else if (a === "--threshold") {
       const v = argv[++i];
       if (v === undefined || !/^\d+$/.test(v)) {
@@ -95,7 +105,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
       file = a;
     }
   }
-  return { file, threshold, jsonOnly, digestOnly, rpcUrl, vaultPda };
+  return { file, threshold, jsonOnly, digestOnly, rpcUrl, vaultPda, strict };
 }
 
 function readInput(file: string | undefined): string {
@@ -198,7 +208,10 @@ async function main(): Promise<void> {
       return;
     }
 
-    const ctx: VerdictContext = { lamportThreshold: args.threshold };
+    const ctx: VerdictContext = {
+      lamportThreshold: args.threshold,
+      ...(args.strict ? { strict: true } : {}),
+    };
 
     if (args.rpcUrl !== undefined) {
       // Online enrichment path: fetch ALT/Squads/mint accounts via RPC.
