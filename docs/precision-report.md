@@ -1,6 +1,6 @@
 # Sign-Safe Precision Report (Phase C)
 
-Generated: 2026-06-23T03:42:18.474Z
+Generated: 2026-06-23T04:08:54.972Z
 Pinned slots: 428290000, 428289500
 
 ## 1. Benign Corpus Summary
@@ -9,8 +9,8 @@ Total benign fixtures: **100**
 
 | Decision | Count | Pct |
 |----------|-------|-----|
-| SIGN     |    24 | 24.0% |
-| HOLD     |    76 | 76.0% |
+| SIGN     |    33 | 33.0% |
+| HOLD     |    67 | 67.0% |
 | REJECT   |     0 | 0.0% |
 
 ### Category Breakdown (benign)
@@ -27,12 +27,12 @@ Total benign fixtures: **100**
 
 ## 3. Benign HOLD Analysis
 
-Total benign HOLDs: **76**
+Total benign HOLDs: **67**
 
 | Category | Count | Explanation |
 |----------|-------|-------------|
 | Has unresolved ALT | 1 | ALT accounts could not be resolved (fail-closed HOLD) |
-| Has resolved ALT   | 37 | ALT resolved but other HOLD finding present |
+| Has resolved ALT   | 28 | ALT resolved but other HOLD finding present |
 | No ALT (other)     | 38 | HOLD from non-ALT finding (large transfer, nonce, etc.) |
 
 ### Benign HOLDs (non-ALT causes) — review findings:
@@ -49,14 +49,14 @@ Total benign HOLDs: **76**
 - **428289500-3.json** (slot=428289500): programIds=[EtrnLzgbS7nMMy5fbD42kXiUzGg8XQzJ972Xtk1cjWih, ComputeBudget111111111111111111111111111111, 11111111111111111111111111111111] findings=[]
 - **428289500-30.json** (slot=428289500): programIds=[ComputeBudget111111111111111111111111111111, ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL, pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA, TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA] findings=[spl-close-account]
 - **428289500-36.json** (slot=428289500): programIds=[11111111111111111111111111111111, dijkbkCAKfFTCxQg3u1pg82gVU1jJGHBBRcteD11mBu, ComputeBudget111111111111111111111111111111] findings=[durable-nonce-advance]
-- **428289500-39.json** (slot=428289500): programIds=[6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P, TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb, 11111111111111111111111111111111] findings=[token2022-close-account]
+- **428289500-39.json** (slot=428289500): programIds=[6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P, TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb, 11111111111111111111111111111111] findings=[token2022-close-account, registry-pump-fun-unknown-instruction]
 - **428289500-4.json** (slot=428289500): programIds=[9H6tua7jkLhdm3w8BvgpTn5LZNU7g4ZynDmCiNN3q6Rp, ComputeBudget111111111111111111111111111111] findings=[]
 - **428289500-43.json** (slot=428289500): programIds=[ComputeBudget111111111111111111111111111111, 11111111111111111111111111111111] findings=[system-large-transfer]
 - **428289500-44.json** (slot=428289500): programIds=[9H6tua7jkLhdm3w8BvgpTn5LZNU7g4ZynDmCiNN3q6Rp, ComputeBudget111111111111111111111111111111] findings=[]
 - **428289500-46.json** (slot=428289500): programIds=[ComputeBudget111111111111111111111111111111, ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL, 11111111111111111111111111111111, TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA, pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA] findings=[spl-close-account]
 - **428289500-7.json** (slot=428289500): programIds=[TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb, MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr] findings=[]
 - **428290000-0.json** (slot=428290000): programIds=[ComputeBudget111111111111111111111111111111, A5X6pdbNATpoPYm1Qk5igf31zkiz2UT44uMuDsbsqTAp] findings=[]
-- **428290000-1.json** (slot=428290000): programIds=[ComputeBudget111111111111111111111111111111, ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL, 11111111111111111111111111111111, TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA, pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA] findings=[spl-close-account]
+- **428290000-1.json** (slot=428290000): programIds=[ComputeBudget111111111111111111111111111111, ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL, 11111111111111111111111111111111, TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA, pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA] findings=[registry-pump-amm-unknown-instruction, spl-close-account]
 - **428290000-12.json** (slot=428290000): programIds=[ComputeBudget111111111111111111111111111111, ojh19ojaKduoJZuaJADhcVGp4xt1TcdAvZmpVsCorch] findings=[]
 - **428290000-15.json** (slot=428290000): programIds=[ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL, TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb] findings=[]
 - **428290000-2.json** (slot=428290000): programIds=[T1pyyaTNZsKv2WcRAB8oVnk93mLJw2XzjtVYqCsaHqt] findings=[]
@@ -82,13 +82,13 @@ Comparing 5 benign v0+ALT fixtures: decision WITH resolved ALTs vs WITHOUT (empt
 
 | Fixture | With Resolution | Without Resolution | Improvement |
 |---------|-----------------|-------------------|-------------|
-| 428289500-1.json | HOLD | HOLD | no change |
+| 428289500-1.json | SIGN | HOLD | YES — less conservative with resolution |
 | 428289500-10.json | HOLD | HOLD | no change |
 | 428289500-13.json | HOLD | HOLD | no change |
 | 428289500-17.json | HOLD | HOLD | no change |
 | 428289500-18.json | HOLD | HOLD | no change |
 
-ALT resolution improvements: **0/5** fixtures showed reduced severity with resolved ALTs.
+ALT resolution improvements: **1/5** fixtures showed reduced severity with resolved ALTs.
 
 ## 5. Malicious Corpus Recall
 
@@ -154,14 +154,14 @@ All malicious fixtures were caught (HOLD or REJECT). No missed detections.
 | Metric | Value |
 |--------|-------|
 | Benign corpus size | 100 transactions |
-| Benign SIGN rate | 24.0% |
+| Benign SIGN rate | 33.0% |
 | Benign false-REJECT | 0 |
-| Benign HOLD rate | 76.0% |
+| Benign HOLD rate | 67.0% |
 | HOLDs with unresolved ALT | 1 |
 | HOLDs without ALT | 38 |
 | Malicious corpus size | 37 fixtures |
 | Malicious recall | 100.0% (37/37) |
-| ALT sub-test wins | 0/5 |
+| ALT sub-test wins | 1/5 |
 | SetAuthority-AccountOwner recall | 100.0% (7/7) |
 | System-Assign recall | 100.0% (5/5) |
 | SPL-Approve recall | 100.0% (5/5) |

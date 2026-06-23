@@ -527,7 +527,7 @@ describe("Native SPL Transfer: no regression (still SIGN)", () => {
 // 8. Fail-closed: recognized-program findings are never SIGN-only
 // =============================================================================
 
-describe("Fail-closed: recognized programs never produce SIGN alone", () => {
+describe("Fail-closed: recognized programs with UNKNOWN instructions never produce SIGN", () => {
   const recognizedProgs = [
     { name: "Jupiter v6", id: JUPITER_V6, data: [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08] },
     { name: "Orca", id: ORCA_WHIRLPOOLS, data: [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08] },
@@ -537,9 +537,177 @@ describe("Fail-closed: recognized programs never produce SIGN alone", () => {
   ];
 
   for (const prog of recognizedProgs) {
-    it(`${prog.name}: instruction never produces SIGN verdict`, () => {
+    it(`${prog.name}: UNKNOWN instruction never produces SIGN verdict`, () => {
       const v = verdictMsg(prog.id, prog.data, 1);
       expect(v.decision).not.toBe("SIGN");
+    });
+  }
+});
+
+// =============================================================================
+// 9. Phase B: Safe (benign) instruction recognition — INFO tier
+// =============================================================================
+
+// New program IDs added in Phase B
+const DRIFT = "dRiftyHA39MWEi3m9aunc5MzRF1JYuBsbn6VPcn33UH";
+const KAMINO_KLEND = "KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD";
+const RAYDIUM_CLMM = "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK";
+const PUMP_FUN = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P";
+
+// Jupiter v6 `route` discriminator: sha256("global:route")[0..8] = e517cb977ae3ad2a
+// Verified against real mainnet transaction AND sha256 computation
+const JUPITER_ROUTE_DISC = "e517cb977ae3ad2a";
+
+// Drift `update_admin` discriminator: sha256("global:update_admin")[0..8] = a1b028d53cb8b3e4
+// Verified: sha256 computation + IDL instruction name
+const DRIFT_UPDATE_ADMIN_DISC = "a1b028d53cb8b3e4";
+
+// Kamino `update_lending_market_owner`: sha256("global:update_lending_market_owner")[0..8] = 76e00a3ec4e6b859
+const KAMINO_UPDATE_MARKET_OWNER_DISC = "76e00a3ec4e6b859";
+
+// Raydium CLMM `swap`: sha256("global:swap")[0..8] = f8c69e91e17587c8
+const RAYDIUM_CLMM_SWAP_DISC = "f8c69e91e17587c8";
+
+// Pump.fun `buy` discriminator: sha256("global:buy")[0..8] = 66063d1201daebea
+// Verified against Pump.fun IDL (pump.json) and sha256 computation
+const PUMP_BUY_DISC = "66063d1201daebea";
+
+describe("Phase B: Jupiter v6 route (safe) -> SIGN (within thresholds)", () => {
+  it("Jupiter route discriminator -> INFO finding (not HOLD/REJECT)", () => {
+    const data = hexToData(JUPITER_ROUTE_DISC + "00000001"); // disc + payload
+    const { cls } = classifyMsg(JUPITER_V6, data, 0);
+
+    // Must have an INFO finding for the route instruction
+    const infoFinding = cls.findings.find((f) => f.id.startsWith("registry-jupiter-v6-safe"));
+    expect(infoFinding).toBeTruthy();
+    expect(infoFinding!.severity).toBe("INFO");
+    expect(infoFinding!.label).toContain("route");
+  });
+
+  it("Jupiter route: full verdict is SIGN (no other danger, within thresholds)", () => {
+    // A Jupiter route instruction + no other programs = SIGN
+    // (The fee payer signer is the only account; no writable non-signer value account)
+    const data = hexToData(JUPITER_ROUTE_DISC + "00000001");
+    const v = verdictMsg(JUPITER_V6, data, 0);
+    // With recognized safe instruction and no danger, should SIGN
+    expect(v.decision).toBe("SIGN");
+  });
+
+  it("Jupiter route: is NOT in unknownPrograms", () => {
+    const data = hexToData(JUPITER_ROUTE_DISC);
+    const { cls } = classifyMsg(JUPITER_V6, data, 0);
+    expect(cls.unknownPrograms).not.toContain(JUPITER_V6);
+    expect(cls.unknownProgramWritable).toBe(false);
+  });
+});
+
+describe("Phase B: Raydium CLMM swap (safe) -> SIGN (within thresholds)", () => {
+  it("Raydium CLMM swap discriminator -> INFO finding (not HOLD/REJECT)", () => {
+    const data = hexToData(RAYDIUM_CLMM_SWAP_DISC + "00000001");
+    const { cls } = classifyMsg(RAYDIUM_CLMM, data, 0);
+
+    const infoFinding = cls.findings.find((f) => f.id.startsWith("registry-raydium-clmm-safe"));
+    expect(infoFinding).toBeTruthy();
+    expect(infoFinding!.severity).toBe("INFO");
+    expect(infoFinding!.label).toContain("swap");
+  });
+
+  it("Raydium CLMM swap: verdict is SIGN (no other danger)", () => {
+    const data = hexToData(RAYDIUM_CLMM_SWAP_DISC + "00000001");
+    const v = verdictMsg(RAYDIUM_CLMM, data, 0);
+    expect(v.decision).toBe("SIGN");
+  });
+});
+
+describe("Phase B: Pump.fun buy (safe) -> SIGN (within thresholds)", () => {
+  it("Pump.fun buy discriminator -> INFO finding", () => {
+    const data = hexToData(PUMP_BUY_DISC + "00000001");
+    const { cls } = classifyMsg(PUMP_FUN, data, 0);
+
+    const infoFinding = cls.findings.find((f) => f.id.startsWith("registry-pump-fun-safe"));
+    expect(infoFinding).toBeTruthy();
+    expect(infoFinding!.severity).toBe("INFO");
+    expect(infoFinding!.label).toContain("buy");
+  });
+});
+
+describe("Phase B: Drift updateAdmin -> REJECT", () => {
+  it("Drift update_admin discriminator -> REJECT finding", () => {
+    const data = hexToData(DRIFT_UPDATE_ADMIN_DISC + "00000001");
+    const { cls } = classifyMsg(DRIFT, data, 1);
+
+    const dangerFinding = cls.findings.find((f) => f.id.startsWith("registry-drift-danger"));
+    expect(dangerFinding).toBeTruthy();
+    expect(dangerFinding!.severity).toBe("REJECT");
+    expect(dangerFinding!.label).toContain("updateAdmin");
+  });
+
+  it("Drift updateAdmin: full verdict is REJECT", () => {
+    const data = hexToData(DRIFT_UPDATE_ADMIN_DISC + "00000001");
+    const v = verdictMsg(DRIFT, data, 1);
+    expect(v.decision).toBe("REJECT");
+  });
+
+  it("Drift updateAdmin: NOT in unknownPrograms", () => {
+    const data = hexToData(DRIFT_UPDATE_ADMIN_DISC);
+    const { cls } = classifyMsg(DRIFT, data, 0);
+    expect(cls.unknownPrograms).not.toContain(DRIFT);
+  });
+});
+
+describe("Phase B: Kamino updateLendingMarketOwner -> REJECT", () => {
+  it("Kamino update_lending_market_owner discriminator -> REJECT finding", () => {
+    const data = hexToData(KAMINO_UPDATE_MARKET_OWNER_DISC + "00000001");
+    const { cls } = classifyMsg(KAMINO_KLEND, data, 1);
+
+    const dangerFinding = cls.findings.find((f) => f.id.startsWith("registry-kamino-klend-danger"));
+    expect(dangerFinding).toBeTruthy();
+    expect(dangerFinding!.severity).toBe("REJECT");
+    expect(dangerFinding!.label).toContain("Market");
+  });
+
+  it("Kamino updateLendingMarketOwner: full verdict is REJECT", () => {
+    const data = hexToData(KAMINO_UPDATE_MARKET_OWNER_DISC + "00000001");
+    const v = verdictMsg(KAMINO_KLEND, data, 1);
+    expect(v.decision).toBe("REJECT");
+  });
+});
+
+describe("Phase B: recognized program + unlisted instruction -> HOLD (unchanged)", () => {
+  it("Raydium CLMM with unknown discriminator -> HOLD (not SIGN)", () => {
+    // Use a discriminator that doesn't match any CLMM instruction
+    const data = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01];
+    const { cls } = classifyMsg(RAYDIUM_CLMM, data, 1);
+
+    const holdFinding = cls.findings.find((f) =>
+      f.id.startsWith("registry-raydium-clmm-unknown-instruction"),
+    );
+    expect(holdFinding).toBeTruthy();
+    expect(holdFinding!.severity).toBe("HOLD");
+  });
+
+  it("Drift with unknown discriminator -> HOLD (not SIGN)", () => {
+    const data = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01];
+    const v = verdictMsg(DRIFT, data, 0);
+    expect(v.decision).toBe("HOLD");
+    expect(v.decision).not.toBe("SIGN");
+  });
+});
+
+describe("Phase B: new programs are registered", () => {
+  const newProgramIds = [
+    "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P",  // Pump.fun
+    "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA",  // Pump AMM
+    "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK",  // Raydium CLMM
+    "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C",  // Raydium CPMM
+    "dRiftyHA39MWEi3m9aunc5MzRF1JYuBsbn6VPcn33UH",   // Drift
+    "KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD",   // Kamino klend
+    "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo",  // Meteora DLMM
+  ];
+
+  for (const pid of newProgramIds) {
+    it(`isRegisteredProgram returns true for ${pid.slice(0, 8)}...`, () => {
+      expect(isRegisteredProgram(pid)).toBe(true);
     });
   }
 });

@@ -27,7 +27,7 @@ import catalog from "../catalog/danger-primitives.json" with { type: "json" };
 import {
   isRegisteredProgram,
   getRegistryProgram,
-  matchDangerousInstruction,
+  matchInstruction,
 } from "./registry.ts";
 import type {
   AccountRole,
@@ -283,10 +283,24 @@ export function classify(
       //   - A truly unregistered program -> fall through to the unknown path.
       if (isRegisteredProgram(pid)) {
         const prog = getRegistryProgram(pid)!;
-        const dangerEntry = matchDangerousInstruction(pid, ix.data);
+        const match = matchInstruction(pid, ix.data);
 
-        if (dangerEntry !== null && dangerEntry !== undefined) {
+        if (match === undefined) {
+          // Should not happen (isRegisteredProgram already confirmed it's in registry),
+          // but fail-closed if it does: treat as unknown instruction.
+          findings.push({
+            id: `registry-${prog.id}-unknown-instruction`,
+            label: `${prog.name}: unrecognized instruction (not individually decoded)`,
+            severity: "HOLD",
+            instructionIndex,
+            programId: pid,
+            detail: `Instruction sent to recognized program ${prog.name} (${pid}) but the specific instruction was not decoded. Verify recipients and amounts before signing.`,
+            mapsToLoss:
+              "Unverified instruction on a DeFi/NFT program; inner effects cannot be fully bounded without per-instruction decoding.",
+          });
+        } else if (match.kind === "dangerous") {
           // Listed dangerous instruction: emit finding with the registry label.
+          const dangerEntry = match.dangerEntry;
           findings.push({
             id: `registry-${prog.id}-danger`,
             label: dangerEntry.label,
@@ -296,8 +310,23 @@ export function classify(
             detail: `${dangerEntry.label} on ${prog.name} (${pid}). Discriminator matched.`,
             mapsToLoss: dangerEntry.mapsToLoss,
           });
+        } else if (match.kind === "safe") {
+          // Recognized benign user instruction: emit INFO finding (no escalation).
+          // The signer sees a human-readable label (e.g. "Jupiter v6: route (swap)").
+          // INFO findings do NOT escalate a verdict — a tx of only registry-benign
+          // instructions within thresholds and with no unknown programs will SIGN.
+          const safeEntry = match.safeEntry;
+          findings.push({
+            id: `registry-${prog.id}-safe`,
+            label: safeEntry.label,
+            severity: "INFO",
+            instructionIndex,
+            programId: pid,
+            detail: `${safeEntry.label} on ${prog.name} (${pid}). Recognized user instruction (clear-signed by registry entry).`,
+            mapsToLoss: "",
+          });
         } else {
-          // Recognized program, unrecognized instruction: mandatory HOLD.
+          // kind === "unknown": recognized program, unrecognized instruction: mandatory HOLD.
           // The fail-closed rule: this must NEVER become SIGN.
           findings.push({
             id: `registry-${prog.id}-unknown-instruction`,

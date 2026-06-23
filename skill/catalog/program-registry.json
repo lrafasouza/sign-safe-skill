@@ -1,6 +1,6 @@
 {
   "$schema": "sign-safe/program-registry@1",
-  "description": "Registry of recognized non-native DeFi/NFT programs. Programs listed here are known to the classifier and will NOT trigger the unknown-program-writable REJECT path. Each entry includes the discriminator scheme used by that program. Per-instruction danger entries list specific instructions that are dangerous and their severity. Any instruction NOT listed as dangerous on a recognized program yields a HOLD (never SIGN).",
+  "description": "Registry of recognized non-native DeFi/NFT programs. Programs listed here are known to the classifier and will NOT trigger the unknown-program-writable REJECT path. Each entry includes the discriminator scheme used by that program. Per-instruction safe entries list clearly-benign user instructions (safeInstructions) that produce INFO findings (no escalation). Per-instruction danger entries list specific instructions that are dangerous and their severity. Any instruction NOT listed as safe or dangerous on a recognized program yields a HOLD (never SIGN).",
   "programs": [
     {
       "id": "metaplex-token-metadata",
@@ -8,6 +8,7 @@
       "programId": "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s",
       "discriminatorScheme": "beet-u8",
       "description": "Metaplex Token Metadata program. Manages NFT/token metadata, creators, and on-chain authority.",
+      "safeInstructions": [],
       "dangerousInstructions": [
         {
           "discHex": "31",
@@ -73,45 +74,53 @@
       "programId": "BGUMAp9Gq7iTEuizy4pqaxsTyUCBK68MDfK752saRPUY",
       "discriminatorScheme": "anchor-8",
       "description": "Metaplex Bubblegum program for compressed NFTs (cNFTs). Uses Anchor 8-byte discriminators.",
+      "safeInstructions": [],
       "dangerousInstructions": [
         {
           "discHex": "a334c8e78c0345ba",
+          "ixName": "transfer",
           "label": "Bubblegum: Transfer cNFT",
           "severity": "REJECT",
           "mapsToLoss": "Transfers ownership of a compressed NFT to the destination wallet — direct cNFT theft if attacker is destination."
         },
         {
           "discHex": "772806ebeaddf831",
+          "ixName": "transfer_v2",
           "label": "Bubblegum: Transfer cNFT v2",
           "severity": "REJECT",
           "mapsToLoss": "V2 transfer of a compressed NFT — same theft risk as Transfer."
         },
         {
           "discHex": "5a934bb255580489",
+          "ixName": "delegate",
           "label": "Bubblegum: Delegate cNFT authority",
           "severity": "HOLD",
           "mapsToLoss": "Grants a delegate authority over the cNFT. A malicious delegate can steal or burn the cNFT."
         },
         {
           "discHex": "5f577d8cb58380e3",
+          "ixName": "delegate_v2",
           "label": "Bubblegum: Delegate cNFT authority v2",
           "severity": "HOLD",
           "mapsToLoss": "V2 delegate for cNFT — same risk as Delegate."
         },
         {
           "discHex": "11e523dabef1fa7b",
+          "ixName": "delegate_and_freeze_v2",
           "label": "Bubblegum: Delegate and freeze cNFT v2",
           "severity": "HOLD",
           "mapsToLoss": "Delegates and freezes the cNFT simultaneously, preventing further transfers until thawed."
         },
         {
           "discHex": "746e1d386bdb2a5d",
+          "ixName": "burn",
           "label": "Bubblegum: Burn cNFT",
           "severity": "REJECT",
           "mapsToLoss": "Burns (permanently destroys) a compressed NFT."
         },
         {
           "discHex": "73d222f0e88fb710",
+          "ixName": "burn_v2",
           "label": "Bubblegum: Burn cNFT v2",
           "severity": "REJECT",
           "mapsToLoss": "V2 burn of a compressed NFT — permanent destruction."
@@ -123,16 +132,142 @@
       "name": "Jupiter Aggregator v6",
       "programId": "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4",
       "discriminatorScheme": "anchor-8",
-      "description": "Jupiter v6 swap aggregator. All instructions default to HOLD (recognized-unknown-instruction) unless individually decoded.",
-      "dangerousInstructions": []
+      "description": "Jupiter v6 swap aggregator. Safe swap/route instructions produce INFO; setTokenLedger decouples amount from quote and is HOLD. Discriminators for the closed-source route family are from @jup-ag/instruction-parser published artifacts and sha256 cross-checked.",
+      "safeInstructions": [
+        {
+          "discHex": "e517cb977ae3ad2a",
+          "ixName": "route",
+          "label": "Jupiter v6: route (swap)"
+        },
+        {
+          "discHex": "bb64facc31c4af14",
+          "ixName": "route_v2",
+          "label": "Jupiter v6: routeV2 (swap)"
+        },
+        {
+          "discHex": "c1209b3341d69c81",
+          "ixName": "shared_accounts_route",
+          "label": "Jupiter v6: sharedAccountsRoute (swap)"
+        },
+        {
+          "discHex": "d19853937cfed8e9",
+          "ixName": "shared_accounts_route_v2",
+          "label": "Jupiter v6: sharedAccountsRouteV2 (swap)"
+        },
+        {
+          "discHex": "b0d169a89a7d453e",
+          "ixName": "shared_accounts_exact_out_route",
+          "label": "Jupiter v6: sharedAccountsExactOutRoute (swap)"
+        },
+        {
+          "discHex": "e6798f50779f6aaa",
+          "ixName": "shared_accounts_route_with_token_ledger",
+          "label": "Jupiter v6: sharedAccountsRouteWithTokenLedger (swap)"
+        }
+      ],
+      "dangerousInstructions": [
+        {
+          "discHex": "e455b9704e4f4d02",
+          "ixName": "set_token_ledger",
+          "label": "Jupiter v6: setTokenLedger",
+          "severity": "HOLD",
+          "mapsToLoss": "Decouples the swap amount from the quoted amount. Can be used to execute a swap with a different amount than quoted, enabling front-running or amount manipulation."
+        }
+      ]
     },
     {
       "id": "orca-whirlpools",
       "name": "Orca Whirlpools",
       "programId": "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc",
       "discriminatorScheme": "anchor-8",
-      "description": "Orca Whirlpools concentrated-liquidity AMM. All instructions default to HOLD.",
-      "dangerousInstructions": []
+      "description": "Orca Whirlpools concentrated-liquidity AMM. Safe instructions include swap, liquidity operations, and position management. Authority instructions are HOLD.",
+      "safeInstructions": [
+        {
+          "discHex": "f8c69e91e17587c8",
+          "ixName": "swap",
+          "label": "Orca Whirlpools: swap"
+        },
+        {
+          "discHex": "2b04ed0b1ac91e62",
+          "ixName": "swap_v2",
+          "label": "Orca Whirlpools: swapV2"
+        },
+        {
+          "discHex": "87802f4d0f98f031",
+          "ixName": "open_position",
+          "label": "Orca Whirlpools: openPosition"
+        },
+        {
+          "discHex": "f21d86303a6e0e3c",
+          "ixName": "open_position_with_metadata",
+          "label": "Orca Whirlpools: openPositionWithMetadata"
+        },
+        {
+          "discHex": "2e9cf3760dcdfbb2",
+          "ixName": "increase_liquidity",
+          "label": "Orca Whirlpools: increaseLiquidity"
+        },
+        {
+          "discHex": "851d59df45eeb00a",
+          "ixName": "increase_liquidity_v2",
+          "label": "Orca Whirlpools: increaseLiquidityV2"
+        },
+        {
+          "discHex": "a026d06f685b2c01",
+          "ixName": "decrease_liquidity",
+          "label": "Orca Whirlpools: decreaseLiquidity"
+        },
+        {
+          "discHex": "3a7fbc3e4f52c460",
+          "ixName": "decrease_liquidity_v2",
+          "label": "Orca Whirlpools: decreaseLiquidityV2"
+        },
+        {
+          "discHex": "7b86510031446262",
+          "ixName": "close_position",
+          "label": "Orca Whirlpools: closePosition"
+        },
+        {
+          "discHex": "a498cf631eba13b6",
+          "ixName": "collect_fees",
+          "label": "Orca Whirlpools: collectFees"
+        },
+        {
+          "discHex": "cf755fbfe5b4e20f",
+          "ixName": "collect_fees_v2",
+          "label": "Orca Whirlpools: collectFeesV2"
+        }
+      ],
+      "dangerousInstructions": [
+        {
+          "discHex": "1f013257ed656184",
+          "ixName": "set_fee_authority",
+          "label": "Orca Whirlpools: setFeeAuthority",
+          "severity": "HOLD",
+          "mapsToLoss": "Changes the fee authority of a Whirlpool, potentially allowing protocol fee extraction or configuration changes by a new authority."
+        },
+        {
+          "discHex": "22965df48be1e943",
+          "ixName": "set_collect_protocol_fees_authority",
+          "label": "Orca Whirlpools: setCollectProtocolFeesAuthority",
+          "severity": "HOLD",
+          "mapsToLoss": "Changes who can collect protocol fees from the pool."
+        },
+        {
+          "discHex": "1643176296b246dc",
+          "ixName": "collect_protocol_fees",
+          "label": "Orca Whirlpools: collectProtocolFees",
+          "severity": "HOLD",
+          "mapsToLoss": "Withdraws accumulated protocol fees from the pool. User should not be doing this; only expected for the protocol operator."
+        },
+        {
+          "discHex": "76d7d69db6e5d0e4",
+          "ixName": "set_default_fee_rate",
+          "label": "Orca Whirlpools: setDefaultFeeRate",
+          "severity": "HOLD",
+          "mapsToLoss": "Changes the default fee rate for new pools created in the Whirlpool config. Should only be called by the Whirlpool authority."
+        }
+      ]
     },
     {
       "id": "raydium-amm-v4",
@@ -140,7 +275,505 @@
       "programId": "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8",
       "discriminatorScheme": "raydium-u8",
       "description": "Raydium AMM v4 liquidity program. All instructions default to HOLD.",
+      "safeInstructions": [],
       "dangerousInstructions": []
+    },
+    {
+      "id": "pump-fun",
+      "name": "Pump.fun",
+      "programId": "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P",
+      "discriminatorScheme": "anchor-8",
+      "description": "Pump.fun bonding curve program. buy/sell/create are normal user operations. Admin parameter changes are dangerous.",
+      "safeInstructions": [
+        {
+          "discHex": "66063d1201daebea",
+          "ixName": "buy",
+          "label": "Pump.fun: buy"
+        },
+        {
+          "discHex": "33e685a4017f83ad",
+          "ixName": "sell",
+          "label": "Pump.fun: sell"
+        },
+        {
+          "discHex": "181ec828051c0777",
+          "ixName": "create",
+          "label": "Pump.fun: create (new token)"
+        }
+      ],
+      "dangerousInstructions": [
+        {
+          "discHex": "1beab2349302bb8d",
+          "ixName": "set_params",
+          "label": "Pump.fun: setParams (admin config change)",
+          "severity": "HOLD",
+          "mapsToLoss": "Changes global bonding curve parameters. Only the protocol admin should call this; a user signing this instruction is unexpected."
+        },
+        {
+          "discHex": "fe94ff70cf8eaaa5",
+          "ixName": "set_creator",
+          "label": "Pump.fun: setCreator (admin override)",
+          "severity": "HOLD",
+          "mapsToLoss": "Overrides the bonding curve creator, redirecting creator fees. Can be used to steal creator fees from the legitimate creator."
+        },
+        {
+          "discHex": "e3b54ac4d01561d5",
+          "ixName": "update_global_authority",
+          "label": "Pump.fun: updateGlobalAuthority (admin)",
+          "severity": "REJECT",
+          "mapsToLoss": "Transfers the global authority of the Pump.fun protocol to a new address. This is a critical admin operation that would give full control of the protocol."
+        }
+      ]
+    },
+    {
+      "id": "pump-amm",
+      "name": "Pump AMM (PumpSwap)",
+      "programId": "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA",
+      "discriminatorScheme": "anchor-8",
+      "description": "Pump.fun AMM (PumpSwap) — Raydium-CPMM fork for graduated pump.fun tokens. buy/sell/deposit/withdraw are normal user operations. Admin instructions are dangerous.",
+      "safeInstructions": [
+        {
+          "discHex": "66063d1201daebea",
+          "ixName": "buy",
+          "label": "Pump AMM: buy"
+        },
+        {
+          "discHex": "33e685a4017f83ad",
+          "ixName": "sell",
+          "label": "Pump AMM: sell"
+        },
+        {
+          "discHex": "f223c68952e1f2b6",
+          "ixName": "deposit",
+          "label": "Pump AMM: deposit (add LP)"
+        },
+        {
+          "discHex": "b712469c946da122",
+          "ixName": "withdraw",
+          "label": "Pump AMM: withdraw (remove LP)"
+        }
+      ],
+      "dangerousInstructions": [
+        {
+          "discHex": "a1b028d53cb8b3e4",
+          "ixName": "update_admin",
+          "label": "Pump AMM: updateAdmin",
+          "severity": "HOLD",
+          "mapsToLoss": "Changes the protocol admin address. Only the current admin should sign this; a user signing it is highly suspicious."
+        },
+        {
+          "discHex": "68b867f258976b14",
+          "ixName": "update_fee_config",
+          "label": "Pump AMM: updateFeeConfig",
+          "severity": "HOLD",
+          "mapsToLoss": "Changes fee parameters for the AMM. Admin-only operation; user signing is unexpected."
+        },
+        {
+          "discHex": "d295802dbc3a4eaf",
+          "ixName": "set_coin_creator",
+          "label": "Pump AMM: setCoinCreator",
+          "severity": "HOLD",
+          "mapsToLoss": "Overrides the coin creator for a pool, redirecting creator fee receipts."
+        },
+        {
+          "discHex": "b9adbb5ad80feee9",
+          "ixName": "disable",
+          "label": "Pump AMM: disable (halt pool)",
+          "severity": "HOLD",
+          "mapsToLoss": "Disables a pool, preventing all swaps. Admin-only; a user signing this would lock user funds."
+        }
+      ]
+    },
+    {
+      "id": "raydium-clmm",
+      "name": "Raydium CLMM",
+      "programId": "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK",
+      "discriminatorScheme": "anchor-8",
+      "description": "Raydium Concentrated Liquidity Market Maker. Swap, position management, and liquidity operations are safe user operations. Protocol admin instructions are dangerous.",
+      "safeInstructions": [
+        {
+          "discHex": "f8c69e91e17587c8",
+          "ixName": "swap",
+          "label": "Raydium CLMM: swap"
+        },
+        {
+          "discHex": "2b04ed0b1ac91e62",
+          "ixName": "swap_v2",
+          "label": "Raydium CLMM: swapV2"
+        },
+        {
+          "discHex": "87802f4d0f98f031",
+          "ixName": "open_position",
+          "label": "Raydium CLMM: openPosition"
+        },
+        {
+          "discHex": "4db84ad67056f1c7",
+          "ixName": "open_position_v2",
+          "label": "Raydium CLMM: openPositionV2"
+        },
+        {
+          "discHex": "4dffae527d1dc92e",
+          "ixName": "open_position_with_token22_nft",
+          "label": "Raydium CLMM: openPositionWithToken22Nft"
+        },
+        {
+          "discHex": "2e9cf3760dcdfbb2",
+          "ixName": "increase_liquidity",
+          "label": "Raydium CLMM: increaseLiquidity"
+        },
+        {
+          "discHex": "851d59df45eeb00a",
+          "ixName": "increase_liquidity_v2",
+          "label": "Raydium CLMM: increaseLiquidityV2"
+        },
+        {
+          "discHex": "a026d06f685b2c01",
+          "ixName": "decrease_liquidity",
+          "label": "Raydium CLMM: decreaseLiquidity"
+        },
+        {
+          "discHex": "3a7fbc3e4f52c460",
+          "ixName": "decrease_liquidity_v2",
+          "label": "Raydium CLMM: decreaseLiquidityV2"
+        },
+        {
+          "discHex": "7b86510031446262",
+          "ixName": "close_position",
+          "label": "Raydium CLMM: closePosition"
+        }
+      ],
+      "dangerousInstructions": [
+        {
+          "discHex": "313cae889a1c74c8",
+          "ixName": "update_amm_config",
+          "label": "Raydium CLMM: updateAmmConfig (admin)",
+          "severity": "HOLD",
+          "mapsToLoss": "Changes AMM configuration parameters. Admin-only; user signing is unexpected."
+        },
+        {
+          "discHex": "82576c062ee0757b",
+          "ixName": "update_pool_status",
+          "label": "Raydium CLMM: updatePoolStatus (admin)",
+          "severity": "HOLD",
+          "mapsToLoss": "Changes pool operational status. Admin-only; can be used to halt or restrict pool operations."
+        },
+        {
+          "discHex": "07160c53f22b3079",
+          "ixName": "transfer_reward_owner",
+          "label": "Raydium CLMM: transferRewardOwner",
+          "severity": "HOLD",
+          "mapsToLoss": "Transfers reward authority to a new address. Can redirect reward emissions."
+        },
+        {
+          "discHex": "8888fcddc2427e59",
+          "ixName": "collect_protocol_fee",
+          "label": "Raydium CLMM: collectProtocolFee",
+          "severity": "HOLD",
+          "mapsToLoss": "Collects accumulated protocol fees from the pool. Should only be called by the protocol operator, not a regular user."
+        },
+        {
+          "discHex": "a78a4e95dfc2067e",
+          "ixName": "collect_fund_fee",
+          "label": "Raydium CLMM: collectFundFee",
+          "severity": "HOLD",
+          "mapsToLoss": "Collects accumulated fund fees from the pool. Should only be called by the protocol operator."
+        }
+      ]
+    },
+    {
+      "id": "raydium-cpmm",
+      "name": "Raydium CPMM",
+      "programId": "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C",
+      "discriminatorScheme": "anchor-8",
+      "description": "Raydium Constant Product Market Maker (CPMM). Swap and liquidity operations are safe user operations. Protocol admin instructions are dangerous.",
+      "safeInstructions": [
+        {
+          "discHex": "8fbe5adac41e33de",
+          "ixName": "swap_base_input",
+          "label": "Raydium CPMM: swapBaseInput"
+        },
+        {
+          "discHex": "37d96256a34ab4ad",
+          "ixName": "swap_base_output",
+          "label": "Raydium CPMM: swapBaseOutput"
+        },
+        {
+          "discHex": "f223c68952e1f2b6",
+          "ixName": "deposit",
+          "label": "Raydium CPMM: deposit (add LP)"
+        },
+        {
+          "discHex": "b712469c946da122",
+          "ixName": "withdraw",
+          "label": "Raydium CPMM: withdraw (remove LP)"
+        },
+        {
+          "discHex": "afaf6d1f0d989bed",
+          "ixName": "initialize",
+          "label": "Raydium CPMM: initialize (create pool)"
+        }
+      ],
+      "dangerousInstructions": [
+        {
+          "discHex": "313cae889a1c74c8",
+          "ixName": "update_amm_config",
+          "label": "Raydium CPMM: updateAmmConfig (admin)",
+          "severity": "HOLD",
+          "mapsToLoss": "Changes AMM configuration parameters. Admin-only; user signing is unexpected."
+        },
+        {
+          "discHex": "82576c062ee0757b",
+          "ixName": "update_pool_status",
+          "label": "Raydium CPMM: updatePoolStatus (admin)",
+          "severity": "HOLD",
+          "mapsToLoss": "Changes pool operational status. Admin-only; can be used to halt pool operations."
+        },
+        {
+          "discHex": "8888fcddc2427e59",
+          "ixName": "collect_protocol_fee",
+          "label": "Raydium CPMM: collectProtocolFee",
+          "severity": "HOLD",
+          "mapsToLoss": "Collects accumulated protocol fees. Should only be called by the protocol operator."
+        },
+        {
+          "discHex": "a78a4e95dfc2067e",
+          "ixName": "collect_fund_fee",
+          "label": "Raydium CPMM: collectFundFee",
+          "severity": "HOLD",
+          "mapsToLoss": "Collects accumulated fund fees. Should only be called by the protocol operator."
+        },
+        {
+          "discHex": "1416567bc61cdb84",
+          "ixName": "collect_creator_fee",
+          "label": "Raydium CPMM: collectCreatorFee",
+          "severity": "HOLD",
+          "mapsToLoss": "Collects creator fees. Should be called by the pool creator, not arbitrary users."
+        }
+      ]
+    },
+    {
+      "id": "drift",
+      "name": "Drift Protocol",
+      "programId": "dRiftyHA39MWEi3m9aunc5MzRF1JYuBsbn6VPcn33UH",
+      "discriminatorScheme": "anchor-8",
+      "description": "Drift Protocol v2 perpetuals and spot trading. Order placement, deposits, and PnL operations are safe user operations. Admin instructions are REJECT or HOLD.",
+      "safeInstructions": [
+        {
+          "discHex": "45a15dca787e4cb9",
+          "ixName": "place_perp_order",
+          "label": "Drift: placePerpOrder"
+        },
+        {
+          "discHex": "2d4f51a0f85a5bdc",
+          "ixName": "place_spot_order",
+          "label": "Drift: placeSpotOrder"
+        },
+        {
+          "discHex": "f223c68952e1f2b6",
+          "ixName": "deposit",
+          "label": "Drift: deposit"
+        },
+        {
+          "discHex": "2b3dea2d0f5f9899",
+          "ixName": "settle_pnl",
+          "label": "Drift: settlePnl"
+        },
+        {
+          "discHex": "0dbcf86786d96af0",
+          "ixName": "fill_perp_order",
+          "label": "Drift: fillPerpOrder"
+        }
+      ],
+      "dangerousInstructions": [
+        {
+          "discHex": "a1b028d53cb8b3e4",
+          "ixName": "update_admin",
+          "label": "Drift: updateAdmin (protocol ownership transfer)",
+          "severity": "REJECT",
+          "mapsToLoss": "Transfers the Drift protocol admin address to a new key. This is a critical admin operation that would give full control of the protocol state."
+        },
+        {
+          "discHex": "8bcd8d8d71245ebb",
+          "ixName": "update_user_delegate",
+          "label": "Drift: updateUserDelegate",
+          "severity": "HOLD",
+          "mapsToLoss": "Sets a delegate that can trade on behalf of the user account. A malicious delegate can open leveraged positions, drain collateral, or force liquidation."
+        },
+        {
+          "discHex": "ba5511f9dbe762fb",
+          "ixName": "delete_user",
+          "label": "Drift: deleteUser",
+          "severity": "HOLD",
+          "mapsToLoss": "Deletes a Drift user account. Verify this is the intended account before signing."
+        },
+        {
+          "discHex": "d24241b666d6b01e",
+          "ixName": "admin_deposit",
+          "label": "Drift: adminDeposit",
+          "severity": "HOLD",
+          "mapsToLoss": "Admin-only deposit operation. A regular user should not be signing this."
+        },
+        {
+          "discHex": "e4d0bff6a93abdd5",
+          "ixName": "admin_withdraw_from_insurance_fund_vault",
+          "label": "Drift: adminWithdrawFromInsuranceFundVault",
+          "severity": "HOLD",
+          "mapsToLoss": "Withdraws from the Drift insurance fund. Admin-only; user signing is highly suspicious."
+        }
+      ]
+    },
+    {
+      "id": "kamino-klend",
+      "name": "Kamino Lending (klend)",
+      "programId": "KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD",
+      "discriminatorScheme": "anchor-8",
+      "description": "Kamino Finance lending protocol. Deposit, borrow, repay, and refresh operations are safe user operations. Admin instructions that change market ownership or global config are REJECT.",
+      "safeInstructions": [
+        {
+          "discHex": "a9c91e7e06cd6644",
+          "ixName": "deposit_reserve_liquidity",
+          "label": "Kamino Lending: depositReserveLiquidity"
+        },
+        {
+          "discHex": "ea75b57db98edc1d",
+          "ixName": "redeem_reserve_collateral",
+          "label": "Kamino Lending: redeemReserveCollateral"
+        },
+        {
+          "discHex": "6cd1044815167685",
+          "ixName": "deposit_obligation_collateral",
+          "label": "Kamino Lending: depositObligationCollateral"
+        },
+        {
+          "discHex": "797f12cc49f5e141",
+          "ixName": "borrow_obligation_liquidity",
+          "label": "Kamino Lending: borrowObligationLiquidity"
+        },
+        {
+          "discHex": "91b20de14cf09348",
+          "ixName": "repay_obligation_liquidity",
+          "label": "Kamino Lending: repayObligationLiquidity"
+        },
+        {
+          "discHex": "218493e497c04859",
+          "ixName": "refresh_obligation",
+          "label": "Kamino Lending: refreshObligation"
+        },
+        {
+          "discHex": "02da8aeb4fc91966",
+          "ixName": "refresh_reserve",
+          "label": "Kamino Lending: refreshReserve"
+        }
+      ],
+      "dangerousInstructions": [
+        {
+          "discHex": "76e00a3ec4e6b859",
+          "ixName": "update_lending_market_owner",
+          "label": "Kamino Lending: updateLendingMarketOwner (ownership transfer)",
+          "severity": "REJECT",
+          "mapsToLoss": "Transfers ownership of a lending market to a new address. This is a critical admin operation giving full control of the market."
+        },
+        {
+          "discHex": "b85717c19ceeaf77",
+          "ixName": "update_global_config_admin",
+          "label": "Kamino Lending: updateGlobalConfigAdmin (admin transfer)",
+          "severity": "REJECT",
+          "mapsToLoss": "Changes the global config admin for the entire Kamino lending protocol. Critical admin operation."
+        },
+        {
+          "discHex": "3d9464468f6b110d",
+          "ixName": "update_reserve_config",
+          "label": "Kamino Lending: updateReserveConfig",
+          "severity": "HOLD",
+          "mapsToLoss": "Changes reserve configuration parameters (LTV, liquidation threshold, fees, etc.). Admin-only; a user signing this could manipulate risk parameters."
+        },
+        {
+          "discHex": "9ec99ebd215da267",
+          "ixName": "withdraw_protocol_fee",
+          "label": "Kamino Lending: withdrawProtocolFee",
+          "severity": "HOLD",
+          "mapsToLoss": "Withdraws accumulated protocol fees. Should only be called by the protocol operator."
+        },
+        {
+          "discHex": "f54b5b00ec611303",
+          "ixName": "socialize_loss",
+          "label": "Kamino Lending: socializeLoss",
+          "severity": "HOLD",
+          "mapsToLoss": "Socializes bad debt across all lenders in a reserve. This reduces the value of all lenders' positions and should only be an emergency admin operation."
+        }
+      ]
+    },
+    {
+      "id": "meteora-dlmm",
+      "name": "Meteora DLMM",
+      "programId": "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo",
+      "discriminatorScheme": "anchor-8",
+      "description": "Meteora Dynamic Liquidity Market Maker. Swap, liquidity add/remove, and fee claiming are safe user operations. Protocol admin instructions are dangerous.",
+      "safeInstructions": [
+        {
+          "discHex": "f8c69e91e17587c8",
+          "ixName": "swap",
+          "label": "Meteora DLMM: swap"
+        },
+        {
+          "discHex": "b59d59438fb63448",
+          "ixName": "add_liquidity",
+          "label": "Meteora DLMM: addLiquidity"
+        },
+        {
+          "discHex": "0703967f94283dc8",
+          "ixName": "add_liquidity_by_strategy",
+          "label": "Meteora DLMM: addLiquidityByStrategy"
+        },
+        {
+          "discHex": "1c8cee63e7a21595",
+          "ixName": "add_liquidity_by_weight",
+          "label": "Meteora DLMM: addLiquidityByWeight"
+        },
+        {
+          "discHex": "5055d14818ceb16c",
+          "ixName": "remove_liquidity",
+          "label": "Meteora DLMM: removeLiquidity"
+        },
+        {
+          "discHex": "1a526698f04a691a",
+          "ixName": "remove_liquidity_by_range",
+          "label": "Meteora DLMM: removeLiquidityByRange"
+        },
+        {
+          "discHex": "a9204f8988e84689",
+          "ixName": "claim_fee",
+          "label": "Meteora DLMM: claimFee"
+        },
+        {
+          "discHex": "955fb5f25e5a9ea2",
+          "ixName": "claim_reward",
+          "label": "Meteora DLMM: claimReward"
+        }
+      ],
+      "dangerousInstructions": [
+        {
+          "discHex": "9ec99ebd215da267",
+          "ixName": "withdraw_protocol_fee",
+          "label": "Meteora DLMM: withdrawProtocolFee",
+          "severity": "HOLD",
+          "mapsToLoss": "Withdraws accumulated protocol fees. Should only be called by the protocol fee owner."
+        },
+        {
+          "discHex": "d31c3020d7a02317",
+          "ixName": "update_reward_funder",
+          "label": "Meteora DLMM: updateRewardFunder",
+          "severity": "HOLD",
+          "mapsToLoss": "Changes who can fund rewards for the pool. Admin-only operation."
+        },
+        {
+          "discHex": "43f8e7899a95d9ae",
+          "ixName": "set_pair_status",
+          "label": "Meteora DLMM: setPairStatus",
+          "severity": "HOLD",
+          "mapsToLoss": "Changes the status of a DLMM pair (enable/disable). Admin-only; can freeze user funds in the pool."
+        }
+      ]
     }
   ]
 }
