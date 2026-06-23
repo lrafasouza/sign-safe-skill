@@ -176,6 +176,7 @@ describe("T11.3 no-network assertion (core modules are offline)", () => {
       "digest.ts",
       "registry.ts",
       "reputation.ts",
+      "alt.ts",
     ];
     const forbidden = [
       /from\s+["']node:(http|https|net|tls|dgram|dns)["']/,

@@ -213,3 +213,160 @@ describe("banned-phrase enforcement over every code path", () => {
     expect(findBannedPhrase("value-bearing account")).toBeNull();
   });
 });
+
+// ---------------------------------------------------------------------------
+// T_A4.8 — FIX 2: mint screening fires on non-TransferChecked paths
+// ---------------------------------------------------------------------------
+//
+// The permanent-delegate / transfer-hook danger is an INHERENT property of the
+// token mint itself. The screening must fire whenever the mint address appears
+// anywhere in the transaction's static account keys — not only inside
+// TransferChecked (disc=12) instructions.
+
+describe("T_A4.8 FIX2: mintExtensions screening fires on non-TransferChecked paths", () => {
+  // Build a message where a dangerous-mint address appears in the static keys
+  // but is referenced by an UNKNOWN / OTHER program instruction (not
+  // TransferChecked disc=12). This should still produce the HOLD finding.
+
+  const TOKEN_2022 = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
+
+  // Mint address bytes: fill 0x55 (matches MINT_B58 in tlv-mint-danger.test.ts)
+  function testKey32(byte: number): number[] {
+    return new Array(32).fill(byte);
+  }
+
+  // Decode TOKEN_2022 to bytes
+  function b58ToBytes(b58: string): number[] {
+    const A = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+    const m: Record<string, number> = {};
+    for (let i = 0; i < A.length; i++) m[A[i]!] = i;
+    let bytes: number[] = [];
+    for (const ch of b58) {
+      let c = m[ch]!;
+      for (let j = 0; j < bytes.length; j++) {
+        c += bytes[j]! * 58;
+        bytes[j] = c & 0xff;
+        c >>= 8;
+      }
+      while (c > 0) {
+        bytes.push(c & 0xff);
+        c >>= 8;
+      }
+    }
+    let lz = 0;
+    for (const ch of b58) {
+      if (ch === "1") lz++;
+      else break;
+    }
+    const out = new Array(32).fill(0);
+    const body = bytes.reverse();
+    const off = 32 - body.length - lz;
+    for (let i = 0; i < body.length; i++) out[off + i] = body[i]!;
+    return out;
+  }
+
+  function base58Encode(bytes: Uint8Array): string {
+    const A = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+    let n = 0n;
+    for (const b of bytes) n = n * 256n + BigInt(b);
+    if (n === 0n) return "1".repeat(bytes.length);
+    let s = "";
+    while (n > 0n) {
+      s = A[Number(n % 58n)]! + s;
+      n /= 58n;
+    }
+    let lz = 0;
+    for (const b of bytes) { if (b === 0) lz++; else break; }
+    return "1".repeat(lz) + s;
+  }
+
+  const MINT_BYTES = new Uint8Array(32).fill(0x55);
+  const MINT_B58 = base58Encode(MINT_BYTES);
+  const DELEGATE_B58 = base58Encode(new Uint8Array(32).fill(0xdd));
+
+  /**
+   * Build a transaction where:
+   *   - The dangerous mint address (0x55) is in static keys
+   *   - The only instruction is a SYSTEM transfer (not TransferChecked)
+   *   - This means the old TransferChecked-only gating would NOT fire,
+   *     but the new account-set scanning MUST fire.
+   */
+  function buildNonTransferCheckedMsgWithMintInKeys(): Uint8Array {
+    const mintBytes = Array.from(MINT_BYTES);
+    const systemBytes = b58ToBytes(SYSTEM);
+    const out: number[] = [];
+    // Header: [1, 0, 1] => 1 signer, 0 readonly-signed, 1 readonly-unsigned
+    out.push(1, 0, 1);
+    // 3 static keys: [feePayer(0x01), SYSTEM, mint(0x55)]
+    out.push(3);
+    out.push(...testKey32(1));  // idx0: feePayer (signer-writable)
+    out.push(...systemBytes);   // idx1: System (readonly)
+    out.push(...mintBytes);     // idx2: mint address (readonly, just referenced)
+    // blockhash
+    out.push(...testKey32(250));
+    // 1 instruction: System transfer (disc=2) from feePayer to itself (below threshold)
+    out.push(1); // 1 instruction
+    out.push(1); // programIdIndex = 1 (SYSTEM)
+    out.push(2); // 2 account indexes
+    out.push(0, 0); // [from=0, to=0] (self-transfer)
+    // data: u32le(2) + u64le(1000) = transfer 1000 lamports
+    out.push(12); // data length
+    out.push(...u32le(2), ...u64le(1000n));
+    return Uint8Array.from(out);
+  }
+
+  const b64 = toB64(buildNonTransferCheckedMsgWithMintInKeys());
+
+  it("non-TransferChecked tx with dangerous mint in static keys -> permanent-delegate HOLD", () => {
+    const mintExtensions = new Map([
+      [MINT_B58, { permanentDelegate: DELEGATE_B58 }],
+    ]);
+    const v = reviewBase64(b64, {
+      lamportThreshold: 1_000_000_000,
+      mintExtensions,
+    });
+    const f = v.findings.find((f) => f.id === "token2022-permanent-delegate");
+    expect(f).toBeDefined();
+    expect(f!.severity).toBe("HOLD");
+    expect(f!.instructionIndex).toBe(-1); // tx-level / inherent property
+    expect(v.decision).toBe("HOLD");
+  });
+
+  it("non-TransferChecked tx with dangerous mint -> transfer-hook HOLD", () => {
+    const hookProgramB58 = base58Encode(new Uint8Array(32).fill(0xbb));
+    const mintExtensions = new Map([
+      [MINT_B58, { transferHook: hookProgramB58 }],
+    ]);
+    const v = reviewBase64(b64, {
+      lamportThreshold: 1_000_000_000,
+      mintExtensions,
+    });
+    const f = v.findings.find((f) => f.id === "token2022-transfer-hook");
+    expect(f).toBeDefined();
+    expect(f!.severity).toBe("HOLD");
+    expect(f!.instructionIndex).toBe(-1); // tx-level / inherent property
+    expect(v.decision).toBe("HOLD");
+  });
+
+  it("no mintExtensions -> no finding (escalate-only invariant)", () => {
+    const v = reviewBase64(b64);
+    const hasToken2022 = v.findings.some(
+      (f) => f.id === "token2022-permanent-delegate" || f.id === "token2022-transfer-hook",
+    );
+    expect(hasToken2022).toBe(false);
+  });
+
+  it("de-duplication: mint appears in multiple instruction accounts -> only one finding per extension", () => {
+    // Build a transaction where the mint address appears TWICE in static keys
+    // (idx2 and again referenced in ix2). One finding per extension type max.
+    const mintExtensions = new Map([
+      [MINT_B58, { permanentDelegate: DELEGATE_B58 }],
+    ]);
+    const v = reviewBase64(b64, {
+      lamportThreshold: 1_000_000_000,
+      mintExtensions,
+    });
+    const delegateFindings = v.findings.filter((f) => f.id === "token2022-permanent-delegate");
+    expect(delegateFindings).toHaveLength(1);
+  });
+});

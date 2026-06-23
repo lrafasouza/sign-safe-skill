@@ -1,16 +1,29 @@
 /**
  * cli.ts -- thin node entry point. Reads a base64 message from a .b64 file
- * argument or from stdin, runs the OFFLINE core, and prints a human verdict
- * table plus the machine-readable verdict.json.
+ * argument or from stdin, runs the OFFLINE core (or online enrichment when
+ * --rpc is set), and prints a human verdict table plus the machine-readable
+ * verdict.json.
  *
  * Usage:
  *   node --import tsx skill/src/cli.ts <file.b64>
  *   cat msg.b64 | node --import tsx skill/src/cli.ts
  *   node --import tsx skill/src/cli.ts <file.b64> --threshold 5000000000
- *   node --import tsx skill/src/cli.ts <file.b64> --json   # JSON only
+ *   node --import tsx skill/src/cli.ts <file.b64> --json        # JSON only
+ *   node --import tsx skill/src/cli.ts <file.b64> --rpc <url>   # online enrichment
+ *   node --import tsx skill/src/cli.ts <file.b64> --rpc <url> --vault-pda <pubkey>
  *
  * Guardrails: this tool NEVER requests a private key, NEVER signs, and NEVER
  * broadcasts. It only decodes and classifies bytes.
+ *
+ * When --rpc is provided:
+ *   - ALT accounts are fetched to resolve all account roles.
+ *   - Squads VaultTransaction PDA is fetched for inner-instruction analysis.
+ *   - Token-2022 mint accounts are fetched to confirm dangerous extensions.
+ * Without --rpc the behavior is byte-identical to the pure offline path.
+ *
+ * When --vault-pda <pubkey> is provided alongside --rpc, that specific address
+ * is fetched as the Squads VaultTransaction PDA (overrides the auto-extracted
+ * address from the message). Without --rpc, --vault-pda is silently ignored.
  */
 
 import { readFileSync } from "node:fs";
@@ -18,21 +31,40 @@ import { DEFAULT_CONTEXT, type Verdict, type VerdictContext } from "./types.ts";
 import { reviewBase64, verdictToJson, rejectVerdict } from "./verdict.ts";
 import { transactionDigest, TransactionDigestError } from "./digest.ts";
 
-function parseArgs(argv: string[]): {
+// ---------------------------------------------------------------------------
+// parseArgs is exported so tests can import it without triggering main().
+// ---------------------------------------------------------------------------
+
+export interface ParsedArgs {
   file?: string;
   threshold: number;
   jsonOnly: boolean;
   digestOnly: boolean;
-} {
+  /** JSON-RPC endpoint URL. When set, enables online enrichment. */
+  rpcUrl?: string;
+  /**
+   * Optional override for the Squads VaultTransaction PDA address. When set
+   * alongside --rpc, this address is fetched as the vault PDA instead of the
+   * one auto-extracted from the message. Silently ignored without --rpc.
+   */
+  vaultPda?: string;
+}
+
+export function parseArgs(argv: string[]): ParsedArgs {
   let file: string | undefined;
   let threshold = DEFAULT_CONTEXT.lamportThreshold;
   let jsonOnly = false;
   let digestOnly = false;
+  let rpcUrl: string | undefined;
+  let vaultPda: string | undefined;
+
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    if (a === "--json") jsonOnly = true;
-    else if (a === "--digest") digestOnly = true;
-    else if (a === "--threshold") {
+    if (a === "--json") {
+      jsonOnly = true;
+    } else if (a === "--digest") {
+      digestOnly = true;
+    } else if (a === "--threshold") {
       const v = argv[++i];
       if (v === undefined || !/^\d+$/.test(v)) {
         throw new Error("--threshold requires an integer lamport value");
@@ -47,11 +79,23 @@ function parseArgs(argv: string[]): {
         );
       }
       threshold = parsed;
+    } else if (a === "--rpc") {
+      const v = argv[++i];
+      if (v === undefined || v.startsWith("--")) {
+        throw new Error("--rpc requires a URL value (e.g. --rpc https://api.mainnet-beta.solana.com)");
+      }
+      rpcUrl = v;
+    } else if (a === "--vault-pda") {
+      const v = argv[++i];
+      if (v === undefined || v.startsWith("--")) {
+        throw new Error("--vault-pda requires a base58 pubkey value");
+      }
+      vaultPda = v;
     } else if (!a?.startsWith("--")) {
       file = a;
     }
   }
-  return { file, threshold, jsonOnly, digestOnly };
+  return { file, threshold, jsonOnly, digestOnly, rpcUrl, vaultPda };
 }
 
 function readInput(file: string | undefined): string {
@@ -117,7 +161,7 @@ function printHuman(v: Verdict): void {
   process.stdout.write(`\nverdict.json:\n`);
 }
 
-function main(): void {
+async function main(): Promise<void> {
   // Fail-closed by construction: ANY error in argument parsing or input I/O
   // (bad --threshold, missing file, unreadable stdin) is converted into a
   // REJECT verdict, mirroring reviewBase64's contract. The signing gate must
@@ -155,7 +199,54 @@ function main(): void {
     }
 
     const ctx: VerdictContext = { lamportThreshold: args.threshold };
-    verdict = reviewBase64(b64, ctx);
+
+    if (args.rpcUrl !== undefined) {
+      // Online enrichment path: fetch ALT/Squads/mint accounts via RPC.
+      // These imports are deferred here so they are NEVER loaded in the pure
+      // offline path -- rpc.ts and review-online.ts are host-layer only.
+      const { makeRpcAccountFetcher } = await import("./rpc.ts");
+      const { reviewWithEnrichment } = await import("./review-online.ts");
+
+      try {
+        const fetcher = makeRpcAccountFetcher(args.rpcUrl);
+
+        // --vault-pda override: decode the message to find the vtAddr that
+        // review-online would extract, then pre-fetch the override PDA and
+        // wrap the fetcher to redirect that vtAddr to the override bytes.
+        // This allows the operator to specify a PDA address when the auto-
+        // extracted one differs from the desired target.
+        let activeFetcher = fetcher;
+        if (args.vaultPda !== undefined) {
+          const vaultPdaAddr = args.vaultPda;
+          try {
+            const { decodeInput } = await import("./decode.ts");
+            const { extractVaultTransactionAddress } = await import("./squads.ts");
+            const decoded = decodeInput(b64);
+            const vtAddr = extractVaultTransactionAddress(decoded.message);
+            const vaultPdaAccount = await fetcher(vaultPdaAddr);
+            if (vaultPdaAccount !== null && vtAddr !== null) {
+              const vaultBytes = vaultPdaAccount.data;
+              const innerFetcher = fetcher;
+              activeFetcher = async (pubkey: string) => {
+                if (pubkey === vtAddr) return { data: vaultBytes };
+                return innerFetcher(pubkey);
+              };
+            }
+          } catch {
+            // If decode fails, review-online handles it gracefully (fail-closed).
+          }
+        }
+
+        verdict = await reviewWithEnrichment(b64, ctx, activeFetcher);
+      } catch (err) {
+        // Any uncaught error in the online path is REJECT (fail-closed).
+        const detail = err instanceof Error ? err.message : String(err);
+        verdict = rejectVerdict(`Online enrichment error: ${detail}`);
+      }
+    } else {
+      // Offline path: byte-identical to the original CLI behavior.
+      verdict = reviewBase64(b64, ctx);
+    }
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
     verdict = rejectVerdict(detail);
@@ -169,4 +260,15 @@ function main(): void {
   process.exitCode = verdict!.decision === "SIGN" ? 0 : verdict!.decision === "HOLD" ? 10 : 20;
 }
 
-main();
+// Guard: only run main() when executed directly, not when imported by tests.
+// When vitest imports this module, process.argv[1] is the vitest runner path
+// (e.g., /path/to/node_modules/.bin/vitest) — it does NOT end with "cli.ts".
+// When executed directly (node --import tsx skill/src/cli.ts), argv[1] ends
+// with "cli.ts" (or "cli.js" for compiled output).
+const _argv1 = typeof process !== "undefined" ? (process.argv[1] ?? "") : "";
+if (_argv1.endsWith("cli.ts") || _argv1.endsWith("cli.js")) {
+  main().catch((err) => {
+    process.stderr.write(String(err) + "\n");
+    process.exitCode = 20;
+  });
+}

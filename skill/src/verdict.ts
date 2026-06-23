@@ -540,7 +540,12 @@ export function reviewBase64(
     // Runtime-accurate writability: apply the SIMD-0105 reserved-account-keys
     // demotion (R5/R6). Both partition and runtime writability are exposed on
     // each role; the verdict consumes the runtime (demoted) mode.
-    const roles = deriveRoles(msg, { reservedAccountKeys: RESERVED_ACCOUNT_KEYS });
+    // When ctx.resolvedAltTables is provided, thread it through so ALT-sourced
+    // accounts can be verified offline when the caller has pre-fetched tables.
+    const roles = deriveRoles(msg, {
+      reservedAccountKeys: RESERVED_ACCOUNT_KEYS,
+      resolvedAltTables: ctx.resolvedAltTables,
+    });
     const cls = classify(msg, roles, ctx);
     const outflow = computeOutflow(msg, roles, ctx);
 
@@ -618,6 +623,61 @@ export function reviewBase64(
         mapsToLoss:
           "Outbound transfers to external addresses can move funds to an attacker if the recipient address is attacker-controlled.",
       });
+    }
+
+    // ── FEATURE A4: Token-2022 mint extension danger screening ──
+    // When ctx.mintExtensions is provided, check each mint address that is a KEY
+    // in the map against the transaction's static account key set. Because
+    // permanent-delegate and transfer-hook danger is an INHERENT property of the
+    // token mint (not specific to any one instruction), the screening fires
+    // whenever the dangerous mint appears anywhere in the transaction's account
+    // address set. Each (mint, extensionType) pair yields at most ONE finding
+    // (de-duplicated). instructionIndex = -1 (tx-level / inherent property).
+    // ESCALATE-ONLY: absence of the map leaves verdict byte-identical.
+    if (ctx.mintExtensions !== undefined) {
+      const mintExtMap = ctx.mintExtensions;
+      // Build the set of static account addresses for O(1) membership checks.
+      const staticKeySet = new Set(msg.staticAccountKeys);
+
+      for (const [mintAddr, exts] of mintExtMap) {
+        if (!staticKeySet.has(mintAddr)) continue; // mint not referenced in this tx
+
+        if (exts.permanentDelegate !== undefined) {
+          topLevelFindings.push({
+            id: "token2022-permanent-delegate",
+            label: `Token-2022 mint has a permanent delegate: ${mintAddr}`,
+            severity: "HOLD",
+            instructionIndex: -1,
+            programId: "",
+            detail:
+              `The mint ${mintAddr} has a PermanentDelegate extension ` +
+              `(delegate: ${exts.permanentDelegate}). A permanent delegate can move or burn ` +
+              `tokens from any holder's account irrevocably, without requiring the holder's signature. ` +
+              `This is an inherent property of the token design, not this transaction specifically -- ` +
+              `but it means your tokens are not exclusively under your control.`,
+            mapsToLoss:
+              "A permanent delegate can drain or burn your tokens at any time without your approval, " +
+              "regardless of what this specific transaction does.",
+          });
+        }
+
+        if (exts.transferHook !== undefined) {
+          topLevelFindings.push({
+            id: "token2022-transfer-hook",
+            label: `Token-2022 mint has a transfer hook program: ${mintAddr}`,
+            severity: "HOLD",
+            instructionIndex: -1,
+            programId: "",
+            detail:
+              `The mint ${mintAddr} has a transfer hook extension (TransferHook) ` +
+              `(hook program: ${exts.transferHook}). An arbitrary program runs on every transfer ` +
+              `and can block, reject, or add fees to this transaction at runtime. ` +
+              `The hook program is invoked as a CPI on every token transfer involving this mint.`,
+            mapsToLoss:
+              "A transfer hook program can block or alter token transfers, freeze accounts, or levy hidden fees.",
+          });
+        }
+      }
     }
 
     return buildVerdict({

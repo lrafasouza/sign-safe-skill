@@ -36,7 +36,7 @@
  * "unverified" bucket. The SIGN bar keys on `addressVerified` (R10/V7).
  */
 
-import type { AccountRole, DecodedMessage, RoleKind } from "./types.ts";
+import type { AccountRole, DecodedMessage, RoleKind, VerdictContext } from "./types.ts";
 
 /**
  * BPF Loader Upgradeable program id. When it is present in the combined account
@@ -94,6 +94,15 @@ export interface DeriveRolesOptions {
    * which `writableRuntime === writablePartition`. (R6.)
    */
   reservedAccountKeys?: ReadonlySet<string>;
+  /**
+   * Pre-resolved ALT contents (table base58 -> ordered address list). When
+   * provided and the table + index are in range, the synthetic
+   * `alt:<table>#wN/#rN` address is replaced with the real resolved base58
+   * address and `addressVerified` is set to true, allowing the SIGN gate to
+   * pass when ALL ALT roles are verified. Absent or partial -> unverified
+   * (fail-closed: HOLD preserved for anything we cannot verify). (A2.)
+   */
+  resolvedAltTables?: ReadonlyMap<string, readonly string[]>;
 }
 
 /**
@@ -141,6 +150,7 @@ export function deriveRoles(
   } = msg.header;
   const K = msg.staticAccountKeys.length;
   const reserved = opts.reservedAccountKeys;
+  const resolvedAltTables = opts.resolvedAltTables;
 
   // W = total writable ALT indexes flattened across all tables (R1).
   let W = 0;
@@ -214,23 +224,48 @@ export function deriveRoles(
   // writable across tables (in lookup order), THEN all readonly across tables
   // (R1/R11). A two-pass layout -- never per-table interleaving -- so a
   // synthetic role's combined index equals the runtime account index an
-  // instruction would use. Address is synthetic (addressVerified=false), but
-  // writability is real and known from the region the index falls in.
+  // instruction would use.
+  //
+  // When resolvedAltTables is provided and the table+index are in range, use
+  // the real resolved address with addressVerified=true and apply the reserved-
+  // key demotion path (same as static keys). When absent or out-of-range, fall
+  // back to the synthetic `alt:<table>#wN/#rN` address with
+  // addressVerified=false (fail-closed: HOLD gate preserved). (A2.)
   let altCursor = K;
   for (const lut of msg.addressTableLookups) {
+    const resolvedTable = resolvedAltTables?.get(lut.accountKey);
     for (const w of lut.writableIndexes) {
-      // Loaded account; never a signer; reserved-key demotion cannot be
-      // evaluated (address unknown) so pass null.
-      roles.push(
-        buildRole(`alt:${lut.accountKey}#w${w}`, altCursor++, false, false, null),
-      );
+      const resolvedAddr =
+        resolvedTable !== undefined && w < resolvedTable.length
+          ? (resolvedTable[w] ?? null)
+          : null;
+      if (resolvedAddr !== null) {
+        // Real address known: apply reserved-key demotion.
+        roles.push(buildRole(resolvedAddr, altCursor++, false, true, resolvedAddr));
+      } else {
+        // Address unknown offline: synthetic id, no demotion.
+        roles.push(
+          buildRole(`alt:${lut.accountKey}#w${w}`, altCursor++, false, false, null),
+        );
+      }
     }
   }
   for (const lut of msg.addressTableLookups) {
+    const resolvedTable = resolvedAltTables?.get(lut.accountKey);
     for (const r of lut.readonlyIndexes) {
-      roles.push(
-        buildRole(`alt:${lut.accountKey}#r${r}`, altCursor++, false, false, null),
-      );
+      const resolvedAddr =
+        resolvedTable !== undefined && r < resolvedTable.length
+          ? (resolvedTable[r] ?? null)
+          : null;
+      if (resolvedAddr !== null) {
+        // Real address known: apply reserved-key demotion.
+        roles.push(buildRole(resolvedAddr, altCursor++, false, true, resolvedAddr));
+      } else {
+        // Address unknown offline: synthetic id, no demotion.
+        roles.push(
+          buildRole(`alt:${lut.accountKey}#r${r}`, altCursor++, false, false, null),
+        );
+      }
     }
   }
 

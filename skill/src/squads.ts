@@ -46,6 +46,7 @@
  */
 
 import { base58Encode } from "./decode.ts";
+import type { DecodedMessage } from "./types.ts";
 
 /** Squads v4 program id on mainnet-beta. */
 export const SQUADS_V4_PROGRAM_ID =
@@ -370,6 +371,38 @@ export function decodeVaultTransaction(
     addressTableLookups,
     hasUnresolvedPrograms,
   };
+}
+
+/**
+ * Extract the VaultTransaction PDA address from a top-level decoded message.
+ *
+ * Finds the first instruction where `isSquadsVaultExecute` is true and returns
+ * the base58 address at account index 2 of that instruction.
+ *
+ * Resolution rules (fail-closed):
+ *   - If `ix.accountIndexes[2]` is within the static account key array, return
+ *     that static key.
+ *   - If it is >= staticAccountKeys.length (ALT-sourced), return null (the
+ *     concrete address cannot be resolved offline -- fail-closed).
+ *   - If no vaultTransactionExecute instruction is found, return null.
+ *   - If the instruction has fewer than 3 account indexes, return null.
+ *
+ * PURE and offline: no network, no RPC. Used by review-online.ts (host layer)
+ * to know which PDA to fetch; the fetch itself lives in the host layer only.
+ */
+export function extractVaultTransactionAddress(msg: DecodedMessage): string | null {
+  for (const ix of msg.instructions) {
+    if (!isSquadsVaultExecute(ix.programId, ix.data)) continue;
+    // Found a vaultTransactionExecute instruction.
+    if (ix.accountIndexes.length < 3) return null; // not enough accounts
+    const idx = ix.accountIndexes[2] as number;
+    if (idx >= msg.staticAccountKeys.length) {
+      // ALT-sourced: cannot resolve offline. Fail-closed.
+      return null;
+    }
+    return msg.staticAccountKeys[idx] ?? null;
+  }
+  return null;
 }
 
 /**

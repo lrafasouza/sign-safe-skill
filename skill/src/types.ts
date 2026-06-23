@@ -257,6 +257,27 @@ export interface VerdictContext {
   /** Lamport threshold above which a System Transfer is a HOLD finding. */
   lamportThreshold: number;
   /**
+   * Pre-resolved Address Lookup Table contents, keyed by the table account's
+   * base58 address. Each value is the ordered list of base58 addresses stored
+   * in that table (index 0 = first slot, matching the on-chain layout).
+   *
+   * When provided, `deriveRoles` can substitute real resolved addresses for
+   * ALT-sourced accounts (setting `addressVerified=true`) instead of using the
+   * synthetic `alt:<table>#wN/#rN` placeholders. Any table missing from the map,
+   * or any index out of range, falls back to the unverified synthetic address
+   * (fail-closed: the HOLD gate is preserved for anything we cannot verify).
+   *
+   * ESCALATE-ONLY invariant: supplying a MORE complete map can only raise the
+   * information level (fewer unverified roles). An absent or partial map keeps
+   * the prior conservative behavior (unverified => HOLD).
+   *
+   * Default: undefined (no resolution; behavior is byte-identical to pre-A2).
+   *
+   * Populated by the caller (e.g. enrich.ts) after on-chain table fetches.
+   * The core never fetches tables itself (offline invariant).
+   */
+  resolvedAltTables?: ReadonlyMap<string, readonly string[]>;
+  /**
    * When true, a bare durable-nonce transaction (even with no other finding)
    * is escalated to REJECT. This models a strict privileged-signing policy
    * where non-expiring transactions are never acceptable, regardless of
@@ -289,6 +310,27 @@ export interface VerdictContext {
    * policy. Escalate-only: it never downgrades a REJECT or another HOLD.
    */
   holdOutboundTransfers?: boolean;
+  /**
+   * Pre-decoded Token-2022 mint extension danger metadata, keyed by the mint
+   * account's base58 address. The value is the output of
+   * `decodeMintDangerExtensions(mintAccountData)`.
+   *
+   * When provided, `reviewBase64` checks whether any mint that appears in the
+   * transaction's touched mints/recipients has a `permanentDelegate` or
+   * `transferHook` extension, and if so, pushes a HOLD finding explaining
+   * that the holder's tokens can be moved or burned without their signature.
+   *
+   * ESCALATE-ONLY: absence of this map (or an absent entry for a mint) leaves
+   * the verdict byte-identical to pre-A4. Providing the map can only ADD
+   * findings, never remove or downgrade them.
+   *
+   * Populated by the caller (e.g. enrich.ts) after on-chain mint account
+   * fetches. The core never fetches accounts itself (offline invariant).
+   */
+  mintExtensions?: ReadonlyMap<
+    string,
+    { permanentDelegate?: string; transferHook?: string; nonTransferable?: boolean }
+  >;
 }
 
 export const DEFAULT_CONTEXT: VerdictContext = {
