@@ -36,6 +36,7 @@ import { classifyInnerInstructions } from "./classify-inner.ts";
 import { screenAddresses, type ScreenHit } from "./reputation.ts";
 import {
   DEFAULT_CONTEXT,
+  type AccountRole,
   type Decision,
   type DecodedMessage,
   type Finding,
@@ -117,16 +118,40 @@ const SYSTEM_PID = "11111111111111111111111111111111";
  *   - SPL Approve/ApproveChecked delegate (accounts[1] / accounts[2]) → "delegate"
  *   - SetAuthority new_authority from data (data[3..35]) → "new-authority"
  *   - System Assign new owner from data (data[4..36]) → "new-authority"
+ *
+ * The `roles` array (from deriveRoles) is used as the single source of truth
+ * for resolving ALT-sourced account indices to real addresses. When an account
+ * index falls in the ALT region AND roles[index].addressVerified is true, the
+ * real resolved address is used instead of null — ensuring blocklist screening
+ * covers all addresses that the SIGN gate considers verified.
  */
 function collectScreenCandidates(
   msg: DecodedMessage,
   outflow: StaticOutflow,
+  roles: AccountRole[],
 ): Array<{ address: string | null; category: ScreenHit["category"]; instructionIndex: number }> {
   const candidates: Array<{
     address: string | null;
     category: ScreenHit["category"];
     instructionIndex: number;
   }> = [];
+
+  /**
+   * Resolve an account index to a base58 address for screening purposes.
+   * Uses roles as the single source of truth (same as outflow.ts) to ensure
+   * blocklist screening and SIGN-gate address verification are always in sync.
+   */
+  function resolveForScreen(accountIndex: number): string | null {
+    if (accountIndex < msg.staticAccountKeys.length) {
+      return msg.staticAccountKeys[accountIndex] ?? null;
+    }
+    // ALT-sourced index: use resolved address from roles when verified.
+    const role = roles[accountIndex];
+    if (role !== undefined && role.addressVerified) {
+      return role.address;
+    }
+    return null; // unresolved → skip (cannot screen offline)
+  }
 
   // 1. SOL transfer recipients
   for (const t of outflow.lamportTransfers) {
@@ -161,18 +186,12 @@ function collectScreenCandidates(
       if (disc === 4 && data.length >= 9) {
         // Approve: delegate is accounts[1]
         const delegateIdx = ix.accountIndexes[1];
-        const addr =
-          delegateIdx !== undefined && delegateIdx < msg.staticAccountKeys.length
-            ? (msg.staticAccountKeys[delegateIdx] ?? null)
-            : null;
+        const addr = delegateIdx !== undefined ? resolveForScreen(delegateIdx) : null;
         candidates.push({ address: addr, category: "delegate", instructionIndex });
       } else if (disc === 13 && data.length >= 10) {
         // ApproveChecked: delegate is accounts[2]
         const delegateIdx = ix.accountIndexes[2];
-        const addr =
-          delegateIdx !== undefined && delegateIdx < msg.staticAccountKeys.length
-            ? (msg.staticAccountKeys[delegateIdx] ?? null)
-            : null;
+        const addr = delegateIdx !== undefined ? resolveForScreen(delegateIdx) : null;
         candidates.push({ address: addr, category: "delegate", instructionIndex });
       } else if (disc === 6 && data.length >= 3) {
         // SetAuthority (disc=6): new_authority in data bytes [3..35] when COption=Some (flag=1 at data[2])
@@ -637,7 +656,7 @@ export function reviewBase64(
           ? ctx.recipientBlocklist
           : new Set(ctx.recipientBlocklist);
 
-      const candidates = collectScreenCandidates(msg, outflow);
+      const candidates = collectScreenCandidates(msg, outflow, roles);
       const hits = screenAddresses(candidates, blocklistSet);
       const reputationFindings = screenHitsToFindings(hits);
       topLevelFindings.push(...reputationFindings);

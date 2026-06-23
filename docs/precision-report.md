@@ -1,6 +1,6 @@
 # Sign-Safe Precision Report (Phase C)
 
-Generated: 2026-06-23T04:08:54.972Z
+Generated: 2026-06-23T04:35:24.485Z
 Pinned slots: 428290000, 428289500
 
 ## 1. Benign Corpus Summary

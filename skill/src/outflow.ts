@@ -38,33 +38,58 @@ const SPL_TRANSFER_CHECKED_DISC = 12;
 
 /**
  * Resolve an account index to a RecipientRef. Static-key indices are resolved
- * to their base58 address; ALT-loaded indices cannot be resolved offline.
+ * to their base58 address directly. ALT-loaded indices (accountIndex >=
+ * staticAccountKeys.length) are resolved via the `roles` array when
+ * `roles[accountIndex].addressVerified` is true — meaning the caller supplied
+ * `resolvedAltTables` and the slot is in range. If the ALT slot is NOT
+ * resolved (addressVerified=false), we stay fail-closed: address=null,
+ * addressUnresolved=true.
  *
- * The `staticAccountKeys` array covers indices 0..N-1. Beyond that range the
- * account was loaded from an address-lookup-table and is ALT-unresolved.
+ * INVARIANT: an address may be treated as `addressVerified` for the SIGN gate
+ * ONLY IF it is simultaneously visible to outflow recipient resolution AND
+ * blocklist screening. The `roles` array is the single source of truth for
+ * both paths, ensuring they can never diverge.
  */
 function resolveRecipient(
   accountIndex: number,
   msg: DecodedMessage,
   signerIndexes: Set<number>,
+  roles: AccountRole[],
 ): RecipientRef {
   const isStatic = accountIndex < msg.staticAccountKeys.length;
-  if (!isStatic) {
-    // ALT-sourced account: address unknown offline → fail-closed (outbound)
+  if (isStatic) {
+    const address = msg.staticAccountKeys[accountIndex] ?? null;
+    const outboundToNonSigner = !signerIndexes.has(accountIndex);
     return {
       index: accountIndex,
-      address: null,
-      addressUnresolved: true,
-      outboundToNonSigner: true,
+      address,
+      addressUnresolved: false,
+      outboundToNonSigner,
     };
   }
-  const address = msg.staticAccountKeys[accountIndex] ?? null;
-  const outboundToNonSigner = !signerIndexes.has(accountIndex);
+
+  // ALT-sourced account: consult the roles array (single source of truth).
+  // roles[accountIndex] exists when deriveRoles was called and includes the
+  // combined-list index covering ALT slots. When addressVerified=true, the
+  // real resolved base58 address is in roles[accountIndex].address.
+  const role = roles[accountIndex];
+  if (role !== undefined && role.addressVerified) {
+    // Real address known via resolvedAltTables — resolve it just like a
+    // static key. It is NOT a signer (ALT slots are never signers).
+    return {
+      index: accountIndex,
+      address: role.address,
+      addressUnresolved: false,
+      outboundToNonSigner: true, // ALT-sourced recipients are never signers
+    };
+  }
+
+  // ALT-sourced account with no resolved address: fail-closed (outbound)
   return {
     index: accountIndex,
-    address,
-    addressUnresolved: false,
-    outboundToNonSigner,
+    address: null,
+    addressUnresolved: true,
+    outboundToNonSigner: true,
   };
 }
 
@@ -109,7 +134,7 @@ export function computeOutflow(
             // an account creation so we track it too for completeness.
             const recipientAccountIndex = ix.accountIndexes[1];
             if (recipientAccountIndex !== undefined) {
-              const recipient = resolveRecipient(recipientAccountIndex, msg, signerIndexes);
+              const recipient = resolveRecipient(recipientAccountIndex, msg, signerIndexes, roles);
               lamportTransfers.push({
                 instructionIndex,
                 to: recipient.address,
@@ -131,7 +156,7 @@ export function computeOutflow(
               // CreateAccountWithSeed recipient = accounts[1]
               const recipientAccountIndex = ix.accountIndexes[1];
               if (recipientAccountIndex !== undefined) {
-                const recipient = resolveRecipient(recipientAccountIndex, msg, signerIndexes);
+                const recipient = resolveRecipient(recipientAccountIndex, msg, signerIndexes, roles);
                 lamportTransfers.push({
                   instructionIndex,
                   to: recipient.address,
@@ -169,7 +194,7 @@ export function computeOutflow(
           : ix.accountIndexes[1];
         const destination =
           destAccountIndex !== undefined
-            ? resolveRecipient(destAccountIndex, msg, signerIndexes)
+            ? resolveRecipient(destAccountIndex, msg, signerIndexes, roles)
             : {
                 index: -1,
                 address: null,
