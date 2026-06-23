@@ -129,6 +129,47 @@ export interface Finding {
   mapsToLoss: string;
 }
 
+/**
+ * A resolved or ALT-unresolved recipient reference.
+ *
+ * When the destination account index falls within the static key range,
+ * `address` is the base58 public key and `addressUnresolved` is false.
+ * When the account is sourced from an address-lookup-table (ALT), the
+ * concrete address is unknown offline; `address` is null and
+ * `addressUnresolved` is true (fail-closed: treat as external).
+ */
+export interface RecipientRef {
+  /** Index into the message's full account-keys array. */
+  index: number;
+  /**
+   * Base58 address when statically known; null for ALT-loaded accounts whose
+   * address cannot be resolved offline.
+   */
+  address: string | null;
+  /** True when the concrete address cannot be determined offline (ALT account). */
+  addressUnresolved: boolean;
+  /**
+   * True when the recipient is NOT a signer of this message (i.e., funds are
+   * being sent to an external party). False for self-transfers (signer pays
+   * signer). Fail-closed: when addressUnresolved is true this is always true.
+   */
+  outboundToNonSigner: boolean;
+}
+
+/** A resolved lamport transfer with source and destination. */
+export interface LamportTransfer {
+  /** Index of the instruction that produced this transfer. */
+  instructionIndex: number;
+  /** Base58 address of the recipient, or null if ALT-unresolved. */
+  to: string | null;
+  /** True when the recipient address is ALT-sourced and cannot be resolved. */
+  toUnresolved: boolean;
+  /** Lamport amount as a base-10 decimal string. */
+  amount: string;
+  /** True when the recipient is NOT a signer of this message. */
+  outboundToNonSigner: boolean;
+}
+
 /** Statically-declared, signer-perspective SOL/SPL outflow. */
 export interface StaticOutflow {
   /**
@@ -146,6 +187,19 @@ export interface StaticOutflow {
   splTransfers: SplTransferOutflow[];
   /** True if lamports exceeded the configured large-transfer threshold. */
   exceedsLamportThreshold: boolean;
+  /**
+   * Per-instruction lamport transfers, each with a resolved recipient address.
+   * Populated only for System Transfer instructions whose funding account is
+   * a signer. Additive — existing lamports/exceedsLamportThreshold math is
+   * byte-identical.
+   */
+  lamportTransfers: LamportTransfer[];
+  /**
+   * True if ANY transfer (SOL or SPL) has a recipient that is NOT a signer of
+   * this message (i.e., value is leaving to an external address). This flags
+   * potential outbound value movement for policy enforcement.
+   */
+  outboundToNonSigner: boolean;
 }
 
 export interface SplTransferOutflow {
@@ -158,6 +212,12 @@ export interface SplTransferOutflow {
    * TransferChecked (a plain Transfer carries no decimals in its data). (C3.)
    */
   decimals?: number;
+  /**
+   * Resolved destination recipient for this SPL transfer.
+   * Transfer (disc 3):        destination = accountIndexes[1]
+   * TransferChecked (disc 12): destination = accountIndexes[2]  (mint is [1])
+   */
+  destination: RecipientRef;
 }
 
 /** The machine-readable verdict. This is the verdict.json contract. */
@@ -205,6 +265,30 @@ export interface VerdictContext {
    * offline cold-storage signing).
    */
   governanceContext?: boolean;
+  /**
+   * Optional set (or array) of known-bad base58 addresses (e.g. from Scam
+   * Sniffer or a community drainer blocklist). When provided, any transfer
+   * recipient, SPL Approve delegate, or SetAuthority new-authority that appears
+   * in this list causes a REJECT finding "blocklisted-recipient".
+   *
+   * Default: undefined (no screening — verdict behavior is byte-identical).
+   *
+   * The blocklist is injected by the host or test; the core never fetches it.
+   * To populate this at runtime, use enrich.ts reconRecipients().
+   */
+  recipientBlocklist?: ReadonlySet<string> | readonly string[];
+  /**
+   * When true, any outbound transfer (SOL or SPL) to a non-signer recipient
+   * is escalated to at least HOLD. Self-transfers (signer pays signer) are
+   * unaffected.
+   *
+   * Default: false — transfers stay at SIGN when no other finding escalates
+   * them (existing behavior is unchanged).
+   *
+   * This models a strict "human-review-required for all external payments"
+   * policy. Escalate-only: it never downgrades a REJECT or another HOLD.
+   */
+  holdOutboundTransfers?: boolean;
 }
 
 export const DEFAULT_CONTEXT: VerdictContext = {

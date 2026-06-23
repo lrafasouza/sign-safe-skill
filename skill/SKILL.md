@@ -1,6 +1,6 @@
 ---
 name: sign-safe
-description: Signing-time safety gate for Solana transactions. Decodes an opaque base64 transaction/message, classifies its instructions against a danger-primitive catalog (35 native-program entries + 11-entry Anchor authority-mutation registry), computes the signer-perspective statically-declared outflow, downgrades unknown programs and unresolved Address-Lookup-Table references, and emits a SIGN / HOLD / REJECT verdict plus a machine-readable verdict.json for autonomous-agent gating. Clear-signs Squads v4 VaultTransaction proposals (offline borsh decode of inner instructions WHEN the PDA bytes are provided; fetching those bytes is the runtime enrichSquads step). Trigger phrases include "is this transaction safe to sign", "review this tx before I sign", "what does this base64 transaction do", "blind signing", "sign-review", "squads proposal review". Offline, deterministic, and tested (238 checks, 13 files). Motivated by the April-2026 Drift blind-signing / durable-nonce incident.
+description: Signing-time safety gate for Solana transactions. Decodes an opaque base64 transaction/message, classifies its instructions against a danger-primitive catalog (35 native-program entries + 11-entry Anchor authority-mutation registry + 5-program DeFi/NFT registry), surfaces transfer recipients and screens them against an injectable drainer blocklist, computes the signer-perspective statically-declared outflow, downgrades unknown programs and unresolved Address-Lookup-Table references, and emits a SIGN / HOLD / REJECT verdict plus a machine-readable verdict.json for autonomous-agent gating. Clear-signs Squads v4 VaultTransaction proposals (offline borsh decode of inner instructions WHEN the PDA bytes are provided; fetching those bytes is the runtime enrichSquads step). Trigger phrases include "is this transaction safe to sign", "review this tx before I sign", "what does this base64 transaction do", "blind signing", "sign-review", "squads proposal review". Offline, deterministic, and tested (292 checks, 16 files). Motivated by the April-2026 Drift blind-signing / durable-nonce incident.
 user-invocable: true
 ---
 
@@ -47,11 +47,24 @@ no RPC, no simulation. Same bytes in, same JSON out:
    program-id demotion, SIMD-0105), both exposed. ALT-referenced accounts keep
    their real writable/readonly role but are marked `addressVerified: false`
    (their concrete identity cannot be known without an on-chain lookup).
-3. **classify** (`src/classify.ts`) -- each instruction x the danger catalog
-   (`catalog/danger-primitives.json`, 35 entries) -> `Finding[]`, matched by
-   programId + discriminator. Plus `src/tlv.ts`, a pure Token-2022 mint/account
-   TLV extension walker (PermanentDelegate / TransferHook / fee / pausable,
-   surfaced on a byte-identical plain Transfer).
+3. **classify** (`src/classify.ts` + `src/registry.ts`) -- each instruction x the
+   danger catalog (`catalog/danger-primitives.json`, 35 entries) -> `Finding[]`,
+   matched by programId + discriminator. Plus a DeFi/NFT registry tier
+   (`catalog/program-registry.json`, 5 programs: Metaplex Token Metadata,
+   Bubblegum cNFT, Jupiter v6, Orca Whirlpools, Raydium AMM v4): recognized
+   programs are named and never trigger the blank unknown-program REJECT; a
+   listed dangerous instruction (e.g. Metaplex Transfer NFT, Bubblegum Transfer
+   cNFT) is REJECT; any other instruction on a recognized program is HOLD (never
+   SIGN). Plus `src/tlv.ts`, a pure Token-2022 mint/account TLV extension walker
+   (PermanentDelegate / TransferHook / fee / pausable, surfaced on a
+   byte-identical plain Transfer).
+3b. **reputation** (`src/reputation.ts`) -- PURE address-reputation screening:
+   when `ctx.recipientBlocklist` is provided, all transfer recipients, SPL
+   Approve delegates, and SetAuthority new-authorities are screened; any match
+   is a REJECT finding `"blocklisted-recipient"`. When `ctx.holdOutboundTransfers`
+   is true, any outbound transfer (to a non-signer) is escalated to HOLD. No-ops
+   when neither is provided (byte-identical behavior for callers not using these
+   features).
 4. **squads** (`src/squads.ts`) -- PURE offline borsh decoder for Squads v4
    `VaultTransaction` PDA accounts. Validates the discriminator
    (`a8faa264510ea2cf` = `sha256("account:VaultTransaction")[0..8]`), reads the
@@ -71,7 +84,11 @@ no RPC, no simulation. Same bytes in, same JSON out:
    for cross-device byte-identity confirmation (out-of-band digest).
 7. **outflow** (`src/outflow.ts`) -- statically-declared signer outflow: System
    Transfer lamports (when the signer funds it) + SPL transfer/transferChecked
-   amounts.
+   amounts. Each transfer now carries a resolved `LamportTransfer` /
+   `RecipientRef` with the destination address (or an `addressUnresolved` flag
+   when the recipient is ALT-loaded) and an `outboundToNonSigner` flag. The
+   SIGN reason explicitly names transfer destinations ("sends X lamports to
+   ADDR").
 8. **verdict** (`src/verdict.ts`) -- `Finding[]` + context -> `Verdict` +
    `verdict.json`. Durable-nonce escalation policy: bare nonce = HOLD; nonce +
    any non-INFO finding or unknown program = REJECT (Drift composite);
@@ -79,11 +96,13 @@ no RPC, no simulation. Same bytes in, same JSON out:
 
 **Fail-closed by construction:** malformed/truncated input -> `REJECT`; any
 unresolved ALT reference forces roles `unverified` so the verdict can never be
-`SIGN`; any unknown program present forbids `SIGN`; a Squads execute without
-PDA bytes injects a mandatory HOLD (`squads-execute-unverified`); a Squads
-execute with inner `update_admin` (discriminator matched by the Anchor registry)
-is REJECT; a Squads execute with zero inner instructions is treated as unverified
-(never SIGN an empty vault).
+`SIGN`; a truly unknown program forbids `SIGN` and forces REJECT when writable;
+a recognized DeFi/NFT program with an unrecognized instruction is HOLD (never
+SIGN); a recognized dangerous instruction (e.g. Metaplex Transfer NFT) forces
+the listed severity; a Squads execute without PDA bytes injects a mandatory HOLD
+(`squads-execute-unverified`); a Squads execute with inner `update_admin`
+(discriminator matched by the Anchor registry) is REJECT; a Squads execute with
+zero inner instructions is treated as unverified (never SIGN an empty vault).
 
 Any MCP/network use (ALT resolution, Squads PDA fetch, live mint-extension
 confirmation) lives ONLY in `src/enrich.ts`, which is **never** imported by the
@@ -95,6 +114,11 @@ core or the tests. It is a documented runtime enhancement only:
 - **`reconNonceAccounts(addresses, signers, getAccountInfo)`** -- fetches and
   decodes nonce account authority; attributes "signer-controlled" nonces for the
   HOLD finding detail.
+- **`reconRecipients(url, fetcher)`** -- fetches a community drainer blocklist
+  from an external API (injectable fetcher callback); returns a
+  `ReadonlySet<string>` of known-bad base58 addresses for injection into
+  `ctx.recipientBlocklist`. Fail-open on fetch error (returns empty set so the
+  gate stays operational).
 - **`enrichAlt(lookup, getAccountInfo)`** -- (stub, not yet implemented) resolves
   ALT indexes to concrete addresses.
 
@@ -152,6 +176,32 @@ Verdict path: nonce at ix0 + `squads-execute-unverified` -> `driftComposite=true
 -> **REJECT**, exit 20. With PDA bytes: nonce + `anchor-inner-update_admin`
 (REJECT) -> **REJECT** with inner authority transfer named explicitly.
 
+## What sign-safe catches and what it does not (honest coverage)
+
+**Catches (HOLD or REJECT):** owner-reassignment (`system-assign`,
+`spl-set-authority`, `bpf-set-upgrade-authority`, …), durable-nonce non-expiry
+(`durable-nonce-advance` at ix0), delegate / approval grants
+(`spl-approve-delegate`, …), account closes and freezes, program upgrades and
+close (`bpf-upgrade`, `bpf-close`), hidden Squads inner authority transfers
+(inner `update_admin` / `set_admin` / … via VaultTransaction PDA), NFT theft
+via named transfers (Metaplex Transfer NFT disc 49, Bubblegum Transfer cNFT
+disc `a334c8e7…`), NFT delegate grants and burns, unknown DeFi programs writing
+value (REJECT), recognized DeFi programs with unrecognized instructions (HOLD),
+transfer recipients on an injected drainer blocklist (REJECT), all external
+transfers when `holdOutboundTransfers` is set (HOLD).
+
+**Not caught by static analysis alone:**
+
+| Not caught | Mitigation |
+|---|---|
+| Plain SOL transfer to an attacker | Recipient is surfaced in the SIGN reason; inject `ctx.recipientBlocklist` via `reconRecipients()` for drainer-address matching; verify the destination address yourself |
+| Address-poisoning / lookalike mints | Visual UI hygiene; blocklist of known poison addresses |
+| Economic / oracle outcomes | Pair with simulation (Blowfish / Phantom-style) |
+| Endpoint compromise / byte tampering | Hardware wallet; use `src/digest.ts` short-code for cross-device byte-identity confirmation |
+| A new dangerous instruction not yet catalogued | Add one data row to `catalog/danger-primitives.json` or `catalog/program-registry.json` |
+
+**One-line summary:** sign-safe catches owner-reassignment, durable nonces, approvals, closes, honeypots, hidden Squads inner instructions, and named NFT/DeFi dangers; a plain transfer to an attacker is SIGN by default (surfaced recipient + optional blocklist/policy mitigate it); address-poisoning, lookalike mints, economic-oracle effects, and endpoint malware are out of scope.
+
 ## Progressive Disclosure (Read When Needed)
 
 - [references/verdict-contract.md](references/verdict-contract.md) -- verdict.json schema + decision rules + banned phrases
@@ -159,6 +209,7 @@ Verdict path: nonce at ix0 + `squads-execute-unverified` -> `driftComposite=true
 - [references/decode-notes.md](references/decode-notes.md) -- message parse details, header role math, ALT conservatism, discriminator notes
 - [catalog/danger-primitives.json](catalog/danger-primitives.json) -- the machine-readable catalog (35 native-program entries)
 - [catalog/anchor-danger.json](catalog/anchor-danger.json) -- Anchor authority-mutation registry (11 entries, 8-byte discriminators)
+- [catalog/program-registry.json](catalog/program-registry.json) -- DeFi/NFT program registry (5 programs, 15 dangerous instructions)
 
 ### Core Solana dev knowledge (from solana-dev-skill)
 

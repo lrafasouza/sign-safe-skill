@@ -1,6 +1,6 @@
 {
   "name": "sign-safe-skill",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Signing-time safety gate for Solana transactions: decode, classify danger primitives, compute signer outflow, and emit a SIGN/HOLD/REJECT verdict. Offline, deterministic, tested.",
   "type": "module",
   "license": "MIT",

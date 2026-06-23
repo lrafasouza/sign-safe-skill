@@ -80,11 +80,22 @@ Given a base64 message (legacy or v0), the deterministic core:
    **both SPL Token and Token-2022** (authority/ownership handoffs, program
    upgrade/close, durable nonces incl. nonce withdrawals, delegate/approve
    grants, account closes & freezes, mint/supply changes, token burns, large
-   transfers) plus a pure Token-2022 TLV extension walker,
-4. **computes** the statically-declared signer outflow,
-5. **emits** a `SIGN / HOLD / REJECT` verdict + `verdict.json`, escalating the
+   transfers) plus a pure Token-2022 TLV extension walker, **and** against a
+   5-program DeFi/NFT registry (Metaplex Token Metadata, Bubblegum cNFT,
+   Jupiter v6, Orca Whirlpools, Raydium AMM v4) that names NFT transfers/burns
+   and never blanket-REJECTs a recognized program,
+4. **surfaces transfer recipients** in every SOL and SPL transfer — the verdict
+   and SIGN reason explicitly name the destination address ("sends X lamports to
+   ADDR"), and an `outboundToNonSigner` flag identifies when value leaves to an
+   external address,
+5. **screens recipients, delegates, and new-authorities** against an optional
+   injectable drainer blocklist (`ctx.recipientBlocklist`): any match becomes a
+   REJECT finding. An optional `holdOutboundTransfers` policy flag escalates all
+   external-recipient transfers to at least HOLD,
+6. **computes** the statically-declared signer outflow,
+7. **emits** a `SIGN / HOLD / REJECT` verdict + `verdict.json`, escalating the
    Drift composite (durable-nonce marker at ix0 + authority change) to REJECT,
-6. **clear-signs Squads v4 proposals** (WHEN given the VaultTransaction PDA
+8. **clear-signs Squads v4 proposals** (WHEN given the VaultTransaction PDA
    bytes): offline borsh-decodes the PDA, resolves inner program IDs from the
    embedded account_keys array, classifies them against the 11-entry
    **Anchor authority-mutation registry** (`catalog/anchor-danger.json`), and
@@ -92,13 +103,15 @@ Given a base64 message (legacy or v0), the deterministic core:
    [inner, via Squads vault]" when the inner instruction carries that
    discriminator. Without the PDA bytes a mandatory HOLD is injected (never
    SIGN a Squads execute whose inner content is unknown),
-7. **computes a deterministic transaction digest** (`digest.ts`, SHA-256 with a
+9. **computes a deterministic transaction digest** (`digest.ts`, SHA-256 with a
    20-hex-char human-verifiable short code `XXXX-XXXX-XXXX-XXXX-XXXX`) so
    signers can confirm byte identity across devices out-of-band.
 
 **Fail-closed by construction:** malformed input -> REJECT; unresolved ALT
-references can never produce SIGN; unknown programs can never produce SIGN, and
-if they write to a value-bearing account they force REJECT.
+references can never produce SIGN; truly unknown programs can never produce
+SIGN, and if they write to a value-bearing account they force REJECT; a
+recognized DeFi/NFT program with an unrecognized instruction is HOLD, never
+SIGN.
 
 ### The SIGN / HOLD / REJECT contract
 
@@ -127,6 +140,22 @@ in this blob is recognized as dangerous," never "this is safe."
 - Classifying instructions against a 35-entry danger-primitive catalog
   (authority handoffs, program upgrades, durable nonces, delegate grants,
   account closes, large transfers) plus a pure Token-2022 TLV extension walker.
+- **DeFi/NFT program registry** (5 programs, `catalog/program-registry.json`):
+  Metaplex Token Metadata, Metaplex Bubblegum (cNFT), Jupiter Aggregator v6,
+  Orca Whirlpools, and Raydium AMM v4 are recognized and no longer produce a
+  blanket unknown-program-writable REJECT. A recognized program with a dangerous
+  instruction is named and classified at its correct severity; an unrecognized
+  instruction on a recognized program is HOLD (never SIGN).
+- **Transfer recipient surfacing**: every SOL and SPL transfer surfaces the
+  destination address in the outflow and the SIGN reason string. An
+  `outboundToNonSigner` flag identifies when value is leaving to an external
+  address.
+- **Injectable blocklist**: `ctx.recipientBlocklist` accepts a set of known-bad
+  addresses; any transfer recipient, SPL Approve delegate, or SetAuthority
+  new-authority that matches is REJECT. Blocklist fetching lives in `enrich.ts
+  reconRecipients()` (injectable, never imported by core).
+- **Outbound-transfer policy** (`ctx.holdOutboundTransfers`): escalate all
+  external-recipient transfers to at least HOLD for strict signing policies.
 - Offline clear-signing of Squads v4 VaultTransaction proposals: when the PDA
   bytes are provided, decoding inner instructions and classifying them against
   an 11-entry Anchor authority-mutation registry (`anchor-danger.json`).
@@ -173,11 +202,43 @@ individually decoded, so it is flagged **HOLD** wholesale — it can never silen
 SIGN; recursively decoding a batch to escalate an inner REJECT-class primitive is
 a planned enhancement.)
 
+### What sign-safe catches and what it does not (honest coverage)
+
+**Catches (HOLD or REJECT by static analysis):**
+
+| Category | How it is caught |
+|---|---|
+| Owner/authority reassignment | `system-assign`, `spl-set-authority`, `bpf-set-upgrade-authority`, etc. — all REJECT |
+| Durable-nonce non-expiry | `durable-nonce-advance` at ix0 — always at least HOLD, escalates to REJECT when combined with any danger |
+| Delegate / approval grants | `spl-approve-delegate`, `token2022-approve-delegate` — HOLD |
+| Account closes and freezes | `spl-close-account`, `spl-freeze-account` (and Token-2022 equivalents) — HOLD |
+| Honeypot / program-upgrade | `bpf-upgrade`, `bpf-close` — REJECT |
+| Squads inner authority transfer | Inner `update_admin` / `set_admin` / etc. decoded from VaultTransaction PDA — REJECT |
+| NFT / cNFT transfer (theft vector) | Metaplex Transfer (disc 49), Bubblegum Transfer (disc `a334c8e7…`) — REJECT |
+| NFT delegate grant | Metaplex Delegate (disc 44), Bubblegum Delegate (disc `5a934bb2…`) — HOLD |
+| NFT burn | Metaplex Burn (disc 41/29), Bubblegum Burn — REJECT |
+| Unknown DeFi program writing value | Any unregistered program touching a writable account — REJECT |
+| Known DeFi program, unrecognized instruction | Recognized (Jupiter/Orca/Raydium/Metaplex/Bubblegum) but unlisted instruction — HOLD |
+| Transfer recipient on drainer blocklist | `recipientBlocklist` injection — REJECT per hit |
+| Outbound transfer policy | `holdOutboundTransfers` flag — HOLD for any external-recipient transfer |
+
+**Not caught by static analysis alone (use the indicated mitigation):**
+
+| Not caught | Why | Mitigation |
+|---|---|---|
+| A plain SOL transfer to an attacker | SIGN by default — recipient is now surfaced in the verdict, but sign-safe cannot know if the address is malicious without external information | Provide `recipientBlocklist` via `enrich.ts reconRecipients()` (community blocklist); verify the destination address yourself |
+| Address-poisoning / lookalike mints | Requires recognizing visual similarity of base58 strings — beyond static decoding | Visual UI hygiene; blocklist of known poison addresses |
+| Economic/oracle outcomes | Token price at signing is not in the bytes | Pair with transaction simulation (Blowfish / Phantom-style) |
+| Endpoint compromise (malicious injector) | If the bytes are tampered before reaching sign-safe, the gate cannot know | Hardware wallet or separate device; out-of-band digest (`src/digest.ts`) confirms byte identity across devices |
+| A new dangerous instruction on a known program not yet in the catalog | Only catalogued primitives are flagged by name | Add a data row to `catalog/danger-primitives.json` or `catalog/program-registry.json` (one-line change, no code edit) |
+
+**One-line coverage summary:** sign-safe catches owner-reassignment, durable nonces, approvals, closes, honeypots, hidden Squads inner instructions, and now named NFT/DeFi dangers; a plain transfer to an attacker is SIGN by default (surfaced recipient + optional blocklist/policy mitigate it); address-poisoning, lookalike mints, economic-oracle effects, and endpoint malware are out of scope and need reputation data, simulation, or endpoint security.
+
 ## Why this skill is different: it actually runs, and it is tested
 
 Most skills are prose. This one ships a small, **pure-function** TypeScript core
 with a deterministic, fully **offline** test suite (`vitest` + `fast-check`),
-**238 checks across 13 files** (`npm test`, see exact counts below):
+**292 checks across 16 files** (`npm test`, see exact counts below):
 
 - **10 synthetic golden fixtures** -- serialized messages built with
   `@solana/web3.js`, decoded by *our own* parser, verdicts deep-equal-checked
@@ -402,22 +463,25 @@ for the machine-readable source.
 ```
 $ npm test            # vitest run -- the full suite (exits nonzero on any fail)
 
- ✓ skill/test/decode.test.ts           (25 tests)   compact-u16 vectors/rejection, D19, versions, fail-closed
- ✓ skill/test/roles.test.ts            (13 tests)   is_writable_index + demotion goldens, multi-lookup, reserved
- ✓ skill/test/classify.test.ts         (21 tests)   Transfer/TransferChecked, SetAuthority, TLV, loader, routing
- ✓ skill/test/catalog-coverage.test.ts (29 tests)   dangerous shapes never SIGN (SPL+T22 Approve/Close/Freeze/MintTo/Burn/WithdrawExcess/Unwrap/Batch + T22 confidential mint/burn, fee-withdraw & permissioned-burn sub-instructions, WithdrawNonce, CreateAccount[WithSeed]); config sub-instructions still SIGN
- ✓ skill/test/verdict.test.ts          (12 tests)   durable nonce ix0 gate, Drift composite, prompt-injection, V2
- ✓ skill/test/squads.test.ts           (28 tests)   VaultTransaction borsh decode, discriminator math, ALT-unresolved fail-closed, real fixture
- ✓ skill/test/squad-verdict.test.ts    (13 tests)   Squads execute verdict integration, durable-nonce+execute REJECT, governanceContext, never-SIGN
- ✓ skill/test/digest.test.ts           (14 tests)   SHA-256 digest, short-code format, determinism, out-of-band byte identity
- ✓ skill/test/pbt.test.ts              ( 7 tests)   round-trip, fail-closed, no-trailing, compact-u16 (fast-check)
- ✓ skill/test/fixtures.test.ts         (52 tests)   golden + web3.js + kit differential + disagreement + no-network
- ✓ skill/test/real-fixtures.test.ts    (14 tests)   REAL mainnet txs decoded offline + cross-validated
- ✓ skill/test/fulltx.test.ts           ( 9 tests)   full signed-tx input stripped + fail-closed (W011 §7)
- ✓ skill/test/legacy-runner.test.ts    ( 1 test )   runs the standalone node smoke runner
+ ✓ skill/test/decode.test.ts              (25 tests)   compact-u16 vectors/rejection, D19, versions, fail-closed
+ ✓ skill/test/roles.test.ts               (13 tests)   is_writable_index + demotion goldens, multi-lookup, reserved
+ ✓ skill/test/classify.test.ts            (21 tests)   Transfer/TransferChecked, SetAuthority, TLV, loader, routing
+ ✓ skill/test/catalog-coverage.test.ts    (29 tests)   dangerous shapes never SIGN (SPL+T22 Approve/Close/Freeze/MintTo/Burn/WithdrawExcess/Unwrap/Batch + T22 confidential mint/burn, fee-withdraw & permissioned-burn sub-instructions, WithdrawNonce, CreateAccount[WithSeed]); config sub-instructions still SIGN
+ ✓ skill/test/verdict.test.ts             (12 tests)   durable nonce ix0 gate, Drift composite, prompt-injection, V2
+ ✓ skill/test/squads.test.ts              (28 tests)   VaultTransaction borsh decode, discriminator math, ALT-unresolved fail-closed, real fixture
+ ✓ skill/test/squad-verdict.test.ts       (13 tests)   Squads execute verdict integration, durable-nonce+execute REJECT, governanceContext, never-SIGN
+ ✓ skill/test/digest.test.ts              (14 tests)   SHA-256 digest, short-code format, determinism, out-of-band byte identity
+ ✓ skill/test/pbt.test.ts                 ( 7 tests)   round-trip, fail-closed, no-trailing, compact-u16 (fast-check)
+ ✓ skill/test/fixtures.test.ts            (52 tests)   golden + web3.js + kit differential + disagreement + no-network
+ ✓ skill/test/real-fixtures.test.ts       (14 tests)   REAL mainnet txs decoded offline + cross-validated
+ ✓ skill/test/fulltx.test.ts              ( 9 tests)   full signed-tx input stripped + fail-closed (W011 §7)
+ ✓ skill/test/program-registry.test.ts    (30 tests)   DeFi/NFT registry: Jupiter/Metaplex/Bubblegum/Orca/Raydium recognized; dangerous instructions named; unrecognized-instruction HOLD; truly-unknown-program REJECT unchanged; no regression on native SPL Transfer
+ ✓ skill/test/recipient.test.ts           ( 8 tests)   System + SPL Transfer recipient surfacing; outboundToNonSigner true/false; self-transfer; ALT-unresolved marker
+ ✓ skill/test/reputation.test.ts          (16 tests)   blocklist REJECT on SOL transfer + SPL Approve; holdOutboundTransfers HOLD; no-blocklist unchanged; screenAddresses unit; reconRecipients injectable stub
+ ✓ skill/test/legacy-runner.test.ts       ( 1 test )   runs the standalone node smoke runner
 
- Test Files  13 passed (13)
-      Tests  238 passed (238)
+ Test Files  16 passed (16)
+      Tests  292 passed (292)
 ```
 
 There are two entry points: `npm test` (vitest, the full suite) and
@@ -459,14 +523,14 @@ commands and no network access at test time:
 ```bash
 npm install            # deps for generation + cross-validation only (no postinstall, no curl)
 npm run gen-fixtures   # rebuild the 10 synthetic .b64 from @solana/web3.js (deterministic, byte-identical)
-npm test               # 238 checks, 13 files, fully offline; exits nonzero on any failure
+npm test               # 292 checks, 16 files, fully offline; exits nonzero on any failure
 ```
 
-Expected: `Tests  238 passed (238)`, and `git status` clean afterward (the
+Expected: `Tests  292 passed (292)`, and `git status` clean afterward (the
 deterministic generator reproduces the committed `.b64` byte-for-byte). To also
 confirm the type contract: `npx tsc --noEmit` (exit 0).
 
-What those 238 checks actually validate:
+What those 292 checks actually validate:
 
 | Coverage area | Where | What it proves |
 |---|---|---|
@@ -481,6 +545,9 @@ What those 238 checks actually validate:
 | **Squads + verdict integration** | `squad-verdict.test.ts` | 13 checks: execute without inner bytes -> HOLD; with inner `update_admin` -> REJECT naming the authority; durable-nonce + execute -> REJECT (Drift composite); bare durable nonce stays HOLD (regression guard); `governanceContext` escalates to REJECT; Squads execute NEVER produces SIGN (with or without inner). |
 | **Transaction digest** | `digest.test.ts` | 14 checks: SHA-256 correctness, short-code format and determinism, round-trip, out-of-band identity confirms, no-network purity. |
 | **Fail-closed / adversarial** | `decode.test.ts`, `verdict.test.ts` | Truncation, trailing garbage, out-of-range index, unsupported version `0x81`, empty/single-byte → REJECT; unresolved ALT can never SIGN; unknown program writing a value-bearing account → REJECT; cross-oracle disagreement ⇒ fail-closed (V10); prompt-injection (decoded data never interpolated, V8); banned reassurance phrases fail loud. |
+| **DeFi/NFT program registry** | `program-registry.test.ts` | 30 checks: Jupiter HOLD (not REJECT), Metaplex Transfer REJECT / Delegate HOLD / Burn REJECT, Bubblegum Transfer REJECT / Burn REJECT / Delegate HOLD, unrecognized-instruction HOLD (fail-closed), Orca/Raydium recognized HOLD, truly-unknown-program REJECT unchanged, SPL Transfer still SIGN (no regression), recognized programs never SIGN alone. |
+| **Recipient surfacing** | `recipient.test.ts` | 8 checks: System Transfer surfaces recipient base58 address, outboundToNonSigner true when non-signer, false for self-transfer, SIGN reason names destination; SPL Transfer destination index, TransferChecked uses [2] not [1] (mint), ALT-sourced recipient marked unresolved. |
+| **Blocklist + policy** | `reputation.test.ts` | 16 checks: blocklist REJECT on SOL transfer to known-bad address; SPL Approve delegate blocklist; no blocklist = no change; holdOutboundTransfers escalation to HOLD; self-transfer stays SIGN; array-form blocklist; screenAddresses unit tests; reconRecipients injectable (frozen stub, fail-open on error, end-to-end with reviewBase64). |
 | **Determinism** | `run.ts` + CI | The standalone node runner's output is byte-identical across two runs (no timing/nondeterminism in the core). |
 | **No-network** | `fixtures.test.ts` | Core modules import no `http`/`https`/`net`/`fetch`; the suite makes zero network calls at run time. |
 
@@ -517,14 +584,17 @@ sign-safe-skill/
     │   └── decode-notes.md
     ├── catalog/
     │   ├── danger-primitives.json   # 35-entry native-program danger catalog
-    │   └── anchor-danger.json       # 11-entry Anchor authority-mutation registry (clear-signing)
+    │   ├── anchor-danger.json       # 11-entry Anchor authority-mutation registry (clear-signing)
+    │   └── program-registry.json    # 5-program DeFi/NFT registry (Metaplex/Bubblegum/Jupiter/Orca/Raydium)
     ├── src/
-    │   ├── types.ts        # the shared contract (two-layer role model)
+    │   ├── types.ts        # the shared contract (two-layer role model + RecipientRef + LamportTransfer)
     │   ├── decode.ts       # PURE base64 -> DecodedMessage (legacy + v0) + re-encoder
     │   ├── roles.ts        # PURE two-layer writability (partition + demotion) + reserved set
-    │   ├── classify.ts     # PURE instruction x catalog -> Finding[]
+    │   ├── classify.ts     # PURE instruction x catalog + registry -> Finding[]
     │   ├── classify-inner.ts # PURE inner-instruction classifier (Squads VaultTransaction)
-    │   ├── outflow.ts      # PURE statically-declared signer outflow
+    │   ├── registry.ts     # PURE DeFi/NFT program registry lookup (program-registry.json)
+    │   ├── reputation.ts   # PURE address-reputation blocklist screening (screenAddresses)
+    │   ├── outflow.ts      # PURE statically-declared signer outflow + recipient surfacing
     │   ├── tlv.ts          # PURE Token-2022 mint/account TLV extension walker
     │   ├── banned.ts       # PURE banned-reassurance-phrase enforcement
     │   ├── squads.ts       # PURE Squads v4 VaultTransaction borsh decoder + isSquadsVaultExecute
@@ -548,11 +618,14 @@ sign-safe-skill/
         ├── squads.test.ts      # VaultTransaction decode, discriminator, ALT-unresolved, real fixture
         ├── squad-verdict.test.ts  # Squads+verdict integration, governanceContext, never-SIGN
         ├── digest.test.ts      # SHA-256 digest, short-code, determinism, out-of-band identity
-        ├── pbt.test.ts         # fast-check property-based tests (seed 42)
-        ├── fixtures.test.ts    # golden + web3.js/kit differential + no-network
-        ├── real-fixtures.test.ts # real mainnet txs decoded offline + cross-validated
-        ├── legacy-runner.test.ts  # wraps run.ts so it is part of `npm test`
-        └── run.ts              # standalone node smoke runner (npm run test:fixtures)
+        ├── pbt.test.ts              # fast-check property-based tests (seed 42)
+        ├── fixtures.test.ts         # golden + web3.js/kit differential + no-network
+        ├── real-fixtures.test.ts    # real mainnet txs decoded offline + cross-validated
+        ├── program-registry.test.ts # DeFi/NFT registry: Metaplex/Bubblegum/Jupiter/Orca/Raydium
+        ├── recipient.test.ts        # recipient surfacing, outboundToNonSigner, ALT-unresolved
+        ├── reputation.test.ts       # blocklist REJECT, holdOutboundTransfers HOLD, screenAddresses unit
+        ├── legacy-runner.test.ts    # wraps run.ts so it is part of `npm test`
+        └── run.ts                   # standalone node smoke runner (npm run test:fixtures)
 ```
 
 ## License

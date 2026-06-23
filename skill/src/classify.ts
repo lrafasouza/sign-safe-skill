@@ -24,6 +24,11 @@
  */
 
 import catalog from "../catalog/danger-primitives.json" with { type: "json" };
+import {
+  isRegisteredProgram,
+  getRegistryProgram,
+  matchDangerousInstruction,
+} from "./registry.ts";
 import type {
   AccountRole,
   CatalogEntry,
@@ -269,6 +274,47 @@ export function classify(
     if (pid === COMPUTE_BUDGET) return;
 
     if (!(pid in KNOWN_PROGRAMS)) {
+      // --- RECOGNIZED DeFi/NFT program tier (GAP 3 fix) ---
+      // Programs in the registry are known but not native. They must NEVER
+      // produce a SIGN outcome. Recognition only adds/escalates:
+      //   - A listed dangerous instruction -> its severity with a clear label.
+      //   - ANY other instruction on a recognized program -> HOLD
+      //     "recognized-unknown-instruction" (never SIGN).
+      //   - A truly unregistered program -> fall through to the unknown path.
+      if (isRegisteredProgram(pid)) {
+        const prog = getRegistryProgram(pid)!;
+        const dangerEntry = matchDangerousInstruction(pid, ix.data);
+
+        if (dangerEntry !== null && dangerEntry !== undefined) {
+          // Listed dangerous instruction: emit finding with the registry label.
+          findings.push({
+            id: `registry-${prog.id}-danger`,
+            label: dangerEntry.label,
+            severity: dangerEntry.severity,
+            instructionIndex,
+            programId: pid,
+            detail: `${dangerEntry.label} on ${prog.name} (${pid}). Discriminator matched.`,
+            mapsToLoss: dangerEntry.mapsToLoss,
+          });
+        } else {
+          // Recognized program, unrecognized instruction: mandatory HOLD.
+          // The fail-closed rule: this must NEVER become SIGN.
+          findings.push({
+            id: `registry-${prog.id}-unknown-instruction`,
+            label: `${prog.name}: unrecognized instruction (not individually decoded)`,
+            severity: "HOLD",
+            instructionIndex,
+            programId: pid,
+            detail: `Instruction sent to recognized program ${prog.name} (${pid}) but the specific instruction was not decoded. Verify recipients and amounts before signing.`,
+            mapsToLoss:
+              "Unverified instruction on a DeFi/NFT program; inner effects cannot be fully bounded without per-instruction decoding.",
+          });
+        }
+        // A recognized program does NOT contribute to unknownPrograms or
+        // unknownProgramWritable -- that path is reserved for truly unknown programs.
+        return;
+      }
+
       unknownPrograms.add(pid);
       // Does this unknown program touch any writable (value-bearing) account?
       //

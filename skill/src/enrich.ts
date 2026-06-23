@@ -291,6 +291,63 @@ export function annotateVerdict(
 }
 
 // ---------------------------------------------------------------------------
+// Recipient blocklist recon (injectable; runtime-only)
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch a community drainer blocklist from an external API and return a
+ * ReadonlySet<string> of known-bad base58 addresses for use with
+ * `ctx.recipientBlocklist` in a subsequent `reviewBase64` call.
+ *
+ * IMPURE: requires a network fetch. The `fetcher` callback is injectable so
+ * tests can supply a frozen stub instead of hitting the network.
+ *
+ * Usage example with the Scam Sniffer community blocklist:
+ *
+ *   import { reconRecipients } from "./enrich.ts";
+ *   import { reviewBase64 } from "./verdict.ts";
+ *
+ *   // Injectable fetcher: production uses real fetch()
+ *   const fetcher = async (url: string) => {
+ *     const res = await fetch(url);
+ *     if (!res.ok) throw new Error(`HTTP ${res.status}`);
+ *     return res.json() as Promise<{ addresses: string[] }>;
+ *   };
+ *
+ *   // 1. Fetch the blocklist (once, then cache)
+ *   const blocklist = await reconRecipients(
+ *     "https://api.scamsniffer.io/blocklist", fetcher
+ *   );
+ *
+ *   // 2. Second pass: offline verdict with blocklist injected
+ *   const verdict = reviewBase64(b64, { lamportThreshold: 1e9, recipientBlocklist: blocklist });
+ *
+ * @param url      URL of the blocklist endpoint. Expected to return JSON with
+ *                 a top-level `addresses: string[]` field (or adapt `fetcher`
+ *                 to normalize the response shape).
+ * @param fetcher  Injectable async fetch callback. Receives the URL and returns
+ *                 the parsed JSON response. The host supplies any auth headers,
+ *                 timeout, and caching.
+ * @returns        ReadonlySet<string> of known-bad base58 addresses.
+ *                 Returns an empty set on fetch failure so the verdict gate
+ *                 stays operational (the caller can log/alert on the error).
+ */
+export async function reconRecipients(
+  url: string,
+  fetcher: (url: string) => Promise<{ addresses: string[] }>,
+): Promise<ReadonlySet<string>> {
+  try {
+    const result = await fetcher(url);
+    return new Set(result.addresses);
+  } catch {
+    // Fail-open for blocklist fetch: if the network is unavailable, we cannot
+    // block signing. The verdict gate proceeds without blocklist enforcement.
+    // Callers that need strict blocklist enforcement should handle this error.
+    return new Set<string>();
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Inline base58 encoder (avoids importing decode.ts here)
 // ---------------------------------------------------------------------------
 

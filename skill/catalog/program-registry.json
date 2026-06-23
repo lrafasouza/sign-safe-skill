@@ -1,0 +1,146 @@
+{
+  "$schema": "sign-safe/program-registry@1",
+  "description": "Registry of recognized non-native DeFi/NFT programs. Programs listed here are known to the classifier and will NOT trigger the unknown-program-writable REJECT path. Each entry includes the discriminator scheme used by that program. Per-instruction danger entries list specific instructions that are dangerous and their severity. Any instruction NOT listed as dangerous on a recognized program yields a HOLD (never SIGN).",
+  "programs": [
+    {
+      "id": "metaplex-token-metadata",
+      "name": "Metaplex Token Metadata",
+      "programId": "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s",
+      "discriminatorScheme": "beet-u8",
+      "description": "Metaplex Token Metadata program. Manages NFT/token metadata, creators, and on-chain authority.",
+      "dangerousInstructions": [
+        {
+          "discHex": "31",
+          "disc": 49,
+          "label": "Metaplex: Transfer NFT",
+          "severity": "REJECT",
+          "mapsToLoss": "Transfers ownership of an NFT from the signer to an attacker-controlled wallet — direct NFT theft."
+        },
+        {
+          "discHex": "2c",
+          "disc": 44,
+          "label": "Metaplex: Delegate NFT authority",
+          "severity": "HOLD",
+          "mapsToLoss": "Grants a delegate authority over the NFT (transfer, burn, lock, etc.). A malicious delegate can steal or burn the NFT after signing."
+        },
+        {
+          "discHex": "2d",
+          "disc": 45,
+          "label": "Metaplex: Revoke NFT delegate",
+          "severity": "HOLD",
+          "mapsToLoss": "Revokes a delegate authority. Low risk on its own but part of authority-management flows; verify the target account."
+        },
+        {
+          "discHex": "29",
+          "disc": 41,
+          "label": "Metaplex: Burn NFT (pNFT)",
+          "severity": "REJECT",
+          "mapsToLoss": "Burns a programmable NFT (pNFT), permanently destroying it."
+        },
+        {
+          "discHex": "1d",
+          "disc": 29,
+          "label": "Metaplex: BurnNft (legacy)",
+          "severity": "REJECT",
+          "mapsToLoss": "Burns a legacy NFT token, permanently destroying it."
+        },
+        {
+          "discHex": "32",
+          "disc": 50,
+          "label": "Metaplex: Update metadata",
+          "severity": "HOLD",
+          "mapsToLoss": "Updates on-chain metadata (name, URI, creators, seller fee). An attacker can change the NFT URI to point to malicious content or alter royalty splits."
+        },
+        {
+          "discHex": "01",
+          "disc": 1,
+          "label": "Metaplex: UpdateMetadataAccount",
+          "severity": "HOLD",
+          "mapsToLoss": "Legacy UpdateMetadataAccount — changes on-chain NFT metadata URI/name/symbol."
+        },
+        {
+          "discHex": "0f",
+          "disc": 15,
+          "label": "Metaplex: UpdateMetadataAccountV2",
+          "severity": "HOLD",
+          "mapsToLoss": "Updates metadata using v2 schema (adds creators/uses/collection fields)."
+        }
+      ]
+    },
+    {
+      "id": "metaplex-bubblegum",
+      "name": "Metaplex Bubblegum (cNFT)",
+      "programId": "BGUMAp9Gq7iTEuizy4pqaxsTyUCBK68MDfK752saRPUY",
+      "discriminatorScheme": "anchor-8",
+      "description": "Metaplex Bubblegum program for compressed NFTs (cNFTs). Uses Anchor 8-byte discriminators.",
+      "dangerousInstructions": [
+        {
+          "discHex": "a334c8e78c0345ba",
+          "label": "Bubblegum: Transfer cNFT",
+          "severity": "REJECT",
+          "mapsToLoss": "Transfers ownership of a compressed NFT to the destination wallet — direct cNFT theft if attacker is destination."
+        },
+        {
+          "discHex": "772806ebeaddf831",
+          "label": "Bubblegum: Transfer cNFT v2",
+          "severity": "REJECT",
+          "mapsToLoss": "V2 transfer of a compressed NFT — same theft risk as Transfer."
+        },
+        {
+          "discHex": "5a934bb255580489",
+          "label": "Bubblegum: Delegate cNFT authority",
+          "severity": "HOLD",
+          "mapsToLoss": "Grants a delegate authority over the cNFT. A malicious delegate can steal or burn the cNFT."
+        },
+        {
+          "discHex": "5f577d8cb58380e3",
+          "label": "Bubblegum: Delegate cNFT authority v2",
+          "severity": "HOLD",
+          "mapsToLoss": "V2 delegate for cNFT — same risk as Delegate."
+        },
+        {
+          "discHex": "11e523dabef1fa7b",
+          "label": "Bubblegum: Delegate and freeze cNFT v2",
+          "severity": "HOLD",
+          "mapsToLoss": "Delegates and freezes the cNFT simultaneously, preventing further transfers until thawed."
+        },
+        {
+          "discHex": "746e1d386bdb2a5d",
+          "label": "Bubblegum: Burn cNFT",
+          "severity": "REJECT",
+          "mapsToLoss": "Burns (permanently destroys) a compressed NFT."
+        },
+        {
+          "discHex": "73d222f0e88fb710",
+          "label": "Bubblegum: Burn cNFT v2",
+          "severity": "REJECT",
+          "mapsToLoss": "V2 burn of a compressed NFT — permanent destruction."
+        }
+      ]
+    },
+    {
+      "id": "jupiter-v6",
+      "name": "Jupiter Aggregator v6",
+      "programId": "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4",
+      "discriminatorScheme": "anchor-8",
+      "description": "Jupiter v6 swap aggregator. All instructions default to HOLD (recognized-unknown-instruction) unless individually decoded.",
+      "dangerousInstructions": []
+    },
+    {
+      "id": "orca-whirlpools",
+      "name": "Orca Whirlpools",
+      "programId": "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc",
+      "discriminatorScheme": "anchor-8",
+      "description": "Orca Whirlpools concentrated-liquidity AMM. All instructions default to HOLD.",
+      "dangerousInstructions": []
+    },
+    {
+      "id": "raydium-amm-v4",
+      "name": "Raydium AMM v4",
+      "programId": "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8",
+      "discriminatorScheme": "raydium-u8",
+      "description": "Raydium AMM v4 liquidity program. All instructions default to HOLD.",
+      "dangerousInstructions": []
+    }
+  ]
+}

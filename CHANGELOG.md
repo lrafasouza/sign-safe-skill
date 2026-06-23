@@ -3,6 +3,92 @@
 All notable changes to sign-safe are documented here.
 Format: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-06-22
+
+### Added
+
+- **Transfer recipient surfacing / clear-signed transfers** (`src/outflow.ts`,
+  `src/types.ts`): every `System Transfer` and `SPL Transfer / TransferChecked`
+  instruction now carries a resolved `RecipientRef` + `LamportTransfer` in the
+  outflow. The verdict's SIGN reason explicitly names the destination address
+  ("sends X lamports to ADDR") so signers see where their funds are going even
+  on a SIGN verdict. A new `outboundToNonSigner` flag on `StaticOutflow` is true
+  whenever value leaves to an address that is not a message signer — surfaced per
+  transfer and rolled up at the outflow level.
+
+- **DeFi/NFT program registry** (`src/registry.ts` +
+  `catalog/program-registry.json`, 5 programs, 15 dangerous instructions):
+  a second classification tier between the native-program catalog and the
+  truly-unknown path. Programs in the registry are named and never trigger the
+  blanket unknown-program-writable REJECT path. Instead:
+    - A listed dangerous instruction → its configured severity with a clear label.
+    - Any instruction on a recognized but uncatalogued path → mandatory HOLD
+      (never SIGN). Programs: **Metaplex Token Metadata** (8 dangerous
+      instructions: Transfer, Delegate, Revoke, Burn pNFT/legacy,
+      UpdateMetadata/V2, Update — REJECT for transfer/burn, HOLD for
+      delegate/update), **Metaplex Bubblegum cNFT** (7: Transfer v1/v2, Delegate
+      v1/v2, Burn v1/v2, MintTo — REJECT for transfer/burn, HOLD for delegate),
+      **Jupiter Aggregator v6** (recognize-only, all instructions HOLD),
+      **Orca Whirlpools** (recognize-only, all HOLD),
+      **Raydium AMM v4** (recognize-only, all HOLD). NFT drains (Metaplex
+      Transfer, Bubblegum Transfer/Burn) are now explicitly named in verdicts
+      rather than appearing as generic REJECT.
+
+- **Injectable address-reputation blocklist** (`src/reputation.ts`,
+  `VerdictContext.recipientBlocklist`): pass a `ReadonlySet<string>` or
+  `readonly string[]` of known-bad base58 addresses as
+  `ctx.recipientBlocklist`. The offline core screens all transfer recipients,
+  SPL Approve delegates, and SetAuthority new-authorities; any hit becomes a
+  REJECT finding `"blocklisted-recipient"`. No-op when no blocklist is provided
+  (byte-identical behavior for existing callers). Fetching the blocklist from a
+  community API lives in `enrich.ts reconRecipients()` (injectable fetcher,
+  never imported by the core).
+
+- **`holdOutboundTransfers` policy flag** (`VerdictContext.holdOutboundTransfers`):
+  when true, any SOL or SPL transfer whose recipient is not a signer of the
+  message is escalated to at least HOLD (finding `"policy-outbound-transfer"`).
+  Self-transfers (signer → signer) are unaffected. Default false — existing
+  verdict behavior is unchanged.
+
+- **54 new tests** (3 new test files, 292 total up from 238):
+  - `program-registry.test.ts` (30): registry catalog validation, Jupiter HOLD,
+    Metaplex Transfer REJECT, Delegate HOLD, Burn REJECT, unrecognized-instruction
+    HOLD (fail-closed), Bubblegum Transfer/Burn REJECT, Delegate HOLD, unknown-disc
+    HOLD, Orca/Raydium recognized HOLD, truly-unknown-program REJECT unchanged,
+    native SPL Transfer still SIGN (no regression), recognized-program never SIGN.
+  - `recipient.test.ts` (8): System Transfer recipient surfacing, outboundToNonSigner
+    true/false, self-transfer detection, SIGN reason string includes destination,
+    SPL Transfer destination index, TransferChecked uses index [2] not [1] (mint),
+    ALT-sourced recipient marked unresolved.
+  - `reputation.test.ts` (16): blocklist REJECT on SOL transfer, SPL Approve
+    delegate REJECT, no blocklist unchanged, holdOutboundTransfers escalation,
+    self-transfer not escalated, no-match SIGN, array-form blocklist, screenAddresses
+    unit tests (empty/hit/null-skip/multi-hit), reconRecipients injectable (frozen
+    stub, fail-open on error, end-to-end with reviewBase64), core isolation invariant.
+
+### Changed
+
+- **Test count**: 238 -> 292 (54 new checks across 3 new test files).
+- **Test file count**: 13 -> 16.
+- **DeFi/NFT program registry**: 5 recognized programs (15 total dangerous
+  instructions across Metaplex Token Metadata and Bubblegum; 3 recognize-only
+  programs). Recognized programs are HOLD-with-label, not REJECT.
+- README and SKILL.md updated with accurate test counts, new feature descriptions,
+  honest coverage section, and repository structure reflecting new source files.
+
+### Invariants preserved
+
+- Offline core is dependency-free: `registry.ts` and `reputation.ts` import
+  nothing from the network layer and nothing from `enrich.ts`.
+- `enrich.ts` is never imported by any core module (test imports are to
+  `enrich.ts` only in `reputation.test.ts` for the `reconRecipients` unit test,
+  which tests the non-core enrich layer in isolation — the core modules and
+  the core-pipeline tests remain enrich-free).
+- Fail-closed: a recognized DeFi/NFT program with an unrecognized instruction
+  stays HOLD (never SIGN). A recognized dangerous instruction adds/escalates
+  severity; it never turns a value-moving instruction into SIGN.
+- All 238 pre-existing tests continue to pass (no regressions).
+
 ## [0.2.0] - 2026-06-22
 
 ### Added

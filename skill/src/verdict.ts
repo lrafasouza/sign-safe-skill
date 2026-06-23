@@ -26,22 +26,196 @@
  * and returns a fail-closed REJECT verdict rather than throwing.
  */
 
-import { DecodeError, decodeInput } from "./decode.ts";
+import { DecodeError, decodeInput, base58Encode } from "./decode.ts";
 import { deriveRoles, hasUnverifiedRoles, RESERVED_ACCOUNT_KEYS } from "./roles.ts";
 import { classify } from "./classify.ts";
 import { computeOutflow } from "./outflow.ts";
 import { assertNoBannedPhrase, findBannedPhrase } from "./banned.ts";
 import { isSquadsVaultExecute, decodeVaultTransaction } from "./squads.ts";
 import { classifyInnerInstructions } from "./classify-inner.ts";
+import { screenAddresses, type ScreenHit } from "./reputation.ts";
 import {
   DEFAULT_CONTEXT,
   type Decision,
+  type DecodedMessage,
   type Finding,
   type Severity,
   type StaticOutflow,
   type Verdict,
   type VerdictContext,
 } from "./types.ts";
+
+/**
+ * Format a lamport amount as a human-readable SOL string.
+ * Keeps exact integer representation; shows SOL only when >= 1 SOL.
+ */
+function lamportsToDisplay(lamports: string): string {
+  const n = BigInt(lamports);
+  const sol = n / 1_000_000_000n;
+  const rem = n % 1_000_000_000n;
+  if (sol > 0n && rem === 0n) return `${sol} SOL`;
+  if (sol > 0n) return `${lamports} lamports (~${sol} SOL)`;
+  return `${lamports} lamports`;
+}
+
+/**
+ * Build a short recipient summary string for SOL outflows in the SIGN reason.
+ * Returns null if there is nothing to surface (no lamport transfers).
+ */
+function buildSignRecipientNote(outflow: StaticOutflow): string | null {
+  const transfers = outflow.lamportTransfers;
+  const splTransfers = outflow.splTransfers;
+  const parts: string[] = [];
+
+  for (const t of transfers) {
+    const to = t.toUnresolved
+      ? "unresolved ALT address"
+      : (t.to ?? "unknown");
+    parts.push(`sends ${lamportsToDisplay(t.amount)} to ${to}`);
+  }
+
+  for (const s of splTransfers) {
+    const dst = s.destination;
+    const to = dst.addressUnresolved ? "unresolved ALT address" : (dst.address ?? "unknown");
+    parts.push(`sends ${s.amount} token units to ${to}`);
+  }
+
+  if (parts.length === 0) return null;
+  return parts.join("; ") + ".";
+}
+
+/**
+ * Build a short recipient summary for SOL outflow threshold HOLD reasons.
+ * Returns null if there are no lamport transfers to surface.
+ */
+function buildLamportRecipientSummary(outflow: StaticOutflow): string | null {
+  const transfers = outflow.lamportTransfers;
+  if (transfers.length === 0) return null;
+  const parts = transfers.map((t) => {
+    const to = t.toUnresolved ? "unresolved ALT address" : (t.to ?? "unknown");
+    return `to ${to}`;
+  });
+  return parts.join(", ");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Reputation screening helpers (PURE, offline)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const SPL_TOKEN_PID = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+const TOKEN_2022_PID = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
+const SYSTEM_PID = "11111111111111111111111111111111";
+
+/**
+ * Extract all addresses that should be screened against a blocklist from the
+ * decoded message + computed outflow. Returns candidate objects for
+ * screenAddresses(). PURE.
+ *
+ * Addresses collected:
+ *   - Transfer recipients (SOL lamport transfers) → category "recipient"
+ *   - SPL transfer destinations → category "recipient"
+ *   - SPL Approve/ApproveChecked delegate (accounts[1] / accounts[2]) → "delegate"
+ *   - SetAuthority new_authority from data (data[3..35]) → "new-authority"
+ *   - System Assign new owner from data (data[4..36]) → "new-authority"
+ */
+function collectScreenCandidates(
+  msg: DecodedMessage,
+  outflow: StaticOutflow,
+): Array<{ address: string | null; category: ScreenHit["category"]; instructionIndex: number }> {
+  const candidates: Array<{
+    address: string | null;
+    category: ScreenHit["category"];
+    instructionIndex: number;
+  }> = [];
+
+  // 1. SOL transfer recipients
+  for (const t of outflow.lamportTransfers) {
+    candidates.push({
+      address: t.to,
+      category: "recipient",
+      instructionIndex: t.instructionIndex,
+    });
+  }
+
+  // 2. SPL transfer destinations
+  for (const s of outflow.splTransfers) {
+    candidates.push({
+      address: s.destination.address,
+      category: "recipient",
+      instructionIndex: s.instructionIndex,
+    });
+  }
+
+  // 3. Scan instructions for Approve (disc 4) / ApproveChecked (disc 13)
+  //    and SetAuthority (disc 6) on SPL Token / Token-2022, plus System Assign.
+  msg.instructions.forEach((ix, instructionIndex) => {
+    const pid = ix.programId;
+    const data = ix.data;
+    if (data.length === 0) return;
+
+    const disc = data[0] as number;
+
+    if (pid === SPL_TOKEN_PID || pid === TOKEN_2022_PID) {
+      // Approve (disc=4): accounts[0]=source, accounts[1]=delegate, accounts[2]=owner
+      // ApproveChecked (disc=13): accounts[0]=source, accounts[1]=mint, accounts[2]=delegate, accounts[3]=owner
+      if (disc === 4 && data.length >= 9) {
+        // Approve: delegate is accounts[1]
+        const delegateIdx = ix.accountIndexes[1];
+        const addr =
+          delegateIdx !== undefined && delegateIdx < msg.staticAccountKeys.length
+            ? (msg.staticAccountKeys[delegateIdx] ?? null)
+            : null;
+        candidates.push({ address: addr, category: "delegate", instructionIndex });
+      } else if (disc === 13 && data.length >= 10) {
+        // ApproveChecked: delegate is accounts[2]
+        const delegateIdx = ix.accountIndexes[2];
+        const addr =
+          delegateIdx !== undefined && delegateIdx < msg.staticAccountKeys.length
+            ? (msg.staticAccountKeys[delegateIdx] ?? null)
+            : null;
+        candidates.push({ address: addr, category: "delegate", instructionIndex });
+      } else if (disc === 6 && data.length >= 3) {
+        // SetAuthority (disc=6): new_authority in data bytes [3..35] when COption=Some (flag=1 at data[2])
+        const optionFlag = data[2] as number;
+        if (optionFlag === 1 && data.length >= 35) {
+          const newAuthority = base58Encode(data.subarray(3, 35));
+          candidates.push({ address: newAuthority, category: "new-authority", instructionIndex });
+        }
+      }
+    } else if (pid === SYSTEM_PID && data.length >= 4) {
+      // System Assign (u32 LE tag=1): new owner pubkey at data[4..36]
+      const tag =
+        ((data[0] as number) |
+          ((data[1] as number) << 8) |
+          ((data[2] as number) << 16) |
+          ((data[3] as number) << 24)) >>>
+        0;
+      if (tag === 1 && data.length >= 36) {
+        const newOwner = base58Encode(data.subarray(4, 36));
+        candidates.push({ address: newOwner, category: "new-authority", instructionIndex });
+      }
+    }
+  });
+
+  return candidates;
+}
+
+/**
+ * Convert ScreenHit[] produced by screenAddresses() into Finding[] entries
+ * with severity REJECT. One finding per hit. PURE.
+ */
+function screenHitsToFindings(hits: ScreenHit[]): Finding[] {
+  return hits.map((hit) => ({
+    id: "blocklisted-recipient",
+    label: `${hit.category === "delegate" ? "Delegate" : hit.category === "new-authority" ? "New authority" : "Recipient"} on the provided drainer blocklist: ${hit.address}`,
+    severity: "REJECT" as const,
+    instructionIndex: hit.instructionIndex,
+    programId: "",
+    detail: `Address ${hit.address} (role: ${hit.category}) appears in the provided drainer blocklist. This is a known malicious address. Do not sign.`,
+    mapsToLoss:
+      "Sending value or authority to a known drainer/scammer address results in immediate, irreversible loss.",
+  }));
+}
 
 const SEVERITY_RANK: Record<Severity, number> = { INFO: 0, HOLD: 1, REJECT: 2 };
 
@@ -246,13 +420,25 @@ export function buildVerdict(args: {
       );
     }
     if (outflow.exceedsLamportThreshold) {
-      reasons.push(`declared SOL outflow ${outflow.lamports} lamports exceeds threshold`);
+      const recipientSummary = buildLamportRecipientSummary(outflow);
+      if (recipientSummary) {
+        reasons.push(
+          `declared SOL outflow ${outflow.lamports} lamports exceeds threshold (${recipientSummary})`,
+        );
+      } else {
+        reasons.push(`declared SOL outflow ${outflow.lamports} lamports exceeds threshold`);
+      }
     }
     reason = `Manual review required: ${reasons.join("; ")}.`;
   } else {
     decision = "SIGN";
-    reason =
-      "Recognized instructions within thresholds; no danger primitives, unknown programs, or unverified ALT references. Not a guarantee of intent -- verify the recipients and amounts yourself.";
+    const signRecipientNote = buildSignRecipientNote(outflow);
+    if (signRecipientNote) {
+      reason = `Recognized instructions within thresholds; no danger primitives, unknown programs, or unverified ALT references. ${signRecipientNote} Not a guarantee of intent -- verify the recipients and amounts yourself.`;
+    } else {
+      reason =
+        "Recognized instructions within thresholds; no danger primitives, unknown programs, or unverified ALT references. Not a guarantee of intent -- verify the recipients and amounts yourself.";
+    }
   }
 
   // If the caller handed us a full signed transaction, say so plainly. The
@@ -310,7 +496,13 @@ export function rejectVerdict(reason: string): Verdict {
     messageVersion: "legacy",
     worstSeverity: "REJECT",
     findings: [],
-    outflow: { lamports: "0", splTransfers: [], exceedsLamportThreshold: false },
+    outflow: {
+      lamports: "0",
+      splTransfers: [],
+      exceedsLamportThreshold: false,
+      lamportTransfers: [],
+      outboundToNonSigner: false,
+    },
     flags: {
       unknownProgramPresent: false,
       altLookupsPresent: false,
@@ -389,6 +581,42 @@ export function reviewBase64(
           "VaultTransaction PDA bytes were provided but failed to parse (malformed, truncated, or tampered). The inner instruction(s) executed via CPI are unknown. Do not sign until the PDA can be fetched and verified.",
         mapsToLoss:
           "A tampered or unreadable VaultTransaction PDA is indistinguishable from a hidden authority transfer or fund drain. Treat it as unverified.",
+      });
+    }
+
+    // ── FEATURE 3a: Address-reputation screening (blocklist, PURE, offline) ──
+    // When ctx.recipientBlocklist is provided, screen all transfer recipients,
+    // Approve delegates, and SetAuthority new-authorities against it. Any hit
+    // becomes a REJECT finding "blocklisted-recipient". No-op when no blocklist.
+    if (ctx.recipientBlocklist !== undefined) {
+      const blocklistSet: ReadonlySet<string> =
+        ctx.recipientBlocklist instanceof Set
+          ? ctx.recipientBlocklist
+          : new Set(ctx.recipientBlocklist);
+
+      const candidates = collectScreenCandidates(msg, outflow);
+      const hits = screenAddresses(candidates, blocklistSet);
+      const reputationFindings = screenHitsToFindings(hits);
+      topLevelFindings.push(...reputationFindings);
+    }
+
+    // ── FEATURE 3b: holdOutboundTransfers policy flag ──
+    // When ctx.holdOutboundTransfers is true AND any transfer goes to a
+    // non-signer recipient, inject a HOLD finding. Escalate-only: this finding
+    // is a HOLD; it cannot downgrade a REJECT or override a higher-severity
+    // finding already in place. Self-transfers (outboundToNonSigner=false) are
+    // unaffected. Default (false) leaves transfer verdicts unchanged.
+    if (ctx.holdOutboundTransfers && outflow.outboundToNonSigner) {
+      topLevelFindings.push({
+        id: "policy-outbound-transfer",
+        label: "Outbound transfer to non-signer: manual review required by policy",
+        severity: "HOLD",
+        instructionIndex: -1,
+        programId: "",
+        detail:
+          "This transaction sends value to at least one recipient that is not a signer of the message (an external address). The holdOutboundTransfers policy is enabled: all outbound transfers require manual review before signing.",
+        mapsToLoss:
+          "Outbound transfers to external addresses can move funds to an attacker if the recipient address is attacker-controlled.",
       });
     }
 

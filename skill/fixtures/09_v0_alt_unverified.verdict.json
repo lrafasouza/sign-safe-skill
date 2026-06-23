@@ -8,7 +8,17 @@
   "outflow": {
     "lamports": "10000000",
     "splTransfers": [],
-    "exceedsLamportThreshold": false
+    "exceedsLamportThreshold": false,
+    "lamportTransfers": [
+      {
+        "instructionIndex": 0,
+        "to": null,
+        "toUnresolved": true,
+        "amount": "10000000",
+        "outboundToNonSigner": true
+      }
+    ],
+    "outboundToNonSigner": true
   },
   "flags": {
     "unknownProgramPresent": false,
