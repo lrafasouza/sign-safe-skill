@@ -55,6 +55,12 @@ export interface ParsedArgs {
    * Suitable for institutional or high-value signers who prefer fail-closed.
    */
   strict?: boolean;
+  /**
+   * When true, run simulateTransaction to verify economic outcomes.
+   * Requires --rpc. If --simulate is given without --rpc, the CLI REJECTS
+   * with a clear message (fail-closed: simulation without an RPC is impossible).
+   */
+  simulate?: boolean;
 }
 
 /**
@@ -97,6 +103,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
   let rpcUrl: string | undefined;
   let vaultPda: string | undefined;
   let strict: boolean | undefined;
+  let simulate: boolean | undefined;
 
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -106,6 +113,8 @@ export function parseArgs(argv: string[]): ParsedArgs {
       digestOnly = true;
     } else if (a === "--strict") {
       strict = true;
+    } else if (a === "--simulate") {
+      simulate = true;
     } else if (a === "--threshold") {
       const v = argv[++i];
       if (v === undefined || !/^\d+$/.test(v)) {
@@ -137,7 +146,15 @@ export function parseArgs(argv: string[]): ParsedArgs {
       file = a;
     }
   }
-  return { file, threshold, jsonOnly, digestOnly, rpcUrl, vaultPda, strict };
+  // Validate: --simulate requires --rpc. Fail-closed: reject before any network.
+  if (simulate && rpcUrl === undefined) {
+    throw new Error(
+      "--simulate requires --rpc <url>: simulation needs a JSON-RPC endpoint to call simulateTransaction. " +
+        "Provide --rpc <url> alongside --simulate.",
+    );
+  }
+
+  return { file, threshold, jsonOnly, digestOnly, rpcUrl, vaultPda, strict, simulate };
 }
 
 function readInput(file: string | undefined): string {
@@ -249,7 +266,7 @@ async function main(): Promise<void> {
       // Online enrichment path: fetch ALT/Squads/mint accounts via RPC.
       // These imports are deferred here so they are NEVER loaded in the pure
       // offline path -- rpc.ts and review-online.ts are host-layer only.
-      const { makeRpcAccountFetcher } = await import("./rpc.ts");
+      const { makeRpcAccountFetcher, makeRpcSimulator } = await import("./rpc.ts");
       const { reviewWithEnrichment } = await import("./review-online.ts");
 
       try {
@@ -275,7 +292,15 @@ async function main(): Promise<void> {
           }
         }
 
-        verdict = await reviewWithEnrichment(b64, ctx, activeFetcher);
+        // Build simulate transport if --simulate flag was given.
+        const simulateFn = args.simulate ? makeRpcSimulator(args.rpcUrl) : undefined;
+
+        verdict = await reviewWithEnrichment(b64, ctx, activeFetcher, {
+          simulate: args.simulate,
+          simulateFn,
+          // Pass rpcUrl for enrichment provenance.
+          rpcUrl: args.rpcUrl,
+        });
       } catch (err) {
         // Any uncaught error in the online path is REJECT (fail-closed).
         const detail = err instanceof Error ? err.message : String(err);

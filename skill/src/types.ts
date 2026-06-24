@@ -250,6 +250,32 @@ export interface Verdict {
   inputWasFullTransaction?: boolean;
   /** Number of stripped signature slots (only set with inputWasFullTransaction). */
   signatureCount?: number;
+  /**
+   * Enrichment provenance: populated ONLY by the host-layer path (review-online.ts).
+   * Never set by the pure offline reviewBase64 path (so golden fixtures stay
+   * byte-identical). Summarizes what facts came from which trusted source.
+   *
+   * TRUST BOUNDARY: facts marked enriched were trusted from the RPC; a compromised
+   * RPC can affect this verdict. The --digest short code covers message bytes only,
+   * NOT enrichment or simulation data.
+   */
+  enrichment?: {
+    /** The RPC endpoint used for on-chain fetches. */
+    rpcUrl: string;
+    /** Number of ALT tables resolved via on-chain fetch. */
+    resolvedAltTables: number;
+    /** True when a Squads VaultTransaction PDA was fetched and decoded. */
+    squadsPdaFetched: boolean;
+    /** Number of Token-2022 mint accounts screened for dangerous extensions. */
+    mintsScreened: number;
+    /** True when the --simulate flag was used to run simulateTransaction. */
+    simulated: boolean;
+    /**
+     * Warning about the trust boundary. Always set when enrichment is present.
+     * Reminds callers that on-chain data is trusted from the RPC endpoint.
+     */
+    trustNote: string;
+  };
 }
 
 /** Tunable context for the verdict (kept explicit so tests are deterministic). */
@@ -331,6 +357,29 @@ export interface VerdictContext {
     string,
     { permanentDelegate?: string; transferHook?: string; nonTransferable?: boolean }
   >;
+  /**
+   * Optional simulation result from `simulateAssetDiff` (host layer).
+   * When present, verdict.ts uses it to detect economic outflows that the
+   * static analysis could not see (swap outputs, CPI-driven transfers, etc.).
+   *
+   * ESCALATE-ONLY: simulation can only ADD or ESCALATE findings. It can never
+   * downgrade a static HOLD/REJECT to SIGN.
+   *
+   * When absent → behavior is byte-identical to pre-simulation verdicts.
+   *
+   * Populated by the host (review-online.ts) after calling simulateAssetDiff.
+   * The core never calls the network itself (offline invariant).
+   *
+   * SimDiff is imported from simulate.ts (host layer) — the core receives only
+   * the plain data object; it never imports simulate.ts.
+   */
+  simulation?: {
+    ok: boolean;
+    err?: string;
+    signerSolDelta: bigint;
+    tokenDeltas: { account: string; mint?: string; owner?: string; delta: bigint }[];
+    outflowsToNonSigner: { to: string; amount: bigint; kind: "sol" | "token" }[];
+  };
   /**
    * When true, enables the maximal fail-closed posture for institutional or
    * high-value signers. Default false (standard two-tier default mode).

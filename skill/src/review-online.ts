@@ -4,8 +4,9 @@
  * ============================ HARD BOUNDARY ============================
  * This module is a HOST LAYER file. It imports from the core but NEVER calls
  * fetch directly. All network access is via the INJECTABLE `fetcher` callback
- * (AccountFetcher). Real fetch lives ONLY in rpc.ts and cli.ts. Tests can
- * supply a frozen stub; the deterministic core modules are unchanged.
+ * (AccountFetcher) and `simulateFn` (SimulateFn). Real fetch lives ONLY in
+ * rpc.ts and cli.ts. Tests can supply a frozen stub; the deterministic core
+ * modules are unchanged.
  * ======================================================================
  *
  * Flow:
@@ -24,19 +25,48 @@
  *      mint account and decode with `decodeMintDangerExtensions`. On fetch null
  *      or decode throw, skip that mint (fail-closed: no downgrade). Build a
  *      `mintExtensions` map and pass to the verdict.
- *   5. Call and return `reviewBase64(b64, { ...ctx, resolvedAltTables, mintExtensions },
- *      vaultTransactionBytes)`.
+ *   5. Simulation (optional): when opts.simulate is true AND a simulateFn is
+ *      provided, call simulateAssetDiff and attach the result as ctx.simulation.
+ *      Fail-closed: any simulate error → ctx.simulation = {ok:false, err} → HOLD.
+ *      Never skip silently when simulation was requested.
+ *   6. Call reviewBase64 with the enriched ctx.
+ *   7. Attach enrichment provenance to the returned verdict (host-layer only).
  */
 
 import { decodeInput } from "./decode.ts";
+import { deriveRoles, RESERVED_ACCOUNT_KEYS } from "./roles.ts";
 import { reviewBase64 } from "./verdict.ts";
 import { decodeAddressLookupTable } from "./alt.ts";
 import { decodeMintDangerExtensions } from "./tlv.ts";
 import { extractVaultTransactionAddress } from "./squads.ts";
+import { simulateAssetDiff } from "./simulate.ts";
+import type { SimulateFn } from "./simulate.ts";
 import type { AccountFetcher } from "./enrich.ts";
 import type { Verdict, VerdictContext } from "./types.ts";
 
 const TOKEN_2022_PID = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
+
+/**
+ * Options for reviewWithEnrichment.
+ */
+export interface ReviewEnrichmentOpts {
+  /**
+   * When true, run simulateTransaction after static analysis to verify
+   * economic outcomes. Requires `simulateFn` to be provided.
+   * Fail-closed: any simulate error → ctx.simulation = {ok:false, err} → HOLD.
+   */
+  simulate?: boolean;
+  /**
+   * Injectable SimulateFn transport for simulation. Required when simulate=true.
+   * Production: makeRpcSimulator(rpcUrl). Tests: frozen stub.
+   */
+  simulateFn?: SimulateFn;
+  /**
+   * The RPC URL, used for enrichment provenance in verdict.enrichment.rpcUrl.
+   * When provided, it is recorded in the verdict for auditability.
+   */
+  rpcUrl?: string;
+}
 
 /**
  * Review a base64-encoded transaction message with online enrichment.
@@ -46,6 +76,7 @@ const TOKEN_2022_PID = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
  *   - Resolve ALT addresses so all roles can be verified.
  *   - Decode the Squads VaultTransaction PDA for inner-instruction analysis.
  *   - Confirm Token-2022 mint danger extensions for any TransferChecked mint.
+ *   - Optionally run simulateTransaction to detect economic outflows (opts.simulate).
  *
  * FAIL-CLOSED: any individual enrichment failure (null account, decode error)
  * is isolated and omitted; it never degrades the verdict below the offline
@@ -55,12 +86,15 @@ const TOKEN_2022_PID = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
  * @param b64      Base64-encoded Solana message or signed transaction.
  * @param ctx      Verdict context (lamport threshold, etc.).
  * @param fetcher  Injectable AccountFetcher. No real fetch happens here.
- * @returns        Promise<Verdict> — the enriched offline verdict.
+ * @param opts     Optional: { simulate, simulateFn } for simulation support.
+ * @returns        Promise<Verdict> — the enriched offline verdict, with
+ *                 provenance in verdict.enrichment.
  */
 export async function reviewWithEnrichment(
   b64: string,
   ctx: VerdictContext,
   fetcher: AccountFetcher,
+  opts: ReviewEnrichmentOpts = {},
 ): Promise<Verdict> {
   // Step 1: Decode. If decode fails, fall back to offline path.
   let decoded: ReturnType<typeof decodeInput>;
@@ -83,8 +117,8 @@ export async function reviewWithEnrichment(
     try {
       const account = await fetcher(lut.accountKey);
       if (account === null) continue; // table not found → omit (fail-closed)
-      const decoded = decodeAddressLookupTable(account.data);
-      resolvedAltTables.set(lut.accountKey, decoded.addresses);
+      const decodedLut = decodeAddressLookupTable(account.data);
+      resolvedAltTables.set(lut.accountKey, decodedLut.addresses);
     } catch {
       // Decode threw: omit this table (fail-closed).
       continue;
@@ -94,12 +128,14 @@ export async function reviewWithEnrichment(
   // Step 3: Squads enrichment.
   // Extract the VaultTransaction PDA address and fetch its bytes.
   let vaultTransactionBytes: Uint8Array | undefined;
+  let squadsPdaFetched = false;
   const vtAddr = extractVaultTransactionAddress(msg);
   if (vtAddr !== null) {
     try {
       const account = await fetcher(vtAddr);
       if (account !== null) {
         vaultTransactionBytes = account.data;
+        squadsPdaFetched = true;
       }
       // If null: leave vaultTransactionBytes undefined → existing HOLD path fires.
     } catch {
@@ -148,12 +184,79 @@ export async function reviewWithEnrichment(
     }
   }
 
-  // Step 5: Assemble enriched context and call the offline verdict.
+  // Step 5: Simulation enrichment (optional).
+  // When opts.simulate is true, run simulateAssetDiff and attach to ctx.simulation.
+  // Fail-closed: any error → ctx.simulation = {ok:false, err} → HOLD in verdict.ts.
+  let simulated = false;
+  let simulationResult: VerdictContext["simulation"] | undefined;
+
+  if (opts.simulate) {
+    simulated = true;
+    if (opts.simulateFn === undefined) {
+      // simulate was requested but no transport provided → fail-closed.
+      simulationResult = {
+        ok: false,
+        err: "simulate requested but no simulateFn transport provided",
+        signerSolDelta: 0n,
+        tokenDeltas: [],
+        outflowsToNonSigner: [],
+      };
+    } else {
+      try {
+        // Derive signer pubkeys from the message.
+        const roles = deriveRoles(msg, {
+          reservedAccountKeys: RESERVED_ACCOUNT_KEYS,
+          resolvedAltTables: resolvedAltTables.size > 0 ? resolvedAltTables : undefined,
+        });
+        const signerPubkeys = roles
+          .filter((r) => r.role === "signer-writable" || r.role === "signer-readonly")
+          .filter((r) => r.addressVerified)
+          .map((r) => r.address);
+
+        const simDiff = await simulateAssetDiff(
+          b64,
+          signerPubkeys,
+          opts.simulateFn,
+          fetcher,
+        );
+        simulationResult = simDiff;
+      } catch (err) {
+        // Fail-closed: any uncaught error → simulation-failed HOLD.
+        simulationResult = {
+          ok: false,
+          err: err instanceof Error ? err.message : String(err),
+          signerSolDelta: 0n,
+          tokenDeltas: [],
+          outflowsToNonSigner: [],
+        };
+      }
+    }
+  }
+
+  // Step 6: Assemble enriched context and call the offline verdict.
   const enrichedCtx: VerdictContext = {
     ...ctx,
     ...(resolvedAltTables.size > 0 ? { resolvedAltTables } : {}),
     ...(mintExtensions.size > 0 ? { mintExtensions } : {}),
+    ...(simulationResult !== undefined ? { simulation: simulationResult } : {}),
   };
 
-  return reviewBase64(b64, enrichedCtx, vaultTransactionBytes);
+  const verdict = reviewBase64(b64, enrichedCtx, vaultTransactionBytes);
+
+  // Step 7: Attach enrichment provenance (host-layer only, never from pure core).
+  // This is the ONLY place verdict.enrichment is populated.
+  const rpcUrl = opts.rpcUrl ?? "unknown";
+
+  verdict.enrichment = {
+    rpcUrl,
+    resolvedAltTables: resolvedAltTables.size,
+    squadsPdaFetched,
+    mintsScreened: candidateMints.size,
+    simulated,
+    trustNote:
+      "Facts marked enriched were trusted from the RPC endpoint; a compromised RPC can affect this verdict. " +
+      "The --digest short code covers message bytes only, NOT enrichment or simulation data.",
+  };
+
+  return verdict;
 }

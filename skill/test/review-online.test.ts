@@ -428,3 +428,65 @@ describe("O5: decode failure falls back to offline reviewBase64", () => {
     expect(verdict.flags.decodeFailed).toBe(true);
   });
 });
+
+// ---------------------------------------------------------------------------
+// v0.5 O6-O9: reviewWithEnrichment enrichment provenance + simulate wiring
+// ---------------------------------------------------------------------------
+
+describe("v0.5 O6: reviewWithEnrichment enrichment provenance", () => {
+  it("O6.1 rpcUrl is recorded in verdict.enrichment when opts.rpcUrl is provided", async () => {
+    const fakeFetcher = async (_pubkey: string) => null;
+    const { legacyBytes, toB64, key } = await import("./helpers.ts");
+    const raw = legacyBytes([1, 0, 1], [0x01, 0x00], []);
+    const b64 = toB64(raw);
+    void key;
+
+    const verdict = await reviewWithEnrichment(b64, DEFAULT_CONTEXT, fakeFetcher, {
+      rpcUrl: "https://test-rpc.example.com",
+    });
+    expect(verdict.enrichment).toBeDefined();
+    expect(verdict.enrichment!.rpcUrl).toBe("https://test-rpc.example.com");
+    expect(verdict.enrichment!.simulated).toBe(false);
+    expect(verdict.enrichment!.trustNote).toContain("--digest");
+  });
+
+  it("O6.2 trustNote always contains warning about RPC trust boundary", async () => {
+    const fakeFetcher = async (_pubkey: string) => null;
+    const { legacyBytes, toB64 } = await import("./helpers.ts");
+    const raw = legacyBytes([1, 0, 1], [0x01, 0x00], []);
+    const b64 = toB64(raw);
+
+    const verdict = await reviewWithEnrichment(b64, DEFAULT_CONTEXT, fakeFetcher, {
+      rpcUrl: "https://api.mainnet-beta.solana.com",
+    });
+    expect(verdict.enrichment!.trustNote).toContain("compromised RPC");
+    expect(verdict.enrichment!.trustNote).toContain("enrichment");
+  });
+
+  it("O6.3 offline reviewBase64 never sets verdict.enrichment (golden fixtures unaffected)", async () => {
+    // Pure offline path: enrichment is NEVER set by reviewBase64.
+    // Covered in detail by simulate.test.ts S8.3; this test confirms from the
+    // review-online suite that only the host-layer path sets enrichment.
+    const { reviewBase64 } = await import("../src/verdict.ts");
+    const { legacyBytes, toB64 } = await import("./helpers.ts");
+    const raw = legacyBytes([1, 0, 1], [0x01, 0x00], []);
+    const b64 = toB64(raw);
+    const verdict = reviewBase64(b64, DEFAULT_CONTEXT);
+    // The pure offline path must NEVER set enrichment.
+    expect(verdict.enrichment).toBeUndefined();
+  });
+});
+
+describe("v0.5 O7: reviewWithEnrichment resolvedAltTables/mintsScreened in enrichment", () => {
+  it("O7.1 resolvedAltTables count matches the number of ALT tables successfully fetched", async () => {
+    // v0 message with 0 ALT lookups → resolvedAltTables=0
+    const { legacyBytes, toB64 } = await import("./helpers.ts");
+    const raw = legacyBytes([1, 0, 1], [0x01, 0x00], []);
+    const b64 = toB64(raw);
+    const fakeFetcher = async (_pubkey: string) => null;
+    const verdict = await reviewWithEnrichment(b64, DEFAULT_CONTEXT, fakeFetcher, {
+      rpcUrl: "https://api.mainnet-beta.solana.com",
+    });
+    expect(verdict.enrichment!.resolvedAltTables).toBe(0);
+  });
+});

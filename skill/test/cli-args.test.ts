@@ -101,3 +101,38 @@ describe("C_STRICT: parseArgs --strict flag", () => {
     expect(result.strict).toBeUndefined();
   });
 });
+
+// ---------------------------------------------------------------------------
+// v0.5: --simulate flag parsing
+// ---------------------------------------------------------------------------
+
+describe("v0.5 C_SIMULATE: parseArgs --simulate flag", () => {
+  it("C14 --simulate without --rpc throws (fail-closed: simulation needs RPC)", () => {
+    expect(() => parseArgs(["--simulate"])).toThrow(/--rpc/i);
+  });
+
+  it("C15 --simulate with --rpc parses correctly", () => {
+    const result = parseArgs(["--simulate", "--rpc", "https://api.mainnet-beta.solana.com"]);
+    expect(result.simulate).toBe(true);
+    expect(result.rpcUrl).toBe("https://api.mainnet-beta.solana.com");
+  });
+
+  it("C16 --simulate is undefined when not provided", () => {
+    const result = parseArgs(["--rpc", "https://api.mainnet-beta.solana.com"]);
+    expect(result.simulate).toBeUndefined();
+  });
+
+  it("C17 --simulate with --rpc and other flags composes correctly", () => {
+    const result = parseArgs([
+      "msg.b64",
+      "--rpc", "https://api.mainnet-beta.solana.com",
+      "--simulate",
+      "--strict",
+      "--threshold", "2000000000",
+    ]);
+    expect(result.simulate).toBe(true);
+    expect(result.strict).toBe(true);
+    expect(result.threshold).toBe(2_000_000_000);
+    expect(result.rpcUrl).toBe("https://api.mainnet-beta.solana.com");
+  });
+});

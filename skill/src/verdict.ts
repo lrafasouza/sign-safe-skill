@@ -744,6 +744,79 @@ export function reviewBase64(
       }
     }
 
+    // ── FEATURE P2: Simulation-based economic outflow findings ──
+    // When ctx.simulation is provided (set by the host after simulateAssetDiff),
+    // fold it into findings. ESCALATE-ONLY: simulation can only ADD findings.
+    //
+    // Cases:
+    //   1. simulation.ok === false AND simulation was requested → HOLD
+    //      "simulation-failed": economic outcome unverified.
+    //   2. simulation.ok === true AND signer loses SOL/tokens to non-signers
+    //      beyond what static analysis already flagged → HOLD "simulation-outflow"
+    //      (REJECT if a blocklisted recipient is among sim outflows).
+    if (ctx.simulation !== undefined) {
+      const sim = ctx.simulation;
+      if (!sim.ok) {
+        // Simulation was requested but could not complete → fail-closed HOLD.
+        topLevelFindings.push({
+          id: "simulation-failed",
+          label: "Transaction simulation requested but could not complete — economic outcome unverified",
+          severity: "HOLD",
+          instructionIndex: -1,
+          programId: "",
+          detail:
+            `A simulateTransaction call was requested to verify economic outcomes, but it failed: ` +
+            (sim.err ?? "unknown error") +
+            `. The actual token/SOL balances after signing cannot be verified. ` +
+            `Do not sign when the economic outcome is unknown.`,
+          mapsToLoss:
+            "Unverified economic outcomes may hide swap-output manipulation, CPI-driven fund drains, " +
+            "or other side effects not visible in the static instruction analysis.",
+        });
+      } else {
+        // Simulation succeeded: check for SOL outflows to non-signers.
+        const hasStaticOutflow = outflow.outboundToNonSigner || outflow.exceedsLamportThreshold;
+        const simHasOutflow = sim.outflowsToNonSigner.length > 0;
+        const simSolLoss = sim.signerSolDelta < 0n;
+
+        if (simHasOutflow || (simSolLoss && !hasStaticOutflow)) {
+          // Determine severity: REJECT if any outflow recipient appears in the blocklist.
+          let severity: Severity = "HOLD";
+          if (ctx.recipientBlocklist !== undefined) {
+            const blocklistSet: ReadonlySet<string> =
+              ctx.recipientBlocklist instanceof Set
+                ? ctx.recipientBlocklist
+                : new Set(ctx.recipientBlocklist);
+            const anyBlocklisted = sim.outflowsToNonSigner.some(
+              (o) => o.to !== "_non-signer_" && blocklistSet.has(o.to),
+            );
+            if (anyBlocklisted) severity = "REJECT";
+          }
+
+          const solLoss = sim.signerSolDelta < 0n ? ` Net signer SOL delta: ${sim.signerSolDelta.toString()} lamports.` : "";
+          const outflowCount = sim.outflowsToNonSigner.length;
+
+          topLevelFindings.push({
+            id: "simulation-outflow",
+            label: `Simulation detected ${outflowCount} outflow(s) from signer to non-signer account(s)`,
+            severity,
+            instructionIndex: -1,
+            programId: "",
+            detail:
+              `Transaction simulation shows the signer's assets being transferred to ` +
+              `non-signer account(s): ${outflowCount} outflow event(s) detected.` +
+              solLoss +
+              ` This may represent swap outputs, CPI-driven transfers, or other ` +
+              `dynamic effects not fully visible in the static instruction analysis. ` +
+              `Verify the recipients and amounts against your intent before signing.`,
+            mapsToLoss:
+              "Simulation-detected outflows to non-signers may represent fund drains, " +
+              "manipulated swap outputs, or CPI transfers to attacker-controlled addresses.",
+          });
+        }
+      }
+    }
+
     return buildVerdict({
       messageVersion: msg.version,
       findings: topLevelFindings,
