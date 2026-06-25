@@ -1,6 +1,7 @@
 {
   "schema": "sign-safe/verdict@1",
   "decision": "HOLD",
+  "requiresHumanReview": true,
   "reason": "Manual review required: unknown program writing to a value-bearing account: CJfRUQxyonG6B5mnztsNUqxknbFT89DJdrdrzV9F96mU (use --strict to reject).",
   "messageVersion": "legacy",
   "worstSeverity": "INFO",
@@ -18,7 +19,5 @@
     "rolesUnverified": false,
     "decodeFailed": false
   },
-  "unknownPrograms": [
-    "CJfRUQxyonG6B5mnztsNUqxknbFT89DJdrdrzV9F96mU"
-  ]
+  "unknownPrograms": ["CJfRUQxyonG6B5mnztsNUqxknbFT89DJdrdrzV9F96mU"]
 }

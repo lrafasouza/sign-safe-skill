@@ -254,6 +254,7 @@ function screenHitsToFindings(hits: ScreenHit[]): Finding[] {
     id: "blocklisted-recipient",
     label: `${hit.category === "delegate" ? "Delegate" : hit.category === "new-authority" ? "New authority" : "Recipient"} on the provided drainer blocklist: ${hit.address}`,
     severity: "REJECT" as const,
+    category: "screening" as const,
     instructionIndex: hit.instructionIndex,
     programId: "",
     detail: `Address ${hit.address} (role: ${hit.category}) appears in the provided drainer blocklist. This is a known malicious address. Do not sign.`,
@@ -365,6 +366,7 @@ export function buildVerdict(args: {
       id: "squads-execute-unverified",
       label: "Squads vaultTransactionExecute: inner content not provided",
       severity: "HOLD",
+      category: "squads",
       instructionIndex: -1,
       programId: "SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf",
       detail:
@@ -556,6 +558,7 @@ export function buildVerdict(args: {
   const verdict: Verdict = {
     schema: "sign-safe/verdict@1",
     decision,
+    requiresHumanReview: decision !== "SIGN",
     reason,
     messageVersion,
     worstSeverity: worst,
@@ -594,6 +597,7 @@ export function rejectVerdict(reason: string): Verdict {
   return enforceBannedPhrases({
     schema: "sign-safe/verdict@1",
     decision: "REJECT",
+    requiresHumanReview: true,
     reason: safeReason,
     messageVersion: "legacy",
     worstSeverity: "REJECT",
@@ -689,6 +693,7 @@ export function reviewBase64(
         label:
           "Squads VaultTransaction PDA: supplied bytes could not be decoded",
         severity: "HOLD",
+        category: "squads",
         instructionIndex: -1,
         programId: "SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf",
         detail:
@@ -726,6 +731,7 @@ export function reviewBase64(
         label:
           "Outbound transfer to non-signer: manual review required by policy",
         severity: "HOLD",
+        category: "policy",
         instructionIndex: -1,
         programId: "",
         detail:
@@ -764,6 +770,7 @@ export function reviewBase64(
             id: "token2022-permanent-delegate",
             label: `Token-2022 mint has a permanent delegate: ${mintAddr}`,
             severity: "HOLD",
+            category: "token-2022-extension",
             instructionIndex: -1,
             programId: "",
             detail:
@@ -783,6 +790,7 @@ export function reviewBase64(
             id: "token2022-transfer-hook",
             label: `Token-2022 mint has a transfer hook program: ${mintAddr}`,
             severity: "HOLD",
+            category: "token-2022-extension",
             instructionIndex: -1,
             programId: "",
             detail:
@@ -816,6 +824,7 @@ export function reviewBase64(
           label:
             "Transaction simulation requested but could not complete — economic outcome unverified",
           severity: "HOLD",
+          category: "simulation",
           instructionIndex: -1,
           programId: "",
           detail:
@@ -855,6 +864,7 @@ export function reviewBase64(
             id: "simulation-outflow",
             label: `Simulation detected ${outflowCount} outflow(s) from signer to non-signer account(s)`,
             severity,
+            category: "simulation",
             instructionIndex: -1,
             programId: "",
             detail:

@@ -1,6 +1,7 @@
 {
   "schema": "sign-safe/verdict@1",
   "decision": "REJECT",
+  "requiresHumanReview": true,
   "reason": "Contains a REJECT-class danger primitive: BPF Loader Upgradeable: Upgrade.",
   "messageVersion": "legacy",
   "worstSeverity": "REJECT",
@@ -9,6 +10,7 @@
       "id": "bpf-upgrade",
       "label": "BPF Loader Upgradeable: Upgrade",
       "severity": "REJECT",
+      "category": "program-upgrade",
       "instructionIndex": 0,
       "programId": "BPFLoaderUpgradeab1e11111111111111111111111",
       "detail": "Matched Upgrade on bpf-loader-upgradeable.",

@@ -1,6 +1,7 @@
 {
   "schema": "sign-safe/verdict@1",
   "decision": "HOLD",
+  "requiresHumanReview": true,
   "reason": "Manual review required: HOLD-class primitive(s): Token-2022 PermanentDelegate (configure/use).",
   "messageVersion": "legacy",
   "worstSeverity": "HOLD",
@@ -9,6 +10,7 @@
       "id": "token2022-permanent-delegate",
       "label": "Token-2022 PermanentDelegate (configure/use)",
       "severity": "HOLD",
+      "category": "token-2022-extension",
       "instructionIndex": 0,
       "programId": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
       "detail": "Matched PermanentDelegate on token-2022.",

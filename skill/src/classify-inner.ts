@@ -107,6 +107,7 @@ export function classifyInnerInstruction(
         id: "squads-inner-unresolved",
         label: "Squads inner instruction: program id unresolved (ALT lookup)",
         severity: "HOLD",
+        category: "squads",
         instructionIndex: innerIndex,
         programId: "squads-inner:unresolved",
         detail:
@@ -137,6 +138,7 @@ export function classifyInnerInstruction(
         id: `anchor-inner-${entry.name}`,
         label: `${entry.label} [inner, via Squads vault]`,
         severity: entry.severity,
+        category: "squads",
         instructionIndex: innerIndex,
         programId: pid,
         detail:
@@ -159,6 +161,7 @@ export function classifyInnerInstruction(
       id: "squads-inner-opaque",
       label: "Squads inner instruction: opaque (uncatalogued program)",
       severity: "HOLD",
+      category: "squads",
       instructionIndex: innerIndex,
       programId: pid,
       detail:

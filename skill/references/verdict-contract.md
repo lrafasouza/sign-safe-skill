@@ -10,6 +10,7 @@ which is a **pure function** of the decoded message and a tunable context.
 {
   "schema": "sign-safe/verdict@1",
   "decision": "SIGN" | "HOLD" | "REJECT",
+  "requiresHumanReview": false,       // true for HOLD/REJECT; false for SIGN
   "reason": "string",                 // qualified, factual; never reassuring
   "messageVersion": "legacy" | 0,
   "worstSeverity": "INFO" | "HOLD" | "REJECT",
@@ -18,6 +19,7 @@ which is a **pure function** of the decoded message and a tunable context.
       "id": "string",                 // catalog id, or synthetic id
       "label": "string",
       "severity": "INFO" | "HOLD" | "REJECT",
+      "category": "string",           // closed FindingCategory taxonomy
       "instructionIndex": 0,
       "programId": "base58",
       "detail": "string",
@@ -41,6 +43,23 @@ which is a **pure function** of the decoded message and a tunable context.
   "unknownPrograms": ["base58", ...]
 }
 ```
+
+`requiresHumanReview` is the single agent-gating boolean: it is `false` only
+when `decision === "SIGN"`, and `true` when the decision is `HOLD` or `REJECT`.
+
+`Finding.category` is one of:
+
+`authority-change`, `ownership-transfer`, `value-outflow`,
+`delegate-approval`, `token-operation`, `token-2022-extension`,
+`program-upgrade`, `durable-nonce`, `unknown-program`, `screening`,
+`simulation`, `structural`, `squads`, `program-interaction`, or `policy`.
+
+### Forward compatibility
+
+The schema is additive within `sign-safe/verdict@1`. Consumers must ignore
+unknown object fields and tolerate unknown future `category` values rather than
+rejecting or mis-parsing the entire verdict. Security gates should continue to
+use `decision` or `requiresHumanReview` as the authoritative action signal.
 
 ## Decision rules (deterministic, worst-severity wins)
 

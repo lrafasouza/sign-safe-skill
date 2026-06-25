@@ -18,7 +18,13 @@ export { decodeInput } from "./decode.ts";
  */
 export { DEFAULT_CONTEXT } from "./types.ts";
 
-export type { Finding, Verdict, VerdictContext } from "./types.ts";
+export { FINDING_CATEGORIES } from "./types.ts";
+export type {
+  Finding,
+  FindingCategory,
+  Verdict,
+  VerdictContext,
+} from "./types.ts";
 export type { AccountFetcher } from "./enrich.ts";
 export type { ReviewEnrichmentOpts } from "./review-online.ts";
 export type { SimulateFn } from "./simulate.ts";

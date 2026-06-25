@@ -125,7 +125,10 @@ function buildMessage(
 // ---------------------------------------------------------------------------
 
 const DEFAULT_CTX: VerdictContext = { lamportThreshold: 1_000_000_000 };
-const STRICT_CTX: VerdictContext = { lamportThreshold: 1_000_000_000, strict: true };
+const STRICT_CTX: VerdictContext = {
+  lamportThreshold: 1_000_000_000,
+  strict: true,
+};
 
 // ---------------------------------------------------------------------------
 // S1: Unknown program writing to a value-bearing account
@@ -173,7 +176,10 @@ describe("S1: unknown program + writable account — default HOLD, strict REJECT
   });
 
   it("S1.5 neither mode ever SIGNs when unknown program writes to value account", () => {
-    const vDefault = reviewBase64(toB64(buildUnknownWritableMsg()), DEFAULT_CTX);
+    const vDefault = reviewBase64(
+      toB64(buildUnknownWritableMsg()),
+      DEFAULT_CTX,
+    );
     const vStrict = reviewBase64(toB64(buildUnknownWritableMsg()), STRICT_CTX);
     expect(vDefault.decision).not.toBe("SIGN");
     expect(vStrict.decision).not.toBe("SIGN");
@@ -197,7 +203,7 @@ describe("S2: durable-nonce + HOLD-class-only — default HOLD, strict REJECT", 
       [1, 0, 1],
       [1, SYSTEM, JUPITER_V6, 3],
       [
-        { prog: 1, accts: [3, 0], data: u32le(4) },    // ix0: AdvanceNonce (System=idx1)
+        { prog: 1, accts: [3, 0], data: u32le(4) }, // ix0: AdvanceNonce (System=idx1)
         { prog: 2, accts: [0, 3], data: unknownJupDisc }, // ix1: Jupiter unknown-instruction (HOLD)
       ],
     );
@@ -223,7 +229,7 @@ describe("S2: durable-nonce + HOLD-class-only — default HOLD, strict REJECT", 
       [1, 0, 1],
       [1, SYSTEM, UNKNOWN_PROG_FILLER, 3],
       [
-        { prog: 1, accts: [3, 0], data: u32le(4) },     // ix0: AdvanceNonce
+        { prog: 1, accts: [3, 0], data: u32le(4) }, // ix0: AdvanceNonce
         { prog: 2, accts: [0, 3], data: [0x01, 0x02] }, // ix1: unknown prog + writable
       ],
     );
@@ -263,7 +269,7 @@ describe("S3: genuine Drift class (authority/ownership change) — always REJECT
       [1, SYSTEM, 3, SPL_TOKEN],
       [
         { prog: 1, accts: [2, 0], data: u32le(4) }, // ix0 AdvanceNonce
-        { prog: 3, accts: [2, 0], data: setAuth },   // ix1 SetAuthority (REJECT)
+        { prog: 3, accts: [2, 0], data: setAuth }, // ix1 SetAuthority (REJECT)
       ],
     );
   }
@@ -286,7 +292,7 @@ describe("S3: genuine Drift class (authority/ownership change) — always REJECT
       [1, SYSTEM, 3],
       [
         { prog: 1, accts: [2, 0], data: u32le(4) }, // ix0 AdvanceNonce
-        { prog: 1, accts: [2], data: u32le(1) },     // ix1 System Assign (REJECT)
+        { prog: 1, accts: [2], data: u32le(1) }, // ix1 System Assign (REJECT)
       ],
     );
     const v = reviewBase64(toB64(msg), DEFAULT_CTX);
@@ -348,7 +354,10 @@ describe("S4: catalog REJECT-class findings — always REJECT in both modes", ()
       let n = 0n;
       for (const b of recipientKey) n = n * 256n + BigInt(b);
       let s = "";
-      while (n > 0n) { s = A[Number(n % 58n)]! + s; n /= 58n; }
+      while (n > 0n) {
+        s = A[Number(n % 58n)]! + s;
+        n /= 58n;
+      }
       b58 = s;
     }
 
@@ -374,7 +383,10 @@ describe("S4: catalog REJECT-class findings — always REJECT in both modes", ()
       let n = 0n;
       for (const b of recipientKey) n = n * 256n + BigInt(b);
       let s = "";
-      while (n > 0n) { s = A[Number(n % 58n)]! + s; n /= 58n; }
+      while (n > 0n) {
+        s = A[Number(n % 58n)]! + s;
+        n /= 58n;
+      }
       b58 = s;
     }
     const msg = buildMessage(
@@ -407,7 +419,11 @@ describe("S5: recall preserved in DEFAULT mode", () => {
     );
     const v = reviewBase64(toB64(msg), DEFAULT_CTX);
     expect(v.decision).toBe("REJECT");
-    expect(v.findings.some((f) => f.id === "spl-set-authority" && f.severity === "REJECT")).toBe(true);
+    expect(
+      v.findings.some(
+        (f) => f.id === "spl-set-authority" && f.severity === "REJECT",
+      ),
+    ).toBe(true);
   });
 
   it("S5.2 System Assign → still REJECT in DEFAULT", () => {
@@ -419,7 +435,11 @@ describe("S5: recall preserved in DEFAULT mode", () => {
     );
     const v = reviewBase64(toB64(msg), DEFAULT_CTX);
     expect(v.decision).toBe("REJECT");
-    expect(v.findings.some((f) => f.id === "system-assign" && f.severity === "REJECT")).toBe(true);
+    expect(
+      v.findings.some(
+        (f) => f.id === "system-assign" && f.severity === "REJECT",
+      ),
+    ).toBe(true);
   });
 
   it("S5.3 bare durable nonce alone → HOLD in DEFAULT (not REJECT)", () => {
@@ -442,8 +462,14 @@ describe("S5: recall preserved in DEFAULT mode", () => {
       [1, SYSTEM, 3],
       [{ prog: 1, accts: [2, 0], data: u32le(4) }],
     );
-    const defaultGov: VerdictContext = { ...DEFAULT_CTX, governanceContext: true };
-    const strictGov: VerdictContext = { ...STRICT_CTX, governanceContext: true };
+    const defaultGov: VerdictContext = {
+      ...DEFAULT_CTX,
+      governanceContext: true,
+    };
+    const strictGov: VerdictContext = {
+      ...STRICT_CTX,
+      governanceContext: true,
+    };
 
     const vDefault = reviewBase64(toB64(msg), defaultGov);
     const vStrict = reviewBase64(toB64(msg), strictGov);
@@ -477,6 +503,7 @@ describe("S6: strict-vs-default monotone invariant", () => {
       id: "some-hold",
       label: "Some HOLD finding",
       severity: "HOLD",
+      category: "structural",
       instructionIndex: 0,
       programId: "SomeProgramId11111111111111111111111111111111",
       detail: "A HOLD finding that does not escalate in default.",
@@ -504,7 +531,9 @@ describe("S6: strict-vs-default monotone invariant", () => {
       strict: true,
     });
 
-    expect(SEVERITY_ORDER[vStrict.decision]).toBeGreaterThanOrEqual(SEVERITY_ORDER[vDefault.decision]);
+    expect(SEVERITY_ORDER[vStrict.decision]).toBeGreaterThanOrEqual(
+      SEVERITY_ORDER[vDefault.decision],
+    );
     expect(vStrict.decision).not.toBe("SIGN");
   });
 
@@ -514,6 +543,7 @@ describe("S6: strict-vs-default monotone invariant", () => {
       id: "spl-set-authority",
       label: "SPL Token: SetAuthority (AccountOwner change)",
       severity: "REJECT",
+      category: "authority-change",
       instructionIndex: 0,
       programId: SPL_TOKEN,
       detail: "SetAuthority changes the account owner.",
@@ -543,7 +573,9 @@ describe("S6: strict-vs-default monotone invariant", () => {
 
     expect(vDefault.decision).toBe("REJECT");
     expect(vStrict.decision).toBe("REJECT");
-    expect(SEVERITY_ORDER[vStrict.decision]).toBeGreaterThanOrEqual(SEVERITY_ORDER[vDefault.decision]);
+    expect(SEVERITY_ORDER[vStrict.decision]).toBeGreaterThanOrEqual(
+      SEVERITY_ORDER[vDefault.decision],
+    );
   });
 });
 
@@ -572,8 +604,8 @@ describe("S6b: strict + governanceContext combined on durable-nonce + HOLD-class
       [1, 0, 1],
       [1, SYSTEM, JUPITER_V6, 3],
       [
-        { prog: 1, accts: [3, 0], data: u32le(4) },        // ix0: AdvanceNonce
-        { prog: 2, accts: [0, 3], data: unknownJupDisc },  // ix1: Jupiter HOLD-only
+        { prog: 1, accts: [3, 0], data: u32le(4) }, // ix0: AdvanceNonce
+        { prog: 2, accts: [0, 3], data: unknownJupDisc }, // ix1: Jupiter HOLD-only
       ],
     );
   }
@@ -604,7 +636,11 @@ describe("S6b: strict + governanceContext combined on durable-nonce + HOLD-class
   it("S6b.5 strict+governance produces REJECT at least as severe as each alone", () => {
     const strictOnly: VerdictContext = { ...DEFAULT_CTX, strict: true };
     const govOnly: VerdictContext = { ...DEFAULT_CTX, governanceContext: true };
-    const both: VerdictContext = { ...DEFAULT_CTX, strict: true, governanceContext: true };
+    const both: VerdictContext = {
+      ...DEFAULT_CTX,
+      strict: true,
+      governanceContext: true,
+    };
     const ORDER: Record<string, number> = { SIGN: 0, HOLD: 1, REJECT: 2 };
 
     const vStrict = reviewBase64(toB64(buildNoncePlusJupiter()), strictOnly);
@@ -612,9 +648,13 @@ describe("S6b: strict + governanceContext combined on durable-nonce + HOLD-class
     const vBoth = reviewBase64(toB64(buildNoncePlusJupiter()), both);
 
     // Combined must be >= strict alone
-    expect(ORDER[vBoth.decision]!).toBeGreaterThanOrEqual(ORDER[vStrict.decision]!);
+    expect(ORDER[vBoth.decision]!).toBeGreaterThanOrEqual(
+      ORDER[vStrict.decision]!,
+    );
     // Combined must be >= governance alone
-    expect(ORDER[vBoth.decision]!).toBeGreaterThanOrEqual(ORDER[vGov.decision]!);
+    expect(ORDER[vBoth.decision]!).toBeGreaterThanOrEqual(
+      ORDER[vGov.decision]!,
+    );
   });
 });
 

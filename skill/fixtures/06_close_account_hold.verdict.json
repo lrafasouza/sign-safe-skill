@@ -1,6 +1,7 @@
 {
   "schema": "sign-safe/verdict@1",
   "decision": "HOLD",
+  "requiresHumanReview": true,
   "reason": "Manual review required: HOLD-class primitive(s): SPL Token CloseAccount.",
   "messageVersion": "legacy",
   "worstSeverity": "HOLD",
@@ -9,6 +10,7 @@
       "id": "spl-close-account",
       "label": "SPL Token CloseAccount",
       "severity": "HOLD",
+      "category": "value-outflow",
       "instructionIndex": 0,
       "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
       "detail": "Matched CloseAccount on spl-token.",

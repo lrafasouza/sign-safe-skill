@@ -1,6 +1,7 @@
 {
   "schema": "sign-safe/verdict@1",
   "decision": "HOLD",
+  "requiresHumanReview": true,
   "reason": "Manual review required: address-lookup-table references are unresolved, so some account roles are unverified.",
   "messageVersion": 0,
   "worstSeverity": "INFO",

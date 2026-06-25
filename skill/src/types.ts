@@ -20,6 +20,66 @@ export type Decision = "SIGN" | "HOLD" | "REJECT";
 /** Finding severity. INFO never escalates a verdict on its own. */
 export type Severity = "INFO" | "HOLD" | "REJECT";
 
+/** Closed taxonomy for machine-routing findings without parsing ids or prose. */
+export const FINDING_CATEGORIES = [
+  "authority-change",
+  "ownership-transfer",
+  "value-outflow",
+  "delegate-approval",
+  "token-operation",
+  "token-2022-extension",
+  "program-upgrade",
+  "durable-nonce",
+  "unknown-program",
+  "screening",
+  "simulation",
+  "structural",
+  "squads",
+  "program-interaction",
+  "policy",
+] as const;
+
+export type FindingCategory = (typeof FINDING_CATEGORIES)[number];
+
+export type CatalogFindingId =
+  | "spl-set-authority"
+  | "token2022-set-authority"
+  | "token2022-permanent-delegate"
+  | "bpf-upgrade"
+  | "bpf-set-upgrade-authority"
+  | "bpf-set-upgrade-authority-checked"
+  | "bpf-close"
+  | "system-assign"
+  | "system-assign-with-seed"
+  | "system-transfer-with-seed"
+  | "durable-nonce-advance"
+  | "durable-nonce-initialize"
+  | "stake-authorize"
+  | "stake-withdraw"
+  | "spl-approve-delegate"
+  | "spl-close-account"
+  | "token2022-approve-delegate"
+  | "token2022-close-account"
+  | "spl-freeze-account"
+  | "token2022-freeze-account"
+  | "spl-mint-to"
+  | "token2022-mint-to"
+  | "spl-burn"
+  | "token2022-burn"
+  | "spl-withdraw-excess-lamports"
+  | "token2022-withdraw-excess-lamports"
+  | "spl-unwrap-lamports"
+  | "token2022-unwrap-lamports"
+  | "spl-batch"
+  | "token2022-batch"
+  | "token2022-confidential-mint"
+  | "token2022-confidential-burn"
+  | "token2022-withdraw-withheld-fees"
+  | "token2022-confidential-withdraw-withheld-fees"
+  | "token2022-permissioned-burn"
+  | "system-withdraw-nonce"
+  | "system-large-transfer";
+
 /**
  * How an account participates in the transaction.
  *
@@ -120,6 +180,7 @@ export interface Finding {
   id: string;
   label: string;
   severity: Severity;
+  category: FindingCategory;
   /** Index of the instruction that produced this finding. */
   instructionIndex: number;
   programId: string;
@@ -225,6 +286,8 @@ export interface Verdict {
   /** Schema version for the verdict.json contract. */
   schema: "sign-safe/verdict@1";
   decision: Decision;
+  /** True for HOLD/REJECT; false only when an automated gate may proceed with SIGN. */
+  requiresHumanReview: boolean;
   /** Qualified, non-reassuring reason string. */
   reason: string;
   messageVersion: "legacy" | 0;
@@ -355,7 +418,11 @@ export interface VerdictContext {
    */
   mintExtensions?: ReadonlyMap<
     string,
-    { permanentDelegate?: string; transferHook?: string; nonTransferable?: boolean }
+    {
+      permanentDelegate?: string;
+      transferHook?: string;
+      nonTransferable?: boolean;
+    }
   >;
   /**
    * Optional simulation result from `simulateAssetDiff` (host layer).
@@ -377,8 +444,17 @@ export interface VerdictContext {
     ok: boolean;
     err?: string;
     signerSolDelta: bigint;
-    tokenDeltas: { account: string; mint?: string; owner?: string; delta: bigint }[];
-    outflowsToNonSigner: { to: string; amount: bigint; kind: "sol" | "token" }[];
+    tokenDeltas: {
+      account: string;
+      mint?: string;
+      owner?: string;
+      delta: bigint;
+    }[];
+    outflowsToNonSigner: {
+      to: string;
+      amount: bigint;
+      kind: "sol" | "token";
+    }[];
   };
   /**
    * When true, enables the maximal fail-closed posture for institutional or
@@ -410,7 +486,7 @@ export const DEFAULT_CONTEXT: VerdictContext = {
 
 /** Catalog entry shape, mirrored from catalog/danger-primitives.json. */
 export interface CatalogEntry {
-  id: string;
+  id: CatalogFindingId;
   label: string;
   program: string;
   programId: string;

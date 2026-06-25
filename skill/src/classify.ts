@@ -31,9 +31,11 @@ import {
 } from "./registry.ts";
 import type {
   AccountRole,
+  CatalogFindingId,
   CatalogEntry,
   DecodedMessage,
   Finding,
+  FindingCategory,
   VerdictContext,
 } from "./types.ts";
 import { isWritable } from "./roles.ts";
@@ -256,6 +258,50 @@ const DISCRIMINATOR_NAMES: Record<string, string> = {
 const NONCED_TX_MARKER_IX_INDEX = 0;
 const SYSTEM_ADVANCE_NONCE_TAG = 4;
 
+const CATALOG_FINDING_CATEGORIES = {
+  "spl-set-authority": "authority-change",
+  "token2022-set-authority": "authority-change",
+  "token2022-permanent-delegate": "token-2022-extension",
+  "bpf-upgrade": "program-upgrade",
+  "bpf-set-upgrade-authority": "authority-change",
+  "bpf-set-upgrade-authority-checked": "authority-change",
+  "bpf-close": "program-upgrade",
+  "system-assign": "ownership-transfer",
+  "system-assign-with-seed": "ownership-transfer",
+  "system-transfer-with-seed": "value-outflow",
+  "durable-nonce-advance": "durable-nonce",
+  "durable-nonce-initialize": "durable-nonce",
+  "stake-authorize": "authority-change",
+  "stake-withdraw": "value-outflow",
+  "spl-approve-delegate": "delegate-approval",
+  "spl-close-account": "value-outflow",
+  "token2022-approve-delegate": "delegate-approval",
+  "token2022-close-account": "value-outflow",
+  "spl-freeze-account": "token-operation",
+  "token2022-freeze-account": "token-operation",
+  "spl-mint-to": "token-operation",
+  "token2022-mint-to": "token-operation",
+  "spl-burn": "value-outflow",
+  "token2022-burn": "value-outflow",
+  "spl-withdraw-excess-lamports": "value-outflow",
+  "token2022-withdraw-excess-lamports": "value-outflow",
+  "spl-unwrap-lamports": "value-outflow",
+  "token2022-unwrap-lamports": "value-outflow",
+  "spl-batch": "token-operation",
+  "token2022-batch": "token-operation",
+  "token2022-confidential-mint": "token-2022-extension",
+  "token2022-confidential-burn": "token-2022-extension",
+  "token2022-withdraw-withheld-fees": "token-2022-extension",
+  "token2022-confidential-withdraw-withheld-fees": "token-2022-extension",
+  "token2022-permissioned-burn": "token-2022-extension",
+  "system-withdraw-nonce": "value-outflow",
+  "system-large-transfer": "value-outflow",
+} satisfies Readonly<Record<CatalogFindingId, FindingCategory>>;
+
+function catalogFindingCategory(id: CatalogFindingId): FindingCategory {
+  return CATALOG_FINDING_CATEGORIES[id];
+}
+
 /**
  * Build the factual `detail` string for a catalog finding. For multi-variant
  * entries (more than one accepted discriminator) we surface the exact decoded
@@ -356,6 +402,7 @@ export function classify(
             id: `registry-${prog.id}-unknown-instruction`,
             label: `${prog.name}: unrecognized instruction (not individually decoded)`,
             severity: "HOLD",
+            category: "unknown-program",
             instructionIndex,
             programId: pid,
             detail: `Instruction sent to recognized program ${prog.name} (${pid}) but the specific instruction was not decoded. Verify recipients and amounts before signing.`,
@@ -369,6 +416,7 @@ export function classify(
             id: `registry-${prog.id}-danger`,
             label: dangerEntry.label,
             severity: dangerEntry.severity,
+            category: "program-interaction",
             instructionIndex,
             programId: pid,
             detail: `${dangerEntry.label} on ${prog.name} (${pid}). Discriminator matched.`,
@@ -384,6 +432,7 @@ export function classify(
             id: `registry-${prog.id}-safe`,
             label: safeEntry.label,
             severity: "INFO",
+            category: "program-interaction",
             instructionIndex,
             programId: pid,
             detail: `${safeEntry.label} on ${prog.name} (${pid}). Recognized user instruction (clear-signed by registry entry).`,
@@ -396,6 +445,7 @@ export function classify(
             id: `registry-${prog.id}-unknown-instruction`,
             label: `${prog.name}: unrecognized instruction (not individually decoded)`,
             severity: "HOLD",
+            category: "unknown-program",
             instructionIndex,
             programId: pid,
             detail: `Instruction sent to recognized program ${prog.name} (${pid}) but the specific instruction was not decoded. Verify recipients and amounts before signing.`,
@@ -476,6 +526,7 @@ export function classify(
           id: entry.id,
           label: entry.label,
           severity: entry.severity,
+          category: catalogFindingCategory(entry.id),
           instructionIndex,
           programId: pid,
           detail: `System Transfer of ${lamports.toString()} lamports exceeds threshold ${ctx.lamportThreshold}.`,
@@ -496,6 +547,7 @@ export function classify(
             id: entry.id,
             label: entry.label,
             severity: entry.severity, // HOLD
+            category: "durable-nonce",
             instructionIndex,
             programId: pid,
             detail:
@@ -507,6 +559,7 @@ export function classify(
             id: "nonce-advance-noninitial",
             label: "System: AdvanceNonceAccount (not at index 0)",
             severity: "INFO",
+            category: "durable-nonce",
             instructionIndex,
             programId: pid,
             detail: `AdvanceNonceAccount at instruction index ${instructionIndex} (not index 0): this is a routine nonce advance, NOT the durable-nonce marker, so it does not by itself make the transaction non-expiring.`,
@@ -528,6 +581,7 @@ export function classify(
           id: entry.id,
           label: entry.label,
           severity: entry.severity,
+          category: catalogFindingCategory(entry.id),
           instructionIndex,
           programId: pid,
           detail: buildSetAuthorityDetail(
@@ -551,6 +605,7 @@ export function classify(
           id: entry.id,
           label: entry.label,
           severity: entry.severity,
+          category: catalogFindingCategory(entry.id),
           instructionIndex,
           programId: pid,
           detail,
@@ -570,6 +625,7 @@ export function classify(
           id: entry.id,
           label: entry.label,
           severity: ctx.strict ? "REJECT" : entry.severity,
+          category: catalogFindingCategory(entry.id),
           instructionIndex,
           programId: pid,
           detail,
@@ -582,6 +638,7 @@ export function classify(
         id: entry.id,
         label: entry.label,
         severity: entry.severity,
+        category: catalogFindingCategory(entry.id),
         instructionIndex,
         programId: pid,
         detail: buildDetail(
@@ -602,6 +659,7 @@ export function classify(
         id: "stake-unverified-instruction",
         label: "Stake: recognized instruction requiring review",
         severity: "HOLD",
+        category: "structural",
         instructionIndex,
         programId: pid,
         detail:
@@ -613,6 +671,24 @@ export function classify(
       });
     }
   });
+
+  if (durableNonceMarker && msg.header.numRequiredSignatures > 1) {
+    const nonFeePayerSigners = msg.staticAccountKeys.slice(
+      1,
+      msg.header.numRequiredSignatures,
+    );
+    findings.push({
+      id: "durable-nonce-non-fee-payer-signer",
+      label: "Durable-nonce transaction includes a non-fee-payer signer",
+      severity: "HOLD",
+      category: "durable-nonce",
+      instructionIndex: NONCED_TX_MARKER_IX_INDEX,
+      programId: SYSTEM_PROGRAM,
+      detail: `Instruction index 0 is System AdvanceNonceAccount and the transaction requires ${nonFeePayerSigners.length} signer(s) other than fee payer ${msg.staticAccountKeys[0]}. Non-fee-payer signer(s): ${nonFeePayerSigners.join(", ")}. This is a non-expiring transaction in which a separate party can pay fees and retain the signed transaction for later submission.`,
+      mapsToLoss:
+        "A separate fee payer can hold and later submit a durable-nonce transaction authorized by another signer, preserving a stale authority or value-moving action until conditions favor execution.",
+    });
+  }
 
   const authorityOrOwnershipChange = findings.some((f) =>
     AUTHORITY_CHANGE_FINDING_IDS.has(f.id),

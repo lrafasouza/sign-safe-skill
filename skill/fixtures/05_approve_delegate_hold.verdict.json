@@ -1,6 +1,7 @@
 {
   "schema": "sign-safe/verdict@1",
   "decision": "HOLD",
+  "requiresHumanReview": true,
   "reason": "Manual review required: HOLD-class primitive(s): SPL Token Approve / ApproveChecked.",
   "messageVersion": "legacy",
   "worstSeverity": "HOLD",
@@ -9,6 +10,7 @@
       "id": "spl-approve-delegate",
       "label": "SPL Token Approve / ApproveChecked",
       "severity": "HOLD",
+      "category": "delegate-approval",
       "instructionIndex": 0,
       "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
       "detail": "Matched Approve on spl-token; instruction discriminator 4 (Approve).",
