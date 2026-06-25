@@ -774,6 +774,46 @@
           "mapsToLoss": "Changes the status of a DLMM pair (enable/disable). Admin-only; can freeze user funds in the pool."
         }
       ]
+    },
+    {
+      "id": "marginfi-v2",
+      "name": "Marginfi v2",
+      "programId": "MFv2hWf31Z9kbCa1snEPYctwafyhdvnV7FZnsebVacA",
+      "discriminatorScheme": "anchor-8",
+      "description": "Marginfi v2 lending protocol. Account-authority transfers are REJECT; user withdrawals require review.",
+      "safeInstructions": [],
+      "dangerousInstructions": [
+        {
+          "discHex": "1c4f81e7a9454541",
+          "ixName": "transfer_to_new_account",
+          "label": "Marginfi v2: transferToNewAccount (account authority transfer)",
+          "severity": "REJECT",
+          "mapsToLoss": "Migrates the full Marginfi account and its lending positions to a new account controlled by a new authority."
+        },
+        {
+          "discHex": "acd2e0dc92d4fd31",
+          "ixName": "transfer_to_new_account_pda",
+          "label": "Marginfi v2: transferToNewAccountPda (account authority transfer)",
+          "severity": "REJECT",
+          "mapsToLoss": "Migrates the full Marginfi account and its lending positions to a new PDA controlled by a new authority."
+        },
+        {
+          "discHex": "24484a13d2d2c0c0",
+          "ixName": "lending_account_withdraw",
+          "label": "Marginfi v2: lendingAccountWithdraw",
+          "severity": "HOLD",
+          "mapsToLoss": "Withdraws assets from a Marginfi lending account to a destination token account."
+        }
+      ]
+    },
+    {
+      "id": "squads-v4",
+      "name": "Squads v4",
+      "programId": "SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf",
+      "discriminatorScheme": "anchor-8",
+      "description": "Squads v4 multisig program. Recognize-only here; VaultTransaction execution is clear-signed by the dedicated Squads decoder.",
+      "safeInstructions": [],
+      "dangerousInstructions": []
     }
   ]
 }

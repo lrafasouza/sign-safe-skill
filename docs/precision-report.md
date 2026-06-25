@@ -1,11 +1,15 @@
-# Sign-Safe Precision Report (Phase C)
+# Sign-Safe Precision Report
 
-Generated: 2026-06-23T04:35:24.485Z
+Generated: 2026-06-25T03:27:57.222Z
 Pinned slots: 428290000, 428289500
 
-## 1. Benign Corpus Summary
+## 1. Signing Precision and Review Rate
 
 Total benign fixtures: **100**
+Benign SIGN precision: **100.0%** (33/33 SIGN decisions across this corpus were benign).
+Benign HOLD rate: **67.0%** (67/100).
+
+These are corpus measurements, not population-wide guarantees. A zero false-REJECT count is useful calibration evidence, but zero false positives is not the optimization target for a fail-closed signing gate; the HOLD rate shows the review cost directly.
 
 | Decision | Count | Pct |
 |----------|-------|-----|
@@ -94,6 +98,8 @@ ALT resolution improvements: **1/5** fixtures showed reduced severity with resol
 
 Total malicious fixtures: **37**
 
+Caveat: this is a curated, mostly synthetic illustrative set designed around known loss primitives. Its recall measures coverage of these fixtures only; it does not mean the gate catches every malicious transaction. Adding independently sourced real mainnet malicious signatures would materially strengthen this evaluation.
+
 | Family | Total | Caught (HOLD+REJECT) | Recall |
 |--------|-------|---------------------|--------|
 | SetAuthority-AccountOwner | 7 | 7 | 100.0% |
@@ -105,7 +111,7 @@ Total malicious fixtures: **37**
 | Squads-Hidden-Authority | 5 | 5 | 100.0% |
 | **TOTAL** | **37** | **37** | **100.0%** |
 
-All malicious fixtures were caught (HOLD or REJECT). No missed detections.
+All curated malicious fixtures were caught (HOLD or REJECT). No fixture in this illustrative set received SIGN.
 
 ### Per-Fixture Detail (Malicious)
 
@@ -154,13 +160,14 @@ All malicious fixtures were caught (HOLD or REJECT). No missed detections.
 | Metric | Value |
 |--------|-------|
 | Benign corpus size | 100 transactions |
+| Benign SIGN precision | 100.0% (33/33) |
 | Benign SIGN rate | 33.0% |
 | Benign false-REJECT | 0 |
 | Benign HOLD rate | 67.0% |
 | HOLDs with unresolved ALT | 1 |
 | HOLDs without ALT | 38 |
 | Malicious corpus size | 37 fixtures |
-| Malicious recall | 100.0% (37/37) |
+| Curated malicious-set recall | 100.0% (37/37) |
 | ALT sub-test wins | 1/5 |
 | SetAuthority-AccountOwner recall | 100.0% (7/7) |
 | System-Assign recall | 100.0% (5/5) |

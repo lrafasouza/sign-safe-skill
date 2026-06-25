@@ -30,7 +30,8 @@ function anchorDisc(ixName: string): string {
 }
 
 /** Valid base58 alphabet. */
-const BASE58_ALPHABET = /^[123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz]{32,44}$/;
+const BASE58_ALPHABET =
+  /^[123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz]{32,44}$/;
 
 const programs = allRegisteredPrograms();
 
@@ -64,6 +65,16 @@ describe("anchor-8 discriminator self-verification (sha256 cross-check)", () => 
     if (prog.discriminatorScheme !== "anchor-8") continue;
 
     describe(`Program: ${prog.name} (${prog.id})`, () => {
+      if (
+        prog.dangerousInstructions.length === 0 &&
+        prog.safeInstructions.length === 0
+      ) {
+        it("is recognize-only with no claimed instruction discriminators", () => {
+          expect(prog.dangerousInstructions).toEqual([]);
+          expect(prog.safeInstructions).toEqual([]);
+        });
+      }
+
       // Verify dangerous instructions
       for (const entry of prog.dangerousInstructions) {
         if (!entry.ixName) continue; // no ixName → skip (not anchor-8 verifiable)
@@ -100,7 +111,9 @@ describe("anchor-8 discriminator self-verification (sha256 cross-check)", () => 
 describe("beet-u8 / raydium-u8 discriminator self-verification", () => {
   // Collect all non-anchor-8 programs that have at least one verifiable entry.
   const nonAnchorPrograms = programs.filter(
-    (p) => p.discriminatorScheme !== "anchor-8" && p.dangerousInstructions.length > 0,
+    (p) =>
+      p.discriminatorScheme !== "anchor-8" &&
+      p.dangerousInstructions.length > 0,
   );
 
   if (nonAnchorPrograms.length === 0) {
@@ -170,7 +183,10 @@ describe("No duplicate discHex within a program (safe + dangerous lists)", () =>
       const seen = new Set<string>();
       const dupes: string[] = [];
 
-      for (const entry of [...prog.dangerousInstructions, ...(prog.safeInstructions ?? [])]) {
+      for (const entry of [
+        ...prog.dangerousInstructions,
+        ...(prog.safeInstructions ?? []),
+      ]) {
         if (seen.has(entry.discHex)) {
           dupes.push(entry.discHex);
         }

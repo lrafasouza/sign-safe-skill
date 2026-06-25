@@ -25,7 +25,11 @@ import { classify } from "../src/classify.ts";
 import { buildVerdict } from "../src/verdict.ts";
 import { computeOutflow } from "../src/outflow.ts";
 import { DEFAULT_CONTEXT } from "../src/types.ts";
-import { validateRegistry, allRegisteredProgramIds, isRegisteredProgram } from "../src/registry.ts";
+import {
+  validateRegistry,
+  allRegisteredProgramIds,
+  isRegisteredProgram,
+} from "../src/registry.ts";
 import { legacyBytes, key, u64le } from "./helpers.ts";
 
 // ---- Program IDs (verified against canonical declare_id! in respective repos) ----
@@ -34,27 +38,29 @@ const METAPLEX_TOKEN_METADATA = "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s";
 const BUBBLEGUM = "BGUMAp9Gq7iTEuizy4pqaxsTyUCBK68MDfK752saRPUY";
 const ORCA_WHIRLPOOLS = "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc";
 const RAYDIUM_AMM_V4 = "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8";
+const LIGHTHOUSE = "L2TExMFKdjpN9kozasaurPirfHy9P8sbXoAN1qA3S95";
+const MARGINFI_V2 = "MFv2hWf31Z9kbCa1snEPYctwafyhdvnV7FZnsebVacA";
 const SPL_TOKEN = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 
 // ---- Discriminator constants (all verified against canonical sources) ----
 
 /** Metaplex Token Metadata: beet-u8 discriminators (verified from generated JS client). */
 const METAPLEX_DISC = {
-  Transfer: 49,        // 0x31 — Transfer (pNFT)
-  Delegate: 44,        // 0x2c — Delegate
-  Revoke: 45,          // 0x2d — Revoke
-  Burn: 41,            // 0x29 — Burn (pNFT)
-  BurnNft: 29,         // 0x1d — BurnNft (legacy)
-  Update: 50,          // 0x32 — Update
-  UpdateMetadata: 1,   // 0x01 — UpdateMetadataAccount
+  Transfer: 49, // 0x31 — Transfer (pNFT)
+  Delegate: 44, // 0x2c — Delegate
+  Revoke: 45, // 0x2d — Revoke
+  Burn: 41, // 0x29 — Burn (pNFT)
+  BurnNft: 29, // 0x1d — BurnNft (legacy)
+  Update: 50, // 0x32 — Update
+  UpdateMetadata: 1, // 0x01 — UpdateMetadataAccount
 };
 
 /** Bubblegum cNFT: Anchor 8-byte discriminators sha256("global:<name>")[0..8]. */
 const BUBBLEGUM_DISC = {
-  transfer: "a334c8e78c0345ba",      // verified locally
+  transfer: "a334c8e78c0345ba", // verified locally
   transfer_v2: "772806ebeaddf831",
-  delegate: "5a934bb255580489",      // verified locally
-  burn: "746e1d386bdb2a5d",          // verified locally
+  delegate: "5a934bb255580489", // verified locally
+  burn: "746e1d386bdb2a5d", // verified locally
 };
 
 // ---- base58 decode helper (same as classify.test.ts) ----
@@ -92,7 +98,11 @@ function base58ToBytes(b58: string): Uint8Array {
  * Header: 1 required signer, 0 readonly-signed, N readonly-unsigned.
  * Accounts: idx0=fee-payer (signer-writable), idx1=program (readonly), extras...
  */
-function singleIxMsg(programId: string, data: number[], writableAcctCount = 0): Uint8Array {
+function singleIxMsg(
+  programId: string,
+  data: number[],
+  writableAcctCount = 0,
+): Uint8Array {
   const progBytes = base58ToBytes(programId);
   const out: number[] = [];
   // numRequiredSignatures=1, numReadonlySigned=0,
@@ -106,7 +116,7 @@ function singleIxMsg(programId: string, data: number[], writableAcctCount = 0): 
   // Keys: fee payer (idx0), writable extras, program
   const numKeys = 1 + writableAcctCount + 1;
   out.push(numKeys);
-  out.push(...key(1));  // idx0 fee payer (signer-writable)
+  out.push(...key(1)); // idx0 fee payer (signer-writable)
   for (let i = 0; i < writableAcctCount; i++) out.push(...key(10 + i)); // writable extras
   out.push(...progBytes); // program (last, readonly-unsigned)
   out.push(...key(250)); // blockhash
@@ -126,7 +136,9 @@ function singleIxMsg(programId: string, data: number[], writableAcctCount = 0): 
 function classifyMsg(programId: string, data: number[], writableAcctCount = 0) {
   const bytes = singleIxMsg(programId, data, writableAcctCount);
   const msg = decodeMessageBytes(bytes);
-  const roles = deriveRoles(msg, { reservedAccountKeys: RESERVED_ACCOUNT_KEYS });
+  const roles = deriveRoles(msg, {
+    reservedAccountKeys: RESERVED_ACCOUNT_KEYS,
+  });
   const cls = classify(msg, roles, DEFAULT_CONTEXT);
   const outflow = computeOutflow(msg, roles, DEFAULT_CONTEXT);
   return { msg, roles, cls, outflow };
@@ -136,7 +148,9 @@ function classifyMsg(programId: string, data: number[], writableAcctCount = 0) {
 function verdictMsg(programId: string, data: number[], writableAcctCount = 0) {
   const bytes = singleIxMsg(programId, data, writableAcctCount);
   const msg = decodeMessageBytes(bytes);
-  const roles = deriveRoles(msg, { reservedAccountKeys: RESERVED_ACCOUNT_KEYS });
+  const roles = deriveRoles(msg, {
+    reservedAccountKeys: RESERVED_ACCOUNT_KEYS,
+  });
   const cls = classify(msg, roles, DEFAULT_CONTEXT);
   const outflow = computeOutflow(msg, roles, DEFAULT_CONTEXT);
   return buildVerdict({
@@ -191,8 +205,15 @@ describe("registry catalog validation", () => {
   it("isRegisteredProgram returns false for native programs (not in registry)", () => {
     expect(isRegisteredProgram(SPL_TOKEN)).toBe(false);
     expect(isRegisteredProgram("11111111111111111111111111111111")).toBe(false);
-    expect(isRegisteredProgram("ComputeBudget111111111111111111111111111111")).toBe(false);
-    expect(isRegisteredProgram("SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf")).toBe(false);
+    expect(
+      isRegisteredProgram("ComputeBudget111111111111111111111111111111"),
+    ).toBe(false);
+  });
+
+  it("recognizes the canonical Squads v4 program id", () => {
+    expect(
+      isRegisteredProgram("SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf"),
+    ).toBe(true);
   });
 });
 
@@ -213,7 +234,9 @@ describe("Jupiter v6 recognized program (GAP 3)", () => {
     // Must NOT produce unknownProgramWritable REJECT path.
     expect(cls.unknownProgramWritable).toBe(false);
     // Must produce a HOLD finding.
-    const holdFinding = cls.findings.find((f) => f.id.startsWith("registry-jupiter-v6"));
+    const holdFinding = cls.findings.find((f) =>
+      f.id.startsWith("registry-jupiter-v6"),
+    );
     expect(holdFinding).toBeTruthy();
     expect(holdFinding!.severity).toBe("HOLD");
   });
@@ -243,7 +266,9 @@ describe("Metaplex Token Metadata: Transfer (disc 49 = 0x31)", () => {
     const data = [METAPLEX_DISC.Transfer, 0x00, 0x01, 0x02]; // disc + some payload
     const { cls } = classifyMsg(METAPLEX_TOKEN_METADATA, data, 1);
 
-    const f = cls.findings.find((f) => f.id.startsWith("registry-metaplex-token-metadata-danger"));
+    const f = cls.findings.find((f) =>
+      f.id.startsWith("registry-metaplex-token-metadata-danger"),
+    );
     expect(f).toBeTruthy();
     expect(f!.severity).toBe("REJECT");
     expect(f!.label).toBe("Metaplex: Transfer NFT");
@@ -271,7 +296,9 @@ describe("Metaplex Token Metadata: Delegate (disc 44 = 0x2c)", () => {
     const data = [METAPLEX_DISC.Delegate, 0x00, 0x01];
     const { cls } = classifyMsg(METAPLEX_TOKEN_METADATA, data, 1);
 
-    const f = cls.findings.find((f) => f.id.startsWith("registry-metaplex-token-metadata-danger"));
+    const f = cls.findings.find((f) =>
+      f.id.startsWith("registry-metaplex-token-metadata-danger"),
+    );
     expect(f).toBeTruthy();
     expect(f!.severity).toBe("HOLD");
     expect(f!.label).toBe("Metaplex: Delegate NFT authority");
@@ -288,7 +315,9 @@ describe("Metaplex Token Metadata: Burn (disc 41 = 0x29)", () => {
   it("Metaplex Burn pNFT -> REJECT", () => {
     const data = [METAPLEX_DISC.Burn];
     const { cls } = classifyMsg(METAPLEX_TOKEN_METADATA, data, 1);
-    const f = cls.findings.find((f) => f.id.startsWith("registry-metaplex-token-metadata-danger"));
+    const f = cls.findings.find((f) =>
+      f.id.startsWith("registry-metaplex-token-metadata-danger"),
+    );
     expect(f).toBeTruthy();
     expect(f!.severity).toBe("REJECT");
     expect(f!.label).toContain("Burn");
@@ -301,7 +330,9 @@ describe("Metaplex Token Metadata: unrecognized instruction -> HOLD (fail-closed
     const data = [0xff, 0x01, 0x02, 0x03];
     const { cls } = classifyMsg(METAPLEX_TOKEN_METADATA, data, 1);
 
-    const f = cls.findings.find((f) => f.id.startsWith("registry-metaplex-token-metadata-unknown"));
+    const f = cls.findings.find((f) =>
+      f.id.startsWith("registry-metaplex-token-metadata-unknown"),
+    );
     expect(f).toBeTruthy();
     expect(f!.severity).toBe("HOLD");
     // Must NOT be SIGN
@@ -325,7 +356,9 @@ describe("Bubblegum cNFT: Transfer (disc a334c8e78c0345ba)", () => {
     const data = hexToData(BUBBLEGUM_DISC.transfer);
     const { cls } = classifyMsg(BUBBLEGUM, data, 1);
 
-    const f = cls.findings.find((f) => f.id.startsWith("registry-metaplex-bubblegum-danger"));
+    const f = cls.findings.find((f) =>
+      f.id.startsWith("registry-metaplex-bubblegum-danger"),
+    );
     expect(f).toBeTruthy();
     expect(f!.severity).toBe("REJECT");
     expect(f!.label).toBe("Bubblegum: Transfer cNFT");
@@ -349,7 +382,9 @@ describe("Bubblegum cNFT: Burn (disc 746e1d386bdb2a5d)", () => {
   it("Bubblegum Burn -> REJECT", () => {
     const data = hexToData(BUBBLEGUM_DISC.burn);
     const { cls } = classifyMsg(BUBBLEGUM, data, 1);
-    const f = cls.findings.find((f) => f.id.startsWith("registry-metaplex-bubblegum-danger"));
+    const f = cls.findings.find((f) =>
+      f.id.startsWith("registry-metaplex-bubblegum-danger"),
+    );
     expect(f).toBeTruthy();
     expect(f!.severity).toBe("REJECT");
     expect(f!.label).toContain("Burn");
@@ -360,7 +395,9 @@ describe("Bubblegum cNFT: Delegate (disc 5a934bb255580489)", () => {
   it("Bubblegum Delegate -> HOLD", () => {
     const data = hexToData(BUBBLEGUM_DISC.delegate);
     const { cls } = classifyMsg(BUBBLEGUM, data, 1);
-    const f = cls.findings.find((f) => f.id.startsWith("registry-metaplex-bubblegum-danger"));
+    const f = cls.findings.find((f) =>
+      f.id.startsWith("registry-metaplex-bubblegum-danger"),
+    );
     expect(f).toBeTruthy();
     expect(f!.severity).toBe("HOLD");
   });
@@ -370,7 +407,9 @@ describe("Bubblegum cNFT: unrecognized instruction -> HOLD (fail-closed)", () =>
   it("Bubblegum unknown 8-byte disc -> HOLD, never SIGN", () => {
     const data = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01]; // not a known disc
     const { cls } = classifyMsg(BUBBLEGUM, data, 1);
-    const f = cls.findings.find((f) => f.id.startsWith("registry-metaplex-bubblegum-unknown"));
+    const f = cls.findings.find((f) =>
+      f.id.startsWith("registry-metaplex-bubblegum-unknown"),
+    );
     expect(f).toBeTruthy();
     expect(f!.severity).toBe("HOLD");
   });
@@ -385,7 +424,9 @@ describe("Orca Whirlpools: recognized, all instructions HOLD", () => {
     const data = [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08];
     const { cls } = classifyMsg(ORCA_WHIRLPOOLS, data, 1);
     expect(cls.unknownPrograms).not.toContain(ORCA_WHIRLPOOLS);
-    const f = cls.findings.find((f) => f.id.startsWith("registry-orca-whirlpools"));
+    const f = cls.findings.find((f) =>
+      f.id.startsWith("registry-orca-whirlpools"),
+    );
     expect(f).toBeTruthy();
     expect(f!.severity).toBe("HOLD");
   });
@@ -396,7 +437,9 @@ describe("Raydium AMM v4: recognized, all instructions HOLD", () => {
     const data = [0x09]; // some single-byte disc
     const { cls } = classifyMsg(RAYDIUM_AMM_V4, data, 1);
     expect(cls.unknownPrograms).not.toContain(RAYDIUM_AMM_V4);
-    const f = cls.findings.find((f) => f.id.startsWith("registry-raydium-amm-v4"));
+    const f = cls.findings.find((f) =>
+      f.id.startsWith("registry-raydium-amm-v4"),
+    );
     expect(f).toBeTruthy();
     expect(f!.severity).toBe("HOLD");
   });
@@ -416,13 +459,15 @@ describe("Truly unknown program: two-tier behavior (default HOLD, strict REJECT)
     // Keys: idx0=fee-payer (signer-writable), idx1=writable-unsigned (value-bearing), idx2=program.
     out.push(1, 0, 1); // numReadonlyUnsigned=1 (just the program)
     out.push(3); // numKeys
-    out.push(...key(1));            // idx0 fee payer
-    out.push(...key(2));            // idx1 writable unsigned
-    out.push(...unknownProgBytes);  // idx2 program
-    out.push(...key(250));          // blockhash
+    out.push(...key(1)); // idx0 fee payer
+    out.push(...key(2)); // idx1 writable unsigned
+    out.push(...unknownProgBytes); // idx2 program
+    out.push(...key(250)); // blockhash
     out.push(1); // 1 instruction
     out.push(2); // programIdIndex = idx2
-    out.push(2); out.push(0); out.push(1); // 2 accts: idx0, idx1
+    out.push(2);
+    out.push(0);
+    out.push(1); // 2 accts: idx0, idx1
     out.push(1, 0x99); // 1-byte data
     return { msgBytes: Uint8Array.from(out), unknownProg };
   }
@@ -430,7 +475,9 @@ describe("Truly unknown program: two-tier behavior (default HOLD, strict REJECT)
   it("DEFAULT mode: unregistered program writing a writable account -> HOLD (not REJECT)", () => {
     const { msgBytes, unknownProg } = buildUnknownWritableMsg();
     const msg = decodeMessageBytes(msgBytes);
-    const roles = deriveRoles(msg, { reservedAccountKeys: RESERVED_ACCOUNT_KEYS });
+    const roles = deriveRoles(msg, {
+      reservedAccountKeys: RESERVED_ACCOUNT_KEYS,
+    });
     const cls = classify(msg, roles, DEFAULT_CONTEXT);
 
     // The unknown program must still go through the unknown-program path.
@@ -455,7 +502,9 @@ describe("Truly unknown program: two-tier behavior (default HOLD, strict REJECT)
   it("STRICT mode: unregistered program writing a writable account -> REJECT", () => {
     const { msgBytes, unknownProg } = buildUnknownWritableMsg();
     const msg = decodeMessageBytes(msgBytes);
-    const roles = deriveRoles(msg, { reservedAccountKeys: RESERVED_ACCOUNT_KEYS });
+    const roles = deriveRoles(msg, {
+      reservedAccountKeys: RESERVED_ACCOUNT_KEYS,
+    });
     const cls = classify(msg, roles, DEFAULT_CONTEXT);
 
     expect(cls.unknownPrograms).toContain(unknownProg);
@@ -489,13 +538,15 @@ describe("Native SPL Transfer: no regression (still SIGN)", () => {
     // Keys: idx0=signer(src), idx1=dest, idx2=program(SPL_TOKEN).
     out.push(1, 0, 1); // numReadonlyUnsigned=1 (just the program)
     out.push(3); // numKeys = 3 (signer, dest/writable-unsigned, program)
-    out.push(...key(1));          // idx0 signer-writable (source)
-    out.push(...key(2));          // idx1 writable-unsigned (destination token account)
-    out.push(...splTokenBytes);   // idx2 program (readonly-unsigned)
-    out.push(...key(250));        // blockhash
+    out.push(...key(1)); // idx0 signer-writable (source)
+    out.push(...key(2)); // idx1 writable-unsigned (destination token account)
+    out.push(...splTokenBytes); // idx2 program (readonly-unsigned)
+    out.push(...key(250)); // blockhash
     out.push(1); // 1 instruction
     out.push(2); // programIdIndex = 2
-    out.push(2); out.push(0); out.push(1); // 2 accts: src=idx0, dst=idx1
+    out.push(2);
+    out.push(0);
+    out.push(1); // 2 accts: src=idx0, dst=idx1
     // disc 3 (Transfer) + u64 amount = 1000 (well below 1 SOL in lamports, not checked for SPL)
     const txData = [3, ...u64le(1000n)];
     out.push(txData.length);
@@ -503,7 +554,9 @@ describe("Native SPL Transfer: no regression (still SIGN)", () => {
     const msgBytes = Uint8Array.from(out);
 
     const msg = decodeMessageBytes(msgBytes);
-    const roles = deriveRoles(msg, { reservedAccountKeys: RESERVED_ACCOUNT_KEYS });
+    const roles = deriveRoles(msg, {
+      reservedAccountKeys: RESERVED_ACCOUNT_KEYS,
+    });
     const cls = classify(msg, roles, DEFAULT_CONTEXT);
     const outflow = computeOutflow(msg, roles, DEFAULT_CONTEXT);
 
@@ -529,11 +582,27 @@ describe("Native SPL Transfer: no regression (still SIGN)", () => {
 
 describe("Fail-closed: recognized programs with UNKNOWN instructions never produce SIGN", () => {
   const recognizedProgs = [
-    { name: "Jupiter v6", id: JUPITER_V6, data: [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08] },
-    { name: "Orca", id: ORCA_WHIRLPOOLS, data: [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08] },
+    {
+      name: "Jupiter v6",
+      id: JUPITER_V6,
+      data: [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08],
+    },
+    {
+      name: "Orca",
+      id: ORCA_WHIRLPOOLS,
+      data: [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08],
+    },
     { name: "Raydium AMM v4", id: RAYDIUM_AMM_V4, data: [0x01] },
-    { name: "Metaplex unknown disc", id: METAPLEX_TOKEN_METADATA, data: [0xfe] },
-    { name: "Bubblegum unknown disc", id: BUBBLEGUM, data: [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02] },
+    {
+      name: "Metaplex unknown disc",
+      id: METAPLEX_TOKEN_METADATA,
+      data: [0xfe],
+    },
+    {
+      name: "Bubblegum unknown disc",
+      id: BUBBLEGUM,
+      data: [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02],
+    },
   ];
 
   for (const prog of recognizedProgs) {
@@ -578,7 +647,9 @@ describe("Phase B: Jupiter v6 route (safe) -> SIGN (within thresholds)", () => {
     const { cls } = classifyMsg(JUPITER_V6, data, 0);
 
     // Must have an INFO finding for the route instruction
-    const infoFinding = cls.findings.find((f) => f.id.startsWith("registry-jupiter-v6-safe"));
+    const infoFinding = cls.findings.find((f) =>
+      f.id.startsWith("registry-jupiter-v6-safe"),
+    );
     expect(infoFinding).toBeTruthy();
     expect(infoFinding!.severity).toBe("INFO");
     expect(infoFinding!.label).toContain("route");
@@ -606,7 +677,9 @@ describe("Phase B: Raydium CLMM swap (safe) -> SIGN (within thresholds)", () => 
     const data = hexToData(RAYDIUM_CLMM_SWAP_DISC + "00000001");
     const { cls } = classifyMsg(RAYDIUM_CLMM, data, 0);
 
-    const infoFinding = cls.findings.find((f) => f.id.startsWith("registry-raydium-clmm-safe"));
+    const infoFinding = cls.findings.find((f) =>
+      f.id.startsWith("registry-raydium-clmm-safe"),
+    );
     expect(infoFinding).toBeTruthy();
     expect(infoFinding!.severity).toBe("INFO");
     expect(infoFinding!.label).toContain("swap");
@@ -624,7 +697,9 @@ describe("Phase B: Pump.fun buy (safe) -> SIGN (within thresholds)", () => {
     const data = hexToData(PUMP_BUY_DISC + "00000001");
     const { cls } = classifyMsg(PUMP_FUN, data, 0);
 
-    const infoFinding = cls.findings.find((f) => f.id.startsWith("registry-pump-fun-safe"));
+    const infoFinding = cls.findings.find((f) =>
+      f.id.startsWith("registry-pump-fun-safe"),
+    );
     expect(infoFinding).toBeTruthy();
     expect(infoFinding!.severity).toBe("INFO");
     expect(infoFinding!.label).toContain("buy");
@@ -636,7 +711,9 @@ describe("Phase B: Drift updateAdmin -> REJECT", () => {
     const data = hexToData(DRIFT_UPDATE_ADMIN_DISC + "00000001");
     const { cls } = classifyMsg(DRIFT, data, 1);
 
-    const dangerFinding = cls.findings.find((f) => f.id.startsWith("registry-drift-danger"));
+    const dangerFinding = cls.findings.find((f) =>
+      f.id.startsWith("registry-drift-danger"),
+    );
     expect(dangerFinding).toBeTruthy();
     expect(dangerFinding!.severity).toBe("REJECT");
     expect(dangerFinding!.label).toContain("updateAdmin");
@@ -660,7 +737,9 @@ describe("Phase B: Kamino updateLendingMarketOwner -> REJECT", () => {
     const data = hexToData(KAMINO_UPDATE_MARKET_OWNER_DISC + "00000001");
     const { cls } = classifyMsg(KAMINO_KLEND, data, 1);
 
-    const dangerFinding = cls.findings.find((f) => f.id.startsWith("registry-kamino-klend-danger"));
+    const dangerFinding = cls.findings.find((f) =>
+      f.id.startsWith("registry-kamino-klend-danger"),
+    );
     expect(dangerFinding).toBeTruthy();
     expect(dangerFinding!.severity).toBe("REJECT");
     expect(dangerFinding!.label).toContain("Market");
@@ -696,13 +775,13 @@ describe("Phase B: recognized program + unlisted instruction -> HOLD (unchanged)
 
 describe("Phase B: new programs are registered", () => {
   const newProgramIds = [
-    "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P",  // Pump.fun
-    "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA",  // Pump AMM
-    "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK",  // Raydium CLMM
-    "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C",  // Raydium CPMM
-    "dRiftyHA39MWEi3m9aunc5MzRF1JYuBsbn6VPcn33UH",   // Drift
-    "KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD",   // Kamino klend
-    "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo",  // Meteora DLMM
+    "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P", // Pump.fun
+    "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA", // Pump AMM
+    "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK", // Raydium CLMM
+    "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C", // Raydium CPMM
+    "dRiftyHA39MWEi3m9aunc5MzRF1JYuBsbn6VPcn33UH", // Drift
+    "KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD", // Kamino klend
+    "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo", // Meteora DLMM
   ];
 
   for (const pid of newProgramIds) {
@@ -710,4 +789,92 @@ describe("Phase B: new programs are registered", () => {
       expect(isRegisteredProgram(pid)).toBe(true);
     });
   }
+});
+
+describe("Phase H: Lighthouse assertion guard", () => {
+  it("emits an INFO finding when an AssertAccountInfo targets the analyzed signer", () => {
+    const assertSignerData = [5, 0, 5, 1, 0];
+    const v = verdictMsg(LIGHTHOUSE, assertSignerData);
+    const finding = v.findings.find((f) => f.id === "lighthouse-assertion");
+
+    expect(finding).toBeTruthy();
+    expect(finding!.severity).toBe("INFO");
+    expect(finding!.detail).toContain("AssertAccountInfo");
+    expect(finding!.detail).toContain("targets analyzed signer account");
+    expect(v.decision).toBe("SIGN");
+  });
+
+  it("does not downgrade a REJECT transaction when a Lighthouse assertion is appended", () => {
+    const splBytes = base58ToBytes(SPL_TOKEN);
+    const lighthouseBytes = base58ToBytes(LIGHTHOUSE);
+    const out: number[] = [
+      1,
+      0,
+      2,
+      4,
+      ...key(1),
+      ...key(2),
+      ...splBytes,
+      ...lighthouseBytes,
+      ...key(250),
+      2,
+    ];
+    out.push(2, 2, 1, 0, 3, 6, 2, 0);
+    out.push(3, 1, 0, 5, 5, 0, 5, 1, 0);
+    const msg = decodeMessageBytes(Uint8Array.from(out));
+    const roles = deriveRoles(msg, {
+      reservedAccountKeys: RESERVED_ACCOUNT_KEYS,
+    });
+    const cls = classify(msg, roles, DEFAULT_CONTEXT);
+    const outflow = computeOutflow(msg, roles, DEFAULT_CONTEXT);
+    const verdict = buildVerdict({
+      messageVersion: msg.version,
+      findings: cls.findings,
+      outflow,
+      unknownPrograms: cls.unknownPrograms,
+      unknownProgramWritable: cls.unknownProgramWritable,
+      altLookupsPresent: msg.altLookupsPresent,
+      rolesUnverified: false,
+      durableNonceMarker: cls.durableNonceMarker,
+      authorityOrOwnershipChange: cls.authorityOrOwnershipChange,
+    });
+
+    expect(
+      verdict.findings.some(
+        (f) => f.id === "lighthouse-assertion" && f.severity === "INFO",
+      ),
+    ).toBe(true);
+    expect(
+      verdict.findings.some(
+        (f) => f.id === "spl-set-authority" && f.severity === "REJECT",
+      ),
+    ).toBe(true);
+    expect(verdict.decision).toBe("REJECT");
+  });
+});
+
+describe("Phase J: Marginfi v2 registry", () => {
+  it("rejects transfer_to_new_account from its derived Anchor discriminator bytes", () => {
+    const v = verdictMsg(MARGINFI_V2, hexToData("1c4f81e7a9454541"), 1);
+    const finding = v.findings.find(
+      (f) => f.id === "registry-marginfi-v2-danger",
+    );
+
+    expect(finding).toBeTruthy();
+    expect(finding!.label).toContain("transferToNewAccount");
+    expect(finding!.severity).toBe("REJECT");
+    expect(v.decision).toBe("REJECT");
+  });
+
+  it("holds lending_account_withdraw from its derived Anchor discriminator bytes", () => {
+    const v = verdictMsg(MARGINFI_V2, hexToData("24484a13d2d2c0c0"), 1);
+    const finding = v.findings.find(
+      (f) => f.id === "registry-marginfi-v2-danger",
+    );
+
+    expect(finding).toBeTruthy();
+    expect(finding!.label).toContain("lendingAccountWithdraw");
+    expect(finding!.severity).toBe("HOLD");
+    expect(v.decision).toBe("HOLD");
+  });
 });

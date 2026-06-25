@@ -79,20 +79,27 @@ function makeEmptyFetcher(): AccountFetcher {
 function loadBenignFixtures(): BenignFixture[] {
   let files: string[];
   try {
-    files = readdirSync(BENIGN_DIR).filter((f) => f.endsWith(".json") && f !== "manifest.json");
+    files = readdirSync(BENIGN_DIR).filter(
+      (f) => f.endsWith(".json") && f !== "manifest.json",
+    );
   } catch {
     console.error("No benign corpus found. Run capture-benign.ts first.");
     return [];
   }
   files.sort();
-  return files.map((f) => JSON.parse(readFileSync(join(BENIGN_DIR, f), "utf8")) as BenignFixture);
+  return files.map(
+    (f) =>
+      JSON.parse(readFileSync(join(BENIGN_DIR, f), "utf8")) as BenignFixture,
+  );
 }
 
 // ---------------------------------------------------------------------------
 // Run corpus functions
 // ---------------------------------------------------------------------------
 
-export async function runBenignCorpus(fixtures: BenignFixture[]): Promise<BenignResult[]> {
+export async function runBenignCorpus(
+  fixtures: BenignFixture[],
+): Promise<BenignResult[]> {
   const results: BenignResult[] = [];
 
   for (const fixture of fixtures) {
@@ -104,10 +111,14 @@ export async function runBenignCorpus(fixtures: BenignFixture[]): Promise<Benign
       // Will be reflected in verdict
     }
 
-    const hasAlt = decoded ? decoded.message.addressTableLookups.length > 0 : false;
-    const altResolved = hasAlt && Object.keys(fixture.accounts).some((k) =>
-      decoded?.message.addressTableLookups.some((l) => l.accountKey === k)
-    );
+    const hasAlt = decoded
+      ? decoded.message.addressTableLookups.length > 0
+      : false;
+    const altResolved =
+      hasAlt &&
+      Object.keys(fixture.accounts).some((k) =>
+        decoded?.message.addressTableLookups.some((l) => l.accountKey === k),
+      );
 
     const verdict = await reviewWithEnrichment(
       fixture.txB64,
@@ -132,7 +143,9 @@ export async function runBenignCorpus(fixtures: BenignFixture[]): Promise<Benign
   return results;
 }
 
-export async function runMaliciousCorpus(fixtures: MaliciousFixture[]): Promise<MaliciousResult[]> {
+export async function runMaliciousCorpus(
+  fixtures: MaliciousFixture[],
+): Promise<MaliciousResult[]> {
   const results: MaliciousResult[] = [];
 
   for (const fixture of fixtures) {
@@ -150,7 +163,11 @@ export async function runMaliciousCorpus(fixtures: MaliciousFixture[]): Promise<
       // we need to pass it via reviewBase64. Use reviewBase64 when vaultTxBytes is present.
       if (vaultTxBytes) {
         const { reviewBase64 } = await import("../src/verdict.ts");
-        verdict = reviewBase64(fixture.txB64, { lamportThreshold: 1_000_000_000 }, vaultTxBytes);
+        verdict = reviewBase64(
+          fixture.txB64,
+          { lamportThreshold: 1_000_000_000 },
+          vaultTxBytes,
+        );
       } else {
         verdict = await reviewWithEnrichment(
           fixture.txB64,
@@ -160,7 +177,9 @@ export async function runMaliciousCorpus(fixtures: MaliciousFixture[]): Promise<
       }
     } catch (e) {
       // Shouldn't happen — verdict never throws, but guard anyway
-      console.error(`  Error running malicious fixture (${fixture.family}): ${e}`);
+      console.error(
+        `  Error running malicious fixture (${fixture.family}): ${e}`,
+      );
       results.push({
         family: fixture.family,
         note: fixture.note,
@@ -193,7 +212,14 @@ export async function runMaliciousCorpus(fixtures: MaliciousFixture[]): Promise<
 async function runAltSubTest(
   benignResults: BenignResult[],
   benignFixtures: BenignFixture[],
-): Promise<Array<{ filename: string; withResolution: Decision; withoutResolution: Decision; hasAlt: boolean }>> {
+): Promise<
+  Array<{
+    filename: string;
+    withResolution: Decision;
+    withoutResolution: Decision;
+    hasAlt: boolean;
+  }>
+> {
   // Pick up to 5 benign v0+ALT fixtures
   const v0AltResults = benignResults
     .filter((r) => r.hasAlt && r.version === "0")
@@ -207,7 +233,9 @@ async function runAltSubTest(
   }> = [];
 
   for (const result of v0AltResults) {
-    const fixture = benignFixtures.find((f) => `${f.slot}-${f.index}.json` === result.filename);
+    const fixture = benignFixtures.find(
+      (f) => `${f.slot}-${f.index}.json` === result.filename,
+    );
     if (!fixture) continue;
 
     // With resolution (frozen fetcher with ALT accounts)
@@ -245,11 +273,16 @@ function severityOrder(d: Decision): number {
 function generateReport(
   benignResults: BenignResult[],
   maliciousResults: MaliciousResult[],
-  altSubTest: Array<{ filename: string; withResolution: Decision; withoutResolution: Decision; hasAlt: boolean }>,
+  altSubTest: Array<{
+    filename: string;
+    withResolution: Decision;
+    withoutResolution: Decision;
+    hasAlt: boolean;
+  }>,
 ): string {
   const lines: string[] = [];
 
-  lines.push("# Sign-Safe Precision Report (Phase C)");
+  lines.push("# Sign-Safe Precision Report");
   lines.push("");
   lines.push(`Generated: ${new Date().toISOString()}`);
   lines.push(`Pinned slots: 428290000, 428289500`);
@@ -259,17 +292,35 @@ function generateReport(
   const benignSign = benignResults.filter((r) => r.decision === "SIGN");
   const benignHold = benignResults.filter((r) => r.decision === "HOLD");
   const benignReject = benignResults.filter((r) => r.decision === "REJECT");
+  const maliciousSign = maliciousResults.filter((r) => r.decision === "SIGN");
+  const signPrecisionDenominator = benignSign.length + maliciousSign.length;
 
-  lines.push("## 1. Benign Corpus Summary");
+  lines.push("## 1. Signing Precision and Review Rate");
   lines.push("");
   lines.push(`Total benign fixtures: **${benignResults.length}**`);
+  lines.push(
+    `Benign SIGN precision: **${pct(benignSign.length, signPrecisionDenominator)}** (${benignSign.length}/${signPrecisionDenominator} SIGN decisions across this corpus were benign).`,
+  );
+  lines.push(
+    `Benign HOLD rate: **${pct(benignHold.length, benignResults.length)}** (${benignHold.length}/${benignResults.length}).`,
+  );
+  lines.push("");
+  lines.push(
+    "These are corpus measurements, not population-wide guarantees. A zero false-REJECT count is useful calibration evidence, but zero false positives is not the optimization target for a fail-closed signing gate; the HOLD rate shows the review cost directly.",
+  );
   lines.push("");
   lines.push("| Decision | Count | Pct |");
   lines.push("|----------|-------|-----|");
   const total = benignResults.length;
-  lines.push(`| SIGN     | ${benignSign.length.toString().padStart(5)} | ${pct(benignSign.length, total)} |`);
-  lines.push(`| HOLD     | ${benignHold.length.toString().padStart(5)} | ${pct(benignHold.length, total)} |`);
-  lines.push(`| REJECT   | ${benignReject.length.toString().padStart(5)} | ${pct(benignReject.length, total)} |`);
+  lines.push(
+    `| SIGN     | ${benignSign.length.toString().padStart(5)} | ${pct(benignSign.length, total)} |`,
+  );
+  lines.push(
+    `| HOLD     | ${benignHold.length.toString().padStart(5)} | ${pct(benignHold.length, total)} |`,
+  );
+  lines.push(
+    `| REJECT   | ${benignReject.length.toString().padStart(5)} | ${pct(benignReject.length, total)} |`,
+  );
   lines.push("");
 
   // ---- Category breakdown ----
@@ -293,9 +344,13 @@ function generateReport(
   lines.push("## 2. False-REJECTs (Benign REJECTs — Target: 0)");
   lines.push("");
   if (benignReject.length === 0) {
-    lines.push("**None.** Zero false-REJECTs. All benign transactions were classified SIGN or HOLD.");
+    lines.push(
+      "**None.** Zero false-REJECTs. All benign transactions were classified SIGN or HOLD.",
+    );
   } else {
-    lines.push(`**WARNING: ${benignReject.length} false-REJECT(s) detected. These require Opus reviewer judgment.**`);
+    lines.push(
+      `**WARNING: ${benignReject.length} false-REJECT(s) detected. These require Opus reviewer judgment.**`,
+    );
     lines.push("");
     lines.push("| Fixture | Slot | Version | ProgramIds | Findings |");
     lines.push("|---------|------|---------|------------|----------|");
@@ -305,7 +360,9 @@ function generateReport(
         .filter((f) => f.severity === "REJECT")
         .map((f) => `${f.id}(${f.severity})`)
         .join("; ");
-      lines.push(`| ${r.filename} | ${r.slot} | ${r.version} | ${pids} | ${findings} |`);
+      lines.push(
+        `| ${r.filename} | ${r.slot} | ${r.version} | ${pids} | ${findings} |`,
+      );
     }
   }
   lines.push("");
@@ -314,17 +371,27 @@ function generateReport(
   lines.push("## 3. Benign HOLD Analysis");
   lines.push("");
 
-  const holdWithUnresolvedAlt = benignHold.filter((r) => r.hasAlt && !r.altResolved);
-  const holdWithResolvedAlt = benignHold.filter((r) => r.hasAlt && r.altResolved);
+  const holdWithUnresolvedAlt = benignHold.filter(
+    (r) => r.hasAlt && !r.altResolved,
+  );
+  const holdWithResolvedAlt = benignHold.filter(
+    (r) => r.hasAlt && r.altResolved,
+  );
   const holdOther = benignHold.filter((r) => !r.hasAlt);
 
   lines.push(`Total benign HOLDs: **${benignHold.length}**`);
   lines.push("");
   lines.push("| Category | Count | Explanation |");
   lines.push("|----------|-------|-------------|");
-  lines.push(`| Has unresolved ALT | ${holdWithUnresolvedAlt.length} | ALT accounts could not be resolved (fail-closed HOLD) |`);
-  lines.push(`| Has resolved ALT   | ${holdWithResolvedAlt.length} | ALT resolved but other HOLD finding present |`);
-  lines.push(`| No ALT (other)     | ${holdOther.length} | HOLD from non-ALT finding (large transfer, nonce, etc.) |`);
+  lines.push(
+    `| Has unresolved ALT | ${holdWithUnresolvedAlt.length} | ALT accounts could not be resolved (fail-closed HOLD) |`,
+  );
+  lines.push(
+    `| Has resolved ALT   | ${holdWithResolvedAlt.length} | ALT resolved but other HOLD finding present |`,
+  );
+  lines.push(
+    `| No ALT (other)     | ${holdOther.length} | HOLD from non-ALT finding (large transfer, nonce, etc.) |`,
+  );
   lines.push("");
 
   if (holdOther.length > 0) {
@@ -335,7 +402,9 @@ function generateReport(
         .filter((f) => f.severity === "HOLD")
         .map((f) => `${f.id}`)
         .join(", ");
-      lines.push(`- **${r.filename}** (slot=${r.slot}): programIds=[${r.programIds.join(", ")}] findings=[${holdFindings}]`);
+      lines.push(
+        `- **${r.filename}** (slot=${r.slot}): programIds=[${r.programIds.join(", ")}] findings=[${holdFindings}]`,
+      );
     }
     lines.push("");
   }
@@ -343,27 +412,42 @@ function generateReport(
   // ---- ALT Sub-test ----
   lines.push("## 4. ALT Sub-test (A2 Win: Resolution vs Empty Fetcher)");
   lines.push("");
-  lines.push("Comparing 5 benign v0+ALT fixtures: decision WITH resolved ALTs vs WITHOUT (empty fetcher).");
+  lines.push(
+    "Comparing 5 benign v0+ALT fixtures: decision WITH resolved ALTs vs WITHOUT (empty fetcher).",
+  );
   lines.push("");
-  lines.push("| Fixture | With Resolution | Without Resolution | Improvement |");
+  lines.push(
+    "| Fixture | With Resolution | Without Resolution | Improvement |",
+  );
   lines.push("|---------|-----------------|-------------------|-------------|");
 
   let altImprovementCount = 0;
   for (const r of altSubTest) {
-    const improved = severityOrder(r.withoutResolution) > severityOrder(r.withResolution);
+    const improved =
+      severityOrder(r.withoutResolution) > severityOrder(r.withResolution);
     if (improved) altImprovementCount++;
-    const improvement = improved ? "YES — less conservative with resolution" : "no change";
-    lines.push(`| ${r.filename} | ${r.withResolution} | ${r.withoutResolution} | ${improvement} |`);
+    const improvement = improved
+      ? "YES — less conservative with resolution"
+      : "no change";
+    lines.push(
+      `| ${r.filename} | ${r.withResolution} | ${r.withoutResolution} | ${improvement} |`,
+    );
   }
 
   lines.push("");
-  lines.push(`ALT resolution improvements: **${altImprovementCount}/${altSubTest.length}** fixtures showed reduced severity with resolved ALTs.`);
+  lines.push(
+    `ALT resolution improvements: **${altImprovementCount}/${altSubTest.length}** fixtures showed reduced severity with resolved ALTs.`,
+  );
   lines.push("");
 
   // ---- Malicious Recall ----
   lines.push("## 5. Malicious Corpus Recall");
   lines.push("");
   lines.push(`Total malicious fixtures: **${maliciousResults.length}**`);
+  lines.push("");
+  lines.push(
+    "Caveat: this is a curated, mostly synthetic illustrative set designed around known loss primitives. Its recall measures coverage of these fixtures only; it does not mean the gate catches every malicious transaction. Adding independently sourced real mainnet malicious signatures would materially strengthen this evaluation.",
+  );
   lines.push("");
 
   const families = [...new Set(maliciousResults.map((r) => r.family))];
@@ -380,10 +464,14 @@ function generateReport(
     totalCaught += caught;
     familyRecall.set(family, { caught, total: familyItems.length });
     const recallPct = pct(caught, familyItems.length);
-    lines.push(`| ${family} | ${familyItems.length} | ${caught} | ${recallPct} |`);
+    lines.push(
+      `| ${family} | ${familyItems.length} | ${caught} | ${recallPct} |`,
+    );
   }
 
-  lines.push(`| **TOTAL** | **${maliciousResults.length}** | **${totalCaught}** | **${pct(totalCaught, maliciousResults.length)}** |`);
+  lines.push(
+    `| **TOTAL** | **${maliciousResults.length}** | **${totalCaught}** | **${pct(totalCaught, maliciousResults.length)}** |`,
+  );
   lines.push("");
 
   // Detail missed malicious
@@ -392,11 +480,15 @@ function generateReport(
     lines.push("### Missed Malicious Fixtures (GOT SIGN — investigate!)");
     lines.push("");
     for (const r of missed) {
-      lines.push(`- **${r.family}** (expected ${r.expectedDecision}, got ${r.decision}): ${r.note}`);
+      lines.push(
+        `- **${r.family}** (expected ${r.expectedDecision}, got ${r.decision}): ${r.note}`,
+      );
     }
     lines.push("");
   } else {
-    lines.push("All malicious fixtures were caught (HOLD or REJECT). No missed detections.");
+    lines.push(
+      "All curated malicious fixtures were caught (HOLD or REJECT). No fixture in this illustrative set received SIGN.",
+    );
     lines.push("");
   }
 
@@ -407,7 +499,9 @@ function generateReport(
   lines.push("|--------|----------|-----|--------|------|");
   for (const r of maliciousResults) {
     const status = r.caught ? "YES" : "**MISSED**";
-    lines.push(`| ${r.family} | ${r.expectedDecision} | ${r.decision} | ${status} | ${r.note.slice(0, 80)} |`);
+    lines.push(
+      `| ${r.family} | ${r.expectedDecision} | ${r.decision} | ${status} | ${r.note.slice(0, 80)} |`,
+    );
   }
   lines.push("");
 
@@ -417,18 +511,32 @@ function generateReport(
   lines.push("| Metric | Value |");
   lines.push("|--------|-------|");
   lines.push(`| Benign corpus size | ${total} transactions |`);
+  lines.push(
+    `| Benign SIGN precision | ${pct(benignSign.length, signPrecisionDenominator)} (${benignSign.length}/${signPrecisionDenominator}) |`,
+  );
   lines.push(`| Benign SIGN rate | ${pct(benignSign.length, total)} |`);
   lines.push(`| Benign false-REJECT | ${benignReject.length} |`);
   lines.push(`| Benign HOLD rate | ${pct(benignHold.length, total)} |`);
   lines.push(`| HOLDs with unresolved ALT | ${holdWithUnresolvedAlt.length} |`);
   lines.push(`| HOLDs without ALT | ${holdOther.length} |`);
   lines.push(`| Malicious corpus size | ${maliciousResults.length} fixtures |`);
-  lines.push(`| Malicious recall | ${pct(totalCaught, maliciousResults.length)} (${totalCaught}/${maliciousResults.length}) |`);
-  lines.push(`| ALT sub-test wins | ${altImprovementCount}/${altSubTest.length} |`);
+  lines.push(
+    `| Curated malicious-set recall | ${pct(totalCaught, maliciousResults.length)} (${totalCaught}/${maliciousResults.length}) |`,
+  );
+  lines.push(
+    `| ALT sub-test wins | ${altImprovementCount}/${altSubTest.length} |`,
+  );
 
-  const aaFamilies = ["SetAuthority-AccountOwner", "System-Assign", "SPL-Approve"];
+  const aaFamilies = [
+    "SetAuthority-AccountOwner",
+    "System-Assign",
+    "SPL-Approve",
+  ];
   for (const f of aaFamilies) {
-    const { caught: c, total: t } = familyRecall.get(f) ?? { caught: 0, total: 0 };
+    const { caught: c, total: t } = familyRecall.get(f) ?? {
+      caught: 0,
+      total: 0,
+    };
     lines.push(`| ${f} recall | ${pct(c, t)} (${c}/${t}) |`);
   }
   lines.push("");
@@ -470,18 +578,26 @@ async function main(): Promise<void> {
   // Print summary to stdout
   const benignSign = benignResults.filter((r) => r.decision === "SIGN").length;
   const benignHold = benignResults.filter((r) => r.decision === "HOLD").length;
-  const benignReject = benignResults.filter((r) => r.decision === "REJECT").length;
+  const benignReject = benignResults.filter(
+    (r) => r.decision === "REJECT",
+  ).length;
   const caught = maliciousResults.filter((r) => r.caught).length;
 
   console.log("\n=== PRECISION SUMMARY ===");
   console.log(`Benign  SIGN: ${benignSign} / ${benignResults.length}`);
   console.log(`Benign  HOLD: ${benignHold} / ${benignResults.length}`);
-  console.log(`Benign  REJECT (false): ${benignReject} / ${benignResults.length}`);
+  console.log(
+    `Benign  REJECT (false): ${benignReject} / ${benignResults.length}`,
+  );
   console.log(`Malicious caught: ${caught} / ${maliciousResults.length}`);
-  console.log(`ALT sub-test improvements: ${altSubTest.filter((r) => severityOrder(r.withoutResolution) > severityOrder(r.withResolution)).length} / ${altSubTest.length}`);
+  console.log(
+    `ALT sub-test improvements: ${altSubTest.filter((r) => severityOrder(r.withoutResolution) > severityOrder(r.withResolution)).length} / ${altSubTest.length}`,
+  );
 
   if (benignReject > 0) {
-    console.log("\n!!! WARNING: FALSE REJECTS DETECTED — see report for details !!!");
+    console.log(
+      "\n!!! WARNING: FALSE REJECTS DETECTED — see report for details !!!",
+    );
     const rejectItems = benignResults.filter((r) => r.decision === "REJECT");
     for (const r of rejectItems) {
       console.log(`  ${r.filename}: programIds=${r.programIds.join(", ")}`);

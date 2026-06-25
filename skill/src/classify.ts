@@ -48,6 +48,28 @@ const SYSTEM_PROGRAM = "11111111111111111111111111111111";
 const STAKE_PROGRAM = "Stake11111111111111111111111111111111111111";
 const COMPUTE_BUDGET = "ComputeBudget111111111111111111111111111111";
 const BPF_LOADER_UPGRADEABLE = "BPFLoaderUpgradeab1e11111111111111111111111";
+const LIGHTHOUSE_PROGRAM = "L2TExMFKdjpN9kozasaurPirfHy9P8sbXoAN1qA3S95";
+
+const LIGHTHOUSE_ASSERT_INSTRUCTIONS: Readonly<
+  Record<number, { name: string; targetCount: number }>
+> = {
+  2: { name: "AssertAccountData", targetCount: 1 },
+  3: { name: "AssertAccountDataMulti", targetCount: 1 },
+  4: { name: "AssertAccountDelta", targetCount: 2 },
+  5: { name: "AssertAccountInfo", targetCount: 1 },
+  6: { name: "AssertAccountInfoMulti", targetCount: 1 },
+  7: { name: "AssertMintAccount", targetCount: 1 },
+  8: { name: "AssertMintAccountMulti", targetCount: 1 },
+  9: { name: "AssertTokenAccount", targetCount: 1 },
+  10: { name: "AssertTokenAccountMulti", targetCount: 1 },
+  11: { name: "AssertStakeAccount", targetCount: 1 },
+  12: { name: "AssertStakeAccountMulti", targetCount: 1 },
+  13: { name: "AssertUpgradeableLoaderAccount", targetCount: 1 },
+  14: { name: "AssertUpgradeableLoaderAccountMulti", targetCount: 1 },
+  15: { name: "AssertSysvarClock", targetCount: 0 },
+  16: { name: "AssertMerkleTreeAccount", targetCount: 1 },
+  17: { name: "AssertBubblegumTreeConfigAccount", targetCount: 1 },
+};
 
 /**
  * Programs whose instruction discriminator is a 4-byte little-endian u32 enum
@@ -382,6 +404,34 @@ export function classify(
 
     // ComputeBudget is always benign metadata; never a danger, never unknown.
     if (pid === COMPUTE_BUDGET) return;
+
+    if (pid === LIGHTHOUSE_PROGRAM && ix.data.length > 0) {
+      const assertion = LIGHTHOUSE_ASSERT_INSTRUCTIONS[ix.data[0] as number];
+      if (
+        assertion !== undefined &&
+        ix.accountIndexes.length >= assertion.targetCount
+      ) {
+        const targetIndexes = ix.accountIndexes.slice(0, assertion.targetCount);
+        const targetsSigner =
+          targetIndexes.length > 0 &&
+          targetIndexes.every(
+            (index) => index < msg.header.numRequiredSignatures,
+          );
+        findings.push({
+          id: "lighthouse-assertion",
+          label: `Lighthouse: ${assertion.name}`,
+          severity: "INFO",
+          category: "program-interaction",
+          instructionIndex,
+          programId: pid,
+          detail: targetsSigner
+            ? `${assertion.name} uses the canonical Lighthouse u8 discriminator and targets analyzed signer account index(es) ${targetIndexes.join(", ")}. This is positive anti-spoof guard context only and does not alter other findings.`
+            : `${assertion.name} uses the canonical Lighthouse u8 discriminator${targetIndexes.length === 0 ? " and has no account target" : ` but target account index(es) ${targetIndexes.join(", ")} are not all analyzed signer accounts`}. This INFO note does not alter other findings.`,
+          mapsToLoss: "",
+        });
+        return;
+      }
+    }
 
     if (!(pid in KNOWN_PROGRAMS)) {
       // --- RECOGNIZED DeFi/NFT program tier (GAP 3 fix) ---

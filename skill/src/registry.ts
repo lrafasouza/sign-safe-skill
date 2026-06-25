@@ -11,7 +11,8 @@
  *   beet-u8   — Metaplex Token Metadata: single leading u8 (beet serialization).
  *               Discriminators verified per-instruction in the generated JS client.
  *   anchor-8  — Bubblegum, Jupiter v6, Orca, Pump.fun, Pump AMM, Raydium CLMM/CPMM,
- *               Drift, Kamino klend, Meteora DLMM: 8-byte Anchor discriminator
+ *               Drift, Kamino klend, Meteora DLMM, Marginfi v2, Squads v4:
+ *               8-byte Anchor discriminator
  *               (sha256("global:<snake_case_instruction_name>")[0..8]).
  *               All anchor-8 discriminators are verified by the self-checking test
  *               registry-discriminators.test.ts which computes sha256 at test time.
@@ -75,7 +76,11 @@ export interface RegistryProgram {
  * Returns undefined when programId is not in the registry.
  */
 export type MatchResult =
-  | { kind: "dangerous"; dangerEntry: RegistryDangerEntry; safeEntry?: undefined }
+  | {
+      kind: "dangerous";
+      dangerEntry: RegistryDangerEntry;
+      safeEntry?: undefined;
+    }
   | { kind: "safe"; safeEntry: RegistrySafeEntry; dangerEntry?: undefined }
   | { kind: "unknown"; dangerEntry?: undefined; safeEntry?: undefined };
 
@@ -91,7 +96,9 @@ export function isRegisteredProgram(programId: string): boolean {
 }
 
 /** Returns the registry entry for the program id, or undefined. */
-export function getRegistryProgram(programId: string): RegistryProgram | undefined {
+export function getRegistryProgram(
+  programId: string,
+): RegistryProgram | undefined {
   return programById.get(programId);
 }
 
@@ -147,7 +154,8 @@ export function matchInstruction(
 
   // Check dangerous first (higher priority).
   for (const entry of prog.dangerousInstructions) {
-    if (entry.discHex === discHex) return { kind: "dangerous", dangerEntry: entry };
+    if (entry.discHex === discHex)
+      return { kind: "dangerous", dangerEntry: entry };
   }
 
   // Check safe.
@@ -203,8 +211,9 @@ export function allRegisteredPrograms(): RegistryProgram[] {
 /** Catalog validation: all discHex values are well-formed (2 or 16 hex chars). */
 export function validateRegistry(): string[] {
   const errors: string[] = [];
-  for (const prog of (registryData as { programs: RegistryProgram[] }).programs) {
-    const expectedLen = (prog.discriminatorScheme === "anchor-8") ? 16 : 2;
+  for (const prog of (registryData as { programs: RegistryProgram[] })
+    .programs) {
+    const expectedLen = prog.discriminatorScheme === "anchor-8" ? 16 : 2;
 
     for (const d of prog.dangerousInstructions) {
       if (!/^[0-9a-f]+$/.test(d.discHex) || d.discHex.length !== expectedLen) {
@@ -213,11 +222,13 @@ export function validateRegistry(): string[] {
         );
       }
       if (d.severity !== "HOLD" && d.severity !== "REJECT") {
-        errors.push(`Program ${prog.id}: invalid severity "${d.severity}" on "${d.label}"`);
+        errors.push(
+          `Program ${prog.id}: invalid severity "${d.severity}" on "${d.label}"`,
+        );
       }
     }
 
-    for (const s of (prog.safeInstructions ?? [])) {
+    for (const s of prog.safeInstructions ?? []) {
       if (!/^[0-9a-f]+$/.test(s.discHex) || s.discHex.length !== expectedLen) {
         errors.push(
           `Program ${prog.id}: safe discHex "${s.discHex}" must be ${expectedLen} lowercase hex chars (scheme=${prog.discriminatorScheme})`,

@@ -21,11 +21,11 @@ REJECT** verdict plus a machine-readable `verdict.json` for autonomous-agent gat
   is now HOLD instead of REJECT, calibrated by a precision study on 100 real benign
   mainnet transactions (0 false-REJECTs). Use `--strict` to restore the aggressive
   single-tier posture for institutional signing.
-- **Clear-signing registry expanded to 12 programs**: Metaplex Token Metadata,
+- **Clear-signing registry expanded to 14 programs**: Metaplex Token Metadata,
   Metaplex Bubblegum, Jupiter v6, Orca Whirlpools, Raydium AMM v4, Pump.fun,
-  Pump AMM/PumpSwap, Raydium CLMM, Raydium CPMM, Drift, Kamino klend, Meteora DLMM.
-  Each has a safe-instruction tier (SIGN) alongside a dangerous-instruction tier
-  (HOLD/REJECT), so normal swaps and LP operations no longer over-HOLD.
+  Pump AMM/PumpSwap, Raydium CLMM, Raydium CPMM, Drift, Kamino klend, Meteora DLMM,
+  Marginfi v2, and Squads v4. Programs may have safe and dangerous instruction
+  tiers or recognize-only coverage; unlisted instructions remain HOLD.
 - **Precision study** (`docs/precision-report.md`): 100 real frozen mainnet benign
   transactions + 37 synthetic malicious patterns. Default: 33% SIGN / 67% HOLD /
   0% false-REJECT. Malicious recall: 100%.
@@ -112,9 +112,10 @@ Given a base64 message (legacy or v0), the deterministic core:
    upgrade/close, durable nonces incl. nonce withdrawals, delegate/approve
    grants, account closes & freezes, mint/supply changes, token burns, large
    transfers) plus a pure Token-2022 TLV extension walker, **and** against a
-   **12-program DeFi/NFT registry** (Metaplex Token Metadata, Bubblegum cNFT,
+   **14-program DeFi/NFT registry** (Metaplex Token Metadata, Bubblegum cNFT,
    Jupiter v6, Orca Whirlpools, Raydium AMM v4, Pump.fun, Pump AMM/PumpSwap,
-   Raydium CLMM, Raydium CPMM, Drift, Kamino klend, Meteora DLMM) that names
+   Raydium CLMM, Raydium CPMM, Drift, Kamino klend, Meteora DLMM, Marginfi v2,
+   Squads v4) that names
    NFT transfers/burns and has a safe-instruction tier so routine swaps SIGN,
 4. **surfaces transfer recipients** in every SOL and SPL transfer -- the verdict
    and SIGN reason explicitly name the destination address ("sends X lamports to
@@ -191,6 +192,8 @@ node --import tsx skill/src/cli.ts msg.b64 --strict
 ```
 
 ### With RPC (ALT resolution + Squads auto-clear-sign)
+
+`--rpc` is a trusted enrichment input. A malicious or faulty endpoint can withhold or falsify enrichment, but it cannot remove or downgrade findings derived from the signed transaction bytes. Helius MCP/RPC is a natural production backend; record the endpoint and treat its responses as provenance-bearing data.
 
 ```bash
 # v0 transaction with ALTs: resolves lookup tables, upgrades HOLD -> SIGN if clean
@@ -442,10 +445,10 @@ for the machine-readable source.
 - Classifying instructions against a 35-entry danger-primitive catalog
   (authority handoffs, program upgrades, durable nonces, delegate grants,
   account closes, large transfers) plus a pure Token-2022 TLV extension walker.
-- **DeFi/NFT program registry** (12 programs, `catalog/program-registry.json`):
+- **DeFi/NFT program registry** (14 programs, `catalog/program-registry.json`):
   Metaplex Token Metadata, Metaplex Bubblegum (cNFT), Jupiter Aggregator v6,
   Orca Whirlpools, Raydium AMM v4, Pump.fun, Pump AMM/PumpSwap, Raydium CLMM,
-  Raydium CPMM, Drift, Kamino klend, Meteora DLMM. Safe instructions SIGN;
+  Raydium CPMM, Drift, Kamino klend, Meteora DLMM, Marginfi v2, Squads v4. Safe instructions SIGN;
   dangerous instructions are labeled at the correct severity; unrecognized
   instructions on recognized programs are HOLD (never SIGN).
 - **Transfer recipient surfacing**: every SOL and SPL transfer surfaces the
@@ -610,7 +613,7 @@ $ npm test            # vitest run -- the full suite (exits nonzero on any fail)
  ✓ skill/test/fixtures.test.ts                   (52 tests)   golden + web3.js + kit differential + disagreement + no-network
  ✓ skill/test/real-fixtures.test.ts              (14 tests)   REAL mainnet txs decoded offline + cross-validated
  ✓ skill/test/fulltx.test.ts                     ( 9 tests)   full signed-tx input stripped + fail-closed (W011 §7)
- ✓ skill/test/program-registry.test.ts           (30 tests)   DeFi/NFT registry: 12 programs; dangerous instructions named; unrecognized HOLD
+ ✓ skill/test/program-registry.test.ts           (56 tests)   DeFi/NFT registry: 14 programs; dangerous instructions named; unrecognized HOLD
  ✓ skill/test/recipient.test.ts                  ( 8 tests)   System + SPL Transfer recipient surfacing; outboundToNonSigner; ALT-unresolved marker
  ✓ skill/test/reputation.test.ts                 (16 tests)   blocklist REJECT; holdOutboundTransfers HOLD; screenAddresses unit; reconRecipients stub
  ✓ skill/test/legacy-runner.test.ts              ( 1 test )   runs the standalone node smoke runner
@@ -684,7 +687,7 @@ What those 607 checks actually validate:
 | **Squads + verdict integration** | `squad-verdict.test.ts` | Execute without inner bytes -> HOLD; with inner `update_admin` -> REJECT; durable-nonce + execute -> REJECT (Drift composite); `governanceContext` -> REJECT. |
 | **Transaction digest** | `digest.test.ts` | SHA-256 correctness, short-code format and determinism, out-of-band identity confirmation, no-network purity. |
 | **Fail-closed / adversarial** | `decode.test.ts`, `verdict.test.ts` | Truncation, trailing garbage, out-of-range index, unsupported version `0x81`, empty/single-byte → REJECT; unresolved ALT never SIGN; prompt-injection (V8); banned reassurance phrases fail loud. |
-| **DeFi/NFT program registry** | `program-registry.test.ts` | 12 programs with verified per-instruction discriminators; safe instructions SIGN; dangerous instructions labeled; unrecognized-instruction HOLD (fail-closed); truly-unknown-program REJECT unchanged (strict) / HOLD (default). |
+| **DeFi/NFT program registry** | `program-registry.test.ts` | 14 programs with verified per-instruction discriminators; safe instructions SIGN; dangerous instructions labeled; unrecognized-instruction HOLD (fail-closed); truly-unknown-program REJECT unchanged (strict) / HOLD (default). |
 | **Self-verifying discriminators** | `registry-discriminators.test.ts` | 127 checks: `sha256("global:"+ixName)[..8]` recomputed live and compared against every entry in `program-registry.json`. |
 | **Recipient surfacing** | `recipient.test.ts` | System Transfer surfaces recipient base58 address, `outboundToNonSigner` true when non-signer, SIGN reason names destination; SPL Transfer, TransferChecked, ALT-sourced recipient marked unresolved. |
 | **Blocklist + policy** | `reputation.test.ts` | Blocklist REJECT on SOL transfer to known-bad address; SPL Approve delegate blocklist; `holdOutboundTransfers` escalation; `reconRecipients` injectable. |
@@ -729,7 +732,7 @@ sign-safe-skill/
     ├── catalog/
     │   ├── danger-primitives.json     # 35-entry native-program danger catalog
     │   ├── anchor-danger.json         # 11-entry Anchor authority-mutation registry
-    │   └── program-registry.json      # 12-program DeFi/NFT registry
+    │   └── program-registry.json      # 14-program DeFi/NFT registry
     ├── src/
     │   ├── types.ts        # the shared contract (two-layer role model + RecipientRef)
     │   ├── decode.ts       # PURE base64 -> DecodedMessage (legacy + v0) + re-encoder
@@ -768,7 +771,7 @@ sign-safe-skill/
         ├── pbt.test.ts              # fast-check property-based tests (seed 42)
         ├── fixtures.test.ts         # golden + web3.js/kit differential + no-network
         ├── real-fixtures.test.ts    # real mainnet txs decoded offline + cross-validated
-        ├── program-registry.test.ts # DeFi/NFT registry: 12 programs, verified discriminators
+        ├── program-registry.test.ts # DeFi/NFT registry: 14 programs, verified discriminators
         ├── recipient.test.ts        # recipient surfacing, outboundToNonSigner, ALT-unresolved
         ├── reputation.test.ts       # blocklist REJECT, holdOutboundTransfers HOLD, screenAddresses unit
         ├── legacy-runner.test.ts    # wraps run.ts so it is part of `npm test`

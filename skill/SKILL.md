@@ -1,6 +1,6 @@
 ---
 name: sign-safe
-description: Signing-time safety gate for Solana transactions. Decodes an opaque base64 transaction/message (legacy + v0 with Address Lookup Tables), classifies its instructions against a danger-primitive catalog (35 native-program entries + 11-entry Anchor authority-mutation registry + 12-program DeFi/NFT clear-signing registry with verified per-instruction safe/dangerous discriminators), surfaces transfer recipients and screens them against an injectable drainer blocklist, computes the signer-perspective statically-declared outflow, and emits a SIGN / HOLD / REJECT verdict plus a machine-readable verdict.json for autonomous-agent gating. With an optional --rpc endpoint it resolves Address Lookup Tables, clear-signs Squads v4 VaultTransaction proposals (decodes the inner CPI instruction), and screens Token-2022 mint extensions (PermanentDelegate / TransferHook) -- all fail-closed, with the deterministic core staying fully offline. Two-tier by default (an unknown program writing a value account -> HOLD); --strict restores reject-on-unknown for institutional signing. Trigger phrases include "is this transaction safe to sign", "review this tx before I sign", "what does this base64 transaction do", "blind signing", "sign-review", "squads proposal review". Offline, deterministic, and tested (607 checks, 29 files), with a precision study on real mainnet traffic (0 false-REJECTs, 100% recall on authority-transfer drainers). Motivated by the April-2026 Drift blind-signing / durable-nonce incident.
+description: Signing-time safety gate for Solana transactions. Decodes an opaque base64 transaction/message (legacy + v0 with Address Lookup Tables), classifies its instructions against a danger-primitive catalog (35 native-program entries + 11-entry Anchor authority-mutation registry + 14-program DeFi/NFT clear-signing registry with verified per-instruction safe/dangerous discriminators), surfaces transfer recipients and screens them against an injectable drainer blocklist, computes the signer-perspective statically-declared outflow, and emits a SIGN / HOLD / REJECT verdict plus a machine-readable verdict.json for autonomous-agent gating. With an optional --rpc endpoint it resolves Address Lookup Tables, clear-signs Squads v4 VaultTransaction proposals (decodes the inner CPI instruction), and screens Token-2022 mint extensions (PermanentDelegate / TransferHook) -- all fail-closed, with the deterministic core staying fully offline. Two-tier by default (an unknown program writing a value account -> HOLD); --strict restores reject-on-unknown for institutional signing. Trigger phrases include "is this transaction safe to sign", "review this tx before I sign", "what does this base64 transaction do", "blind signing", "sign-review", "squads proposal review". Offline, deterministic, and tested (607 checks, 29 files), with a precision study on real mainnet traffic (0 false-REJECTs, 100% recall on authority-transfer drainers). Motivated by the April-2026 Drift blind-signing / durable-nonce incident.
 user-invocable: true
 ---
 
@@ -54,10 +54,10 @@ no RPC, no simulation. Same bytes in, same JSON out:
 3. **classify** (`src/classify.ts` + `src/registry.ts`) -- each instruction x the
    danger catalog (`catalog/danger-primitives.json`, 35 entries) -> `Finding[]`,
    matched by programId + discriminator. Plus a DeFi/NFT registry tier
-   (`catalog/program-registry.json`, **12 programs**: Metaplex Token Metadata,
+   (`catalog/program-registry.json`, **14 programs**: Metaplex Token Metadata,
    Metaplex Bubblegum, Jupiter v6, Orca Whirlpools, Raydium AMM v4, Pump.fun,
    Pump AMM/PumpSwap, Raydium CLMM, Raydium CPMM, Drift, Kamino klend, Meteora
-   DLMM): recognized programs are named with a two-tier structure — safe
+   DLMM, Marginfi v2, Squads v4): recognized programs are named with a two-tier structure — safe
    instructions SIGN, dangerous instructions are labeled at their configured
    severity, and any unrecognized instruction on a recognized program is HOLD
    (never SIGN). Plus `src/tlv.ts`, a pure Token-2022 mint/account TLV extension
@@ -142,6 +142,8 @@ rate is acceptable and the priority is maximum caution.
 
 With `--rpc <url>` the CLI performs one round of on-chain enrichment before the
 deterministic offline pass:
+
+Treat the RPC endpoint as a trusted input for enrichment provenance. RPC data can supply or withhold ALT, Squads PDA, mint-extension, and simulation context, but it cannot remove or downgrade findings derived from the signed transaction bytes. A Helius MCP/RPC integration is a natural production backend for this host-layer input.
 
 - **ALT resolution**: fetches Address Lookup Table accounts and resolves
   ALT-sourced account roles (marking them `addressVerified: true`). Without
@@ -267,7 +269,7 @@ transfers when `holdOutboundTransfers` is set (HOLD).
 - [references/decode-notes.md](references/decode-notes.md) -- message parse details, header role math, ALT conservatism, discriminator notes
 - [catalog/danger-primitives.json](catalog/danger-primitives.json) -- the machine-readable catalog (35 native-program entries)
 - [catalog/anchor-danger.json](catalog/anchor-danger.json) -- Anchor authority-mutation registry (11 entries, 8-byte discriminators)
-- [catalog/program-registry.json](catalog/program-registry.json) -- DeFi/NFT program registry (12 programs, with safe + dangerous instruction tiers)
+- [catalog/program-registry.json](catalog/program-registry.json) -- DeFi/NFT program registry (14 programs, with safe + dangerous or recognize-only instruction tiers)
 
 ### Core Solana dev knowledge (from solana-dev-skill)
 
