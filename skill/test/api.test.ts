@@ -14,6 +14,8 @@ import {
   type VerdictContext,
 } from "../src/index.ts";
 import {
+  SignBlockedError,
+  guardedSignWeb3Transaction,
   kitTransactionToBase64,
   reviewKitTransaction,
   reviewWeb3Transaction,
@@ -55,6 +57,27 @@ describe("public programmatic API", () => {
       Buffer.from(transaction.serialize()).toString("base64"),
     );
     expect(reviewWeb3Transaction(transaction).decision).toBe("SIGN");
+  });
+
+  it("guards web3.js signing with the adapter serializer", async () => {
+    const rejectMessageBase64 = readFixtureB64("02_setauthority_reject");
+    const message = VersionedMessage.deserialize(
+      new Uint8Array(Buffer.from(rejectMessageBase64, "base64")),
+    );
+    const transaction = new VersionedTransaction(message);
+    let signCalls = 0;
+
+    await expect(
+      guardedSignWeb3Transaction(
+        transaction,
+        async () => {
+          signCalls++;
+          return transaction;
+        },
+        { requireHumanReview: true },
+      ),
+    ).rejects.toBeInstanceOf(SignBlockedError);
+    expect(signCalls).toBe(0);
   });
 
   it("reviews a legacy web3.js Transaction through the adapter", () => {

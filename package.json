@@ -46,7 +46,8 @@
     "./package.json": "./package.json"
   },
   "bin": {
-    "sign-safe": "./dist/src/cli.js"
+    "sign-safe": "./dist/src/cli.js",
+    "sign-safe-mcp": "./dist/src/mcp.js"
   },
   "files": [
     "dist/",
