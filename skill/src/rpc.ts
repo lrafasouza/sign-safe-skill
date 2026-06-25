@@ -80,7 +80,9 @@ export function makeRpcAccountFetcher(
   validateRpcUrl(rpcUrl);
   const timeoutMs = opts.timeoutMs ?? 10000;
 
-  return async function rpcAccountFetcher(pubkey: string): Promise<{ data: Uint8Array } | null> {
+  return async function rpcAccountFetcher(
+    pubkey: string,
+  ): Promise<{ data: Uint8Array } | null> {
     const id = ++requestIdCounter;
     const body = JSON.stringify({
       jsonrpc: "2.0",
@@ -168,7 +170,8 @@ export function makeRpcAccountFetcher(
  *   - sigVerify: false (no need for valid signatures)
  *   - replaceRecentBlockhash: true (avoids blockhash-expired errors)
  *   - encoding: "base64"
- *   - accounts.encoding: "base64"
+ *   - innerInstructions: true
+ *   - accounts.encoding: "jsonParsed"
  *   - accounts.addresses: the caller-supplied list of addresses to return
  *
  * This is injectable: pass a frozen stub in tests; production wires to a real
@@ -202,8 +205,9 @@ export function makeRpcSimulator(
           sigVerify: false,
           replaceRecentBlockhash: true,
           encoding: "base64",
+          innerInstructions: true,
           accounts: {
-            encoding: "base64",
+            encoding: "jsonParsed",
             addresses,
           },
         },
@@ -256,11 +260,33 @@ export function makeRpcSimulator(
         value: {
           err: unknown;
           logs?: string[] | null;
-          accounts?: (null | {
-            lamports: number;
-            data: [string, string];
-            owner: string;
-          })[] | null;
+          accounts?:
+            | (null | {
+                lamports: number;
+                data:
+                  | [string, string]
+                  | {
+                      program: string;
+                      parsed: {
+                        type: string;
+                        info: {
+                          mint?: string;
+                          owner?: string;
+                          tokenAmount?: {
+                            amount?: string;
+                          };
+                        };
+                      };
+                      space: number;
+                    };
+                owner: string;
+              })[]
+            | null;
+          innerInstructions?: SimulateResult["innerInstructions"] | null;
+          preBalances?: number[] | null;
+          postBalances?: number[] | null;
+          preTokenBalances?: SimulateResult["preTokenBalances"] | null;
+          postTokenBalances?: SimulateResult["postTokenBalances"] | null;
         };
       };
       error?: { code: number; message: string };
@@ -282,12 +308,35 @@ export function makeRpcSimulator(
       logs: value.logs ?? [],
       accounts: (value.accounts ?? []).map((acc) => {
         if (acc === null) return null;
+        if (!Array.isArray(acc.data)) {
+          const info = acc.data.parsed.info;
+          const mint = info.mint;
+          const owner = info.owner;
+          const amount = info.tokenAmount?.amount;
+          return {
+            lamports: BigInt(acc.lamports),
+            data: Buffer.alloc(0),
+            owner: acc.owner,
+            ...(mint !== undefined &&
+            owner !== undefined &&
+            amount !== undefined
+              ? { parsedToken: { mint, owner, amount: BigInt(amount) } }
+              : {}),
+          };
+        }
         return {
           lamports: BigInt(acc.lamports),
           data: Buffer.from(acc.data[0], "base64"),
           owner: acc.owner,
         };
       }),
+      innerInstructions: value.innerInstructions ?? [],
+      preBalances: (value.preBalances ?? []).map((balance) => BigInt(balance)),
+      postBalances: (value.postBalances ?? []).map((balance) =>
+        BigInt(balance),
+      ),
+      preTokenBalances: value.preTokenBalances ?? [],
+      postTokenBalances: value.postTokenBalances ?? [],
     };
   };
 }

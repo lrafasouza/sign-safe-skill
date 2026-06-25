@@ -17,19 +17,88 @@
  */
 
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
 import { simulateAssetDiff } from "../src/simulate.ts";
+import { makeRpcSimulator } from "../src/rpc.ts";
 import { reviewWithEnrichment } from "../src/review-online.ts";
 import { reviewBase64 } from "../src/verdict.ts";
 import { DEFAULT_CONTEXT, type VerdictContext } from "../src/types.ts";
 import type { SimulateFn, SimulateResult } from "../src/simulate.ts";
-import { legacyBytes, v0Bytes, toB64, key, u64le } from "./helpers.ts";
+import type { AccountFetcher } from "../src/enrich.ts";
+import { base58DecodeFixed, decodeInput } from "../src/decode.ts";
+import {
+  encodeCompactU16,
+  legacyBytes,
+  v0Bytes,
+  toB64,
+  key,
+  u64le,
+} from "./helpers.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
 const SYSTEM = "11111111111111111111111111111111";
-const NOOP_FETCHER = async (_pk: string) => null;
+const NOOP_FETCHER: AccountFetcher = async (_pk: string) => null;
+const FROZEN_SIMULATIONS = JSON.parse(
+  readFileSync(
+    new URL("./fixtures/simulate-transaction.json", import.meta.url),
+    "utf8",
+  ),
+) as Record<string, unknown>;
+
+function buildSwapMsg(): { b64: string; addresses: string[] } {
+  const keys = [
+    Uint8Array.from(key(0x01)),
+    Uint8Array.from(key(0x02)),
+    Uint8Array.from(key(0x03)),
+    Uint8Array.from(key(0x04)),
+    Uint8Array.from(key(0x05)),
+    base58DecodeFixed("JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4", 32),
+  ];
+  const out: number[] = [1, 0, 1, ...encodeCompactU16(keys.length)];
+  for (const accountKey of keys) out.push(...accountKey);
+  out.push(...key(0xfa));
+  out.push(
+    1,
+    5,
+    5,
+    0,
+    1,
+    2,
+    3,
+    4,
+    8,
+    0xe5,
+    0x17,
+    0xcb,
+    0x97,
+    0x7a,
+    0xe3,
+    0xad,
+    0x2a,
+  );
+  const b64 = toB64(Uint8Array.from(out));
+  return { b64, addresses: decodeInput(b64).message.staticAccountKeys };
+}
+
+function frozenSimulator(name: string): SimulateFn {
+  const response = FROZEN_SIMULATIONS[name];
+  const fetchImpl = async () =>
+    new Response(JSON.stringify(response), { status: 200 });
+  return makeRpcSimulator("https://frozen.invalid", fetchImpl as typeof fetch);
+}
+
+function frozenPreAccountFetcher(name: string): AccountFetcher {
+  const frozen = FROZEN_SIMULATIONS[name] as {
+    preAccounts?: Record<string, string>;
+  };
+  return async (pubkey: string) => {
+    const data = frozen.preAccounts?.[pubkey];
+    return data === undefined ? null : { data: Buffer.from(data, "base64") };
+  };
+}
 
 /** Build a minimal legacy System Transfer message: signer → recipient, amount lamports. */
 function buildTransferMsg(lamports: bigint): { raw: Uint8Array; b64: string } {
@@ -48,13 +117,34 @@ function makeDrainSimResult(
   signerPk: string,
   preLamports: bigint,
   postLamports: bigint,
-): SimulateResult & { preBalances: bigint[] } {
-  void signerPk; // captured in the closure for assertion clarity
+): SimulateResult {
   return {
     err: null,
     logs: [],
-    accounts: [{ lamports: postLamports, data: Buffer.alloc(0), owner: SYSTEM }],
+    accounts: [
+      { lamports: postLamports, data: Buffer.alloc(0), owner: SYSTEM },
+    ],
     preBalances: [preLamports],
+    postBalances: [postLamports],
+    innerInstructions: [
+      {
+        index: 0,
+        instructions: [
+          {
+            program: "system",
+            programId: SYSTEM,
+            parsed: {
+              type: "transfer",
+              info: {
+                source: signerPk,
+                destination: "_non-signer_",
+                lamports: (preLamports - postLamports).toString(),
+              },
+            },
+          },
+        ],
+      },
+    ],
   };
 }
 
@@ -64,12 +154,13 @@ function makeErrorSimResult(err: string): SimulateResult {
 }
 
 /** Build a benign SimulateResult with no delta (signer keeps same lamports). */
-function makeBenignSimResult(lamports: bigint): SimulateResult & { preBalances: bigint[] } {
+function makeBenignSimResult(lamports: bigint): SimulateResult {
   return {
     err: null,
     logs: [],
     accounts: [{ lamports, data: Buffer.alloc(0), owner: SYSTEM }],
     preBalances: [lamports],
+    postBalances: [lamports],
   };
 }
 
@@ -80,9 +171,16 @@ function makeBenignSimResult(lamports: bigint): SimulateResult & { preBalances: 
 describe("S6: simulateAssetDiff unit — zero signers", () => {
   it("S6.1 zero signerPubkeys → ok=true, zero deltas", async () => {
     const dummySim: SimulateFn = async () => ({
-      err: null, logs: [], accounts: [],
+      err: null,
+      logs: [],
+      accounts: [],
     });
-    const result = await simulateAssetDiff("AQAAABBB==", [], dummySim, NOOP_FETCHER);
+    const result = await simulateAssetDiff(
+      "AQAAABBB==",
+      [],
+      dummySim,
+      NOOP_FETCHER,
+    );
     expect(result.ok).toBe(true);
     expect(result.signerSolDelta).toBe(0n);
     expect(result.tokenDeltas).toHaveLength(0);
@@ -92,8 +190,11 @@ describe("S6: simulateAssetDiff unit — zero signers", () => {
 
 describe("S7: simulateAssetDiff unit — sim error → ok=false", () => {
   it("S7.1 simulator returns err → ok=false with err message", async () => {
-    const errSim: SimulateFn = async () => makeErrorSimResult("InstructionError at 0");
-    const result = await simulateAssetDiff("AQAAABBB==", ["signer1"], errSim, NOOP_FETCHER);
+    const errSim: SimulateFn = async () =>
+      makeErrorSimResult("InstructionError at 0");
+    const { b64 } = buildTransferMsg(0n);
+    const signer = decodeInput(b64).message.staticAccountKeys[0]!;
+    const result = await simulateAssetDiff(b64, [signer], errSim, NOOP_FETCHER);
     expect(result.ok).toBe(false);
     expect(result.err).toMatch(/InstructionError/);
     expect(result.signerSolDelta).toBe(0n);
@@ -103,7 +204,14 @@ describe("S7: simulateAssetDiff unit — sim error → ok=false", () => {
     const throwSim: SimulateFn = async () => {
       throw new Error("network failure");
     };
-    const result = await simulateAssetDiff("AQAAABBB==", ["signer1"], throwSim, NOOP_FETCHER);
+    const { b64 } = buildTransferMsg(0n);
+    const signer = decodeInput(b64).message.staticAccountKeys[0]!;
+    const result = await simulateAssetDiff(
+      b64,
+      [signer],
+      throwSim,
+      NOOP_FETCHER,
+    );
     expect(result.ok).toBe(false);
     expect(result.err).toMatch(/network failure/);
   });
@@ -111,13 +219,18 @@ describe("S7: simulateAssetDiff unit — sim error → ok=false", () => {
 
 describe("S7b: simulateAssetDiff unit — SOL drain to non-signer", () => {
   it("S7b.1 signer loses 2 SOL → signerSolDelta < 0, outflow reported", async () => {
+    const { b64 } = buildTransferMsg(0n);
+    const signerPk = decodeInput(b64).message.staticAccountKeys[0]!;
     const pre = 5_000_000_000n; // 5 SOL
     const post = 3_000_000_000n; // 3 SOL (2 SOL drain)
     const drainSim: SimulateFn = async (_b64, _addrs) =>
-      makeDrainSimResult("signerPk", pre, post);
+      makeDrainSimResult(signerPk, pre, post);
 
     const result = await simulateAssetDiff(
-      "AQAAABBB==", ["signerPk"], drainSim, NOOP_FETCHER,
+      b64,
+      [signerPk],
+      drainSim,
+      NOOP_FETCHER,
     );
     expect(result.ok).toBe(true);
     expect(result.signerSolDelta).toBe(post - pre); // -2_000_000_000n
@@ -126,6 +239,107 @@ describe("S7b: simulateAssetDiff unit — SOL drain to non-signer", () => {
     const solOutflow = result.outflowsToNonSigner.find((o) => o.kind === "sol");
     expect(solOutflow).toBeDefined();
     expect(solOutflow!.amount).toBe(2_000_000_000n);
+  });
+});
+
+describe("S7c: frozen realistic swap simulation", () => {
+  it("S7c.1 benign swap sends output to signer and does not escalate", async () => {
+    const { b64, addresses } = buildSwapMsg();
+    const result = await simulateAssetDiff(
+      b64,
+      [addresses[0]!],
+      frozenSimulator("benignSwap"),
+      NOOP_FETCHER,
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.signerSolDelta).toBe(-5_000n);
+    expect(result.tokenDeltas).toEqual(
+      expect.arrayContaining([
+        {
+          account: addresses[1],
+          mint: "US517G5965aydkZ46HS38QLi7UQiSojurfbQfKCELFx",
+          owner: addresses[0],
+          delta: -100n,
+        },
+        {
+          account: addresses[2],
+          mint: "YMN9Qj5jPNp7j14VPcML1B6xGgcPWVZUGLFU3Mnyfaf",
+          owner: addresses[0],
+          delta: 200n,
+        },
+      ]),
+    );
+    expect(result.outflowsToNonSigner).toEqual([]);
+
+    const verdict = await reviewWithEnrichment(
+      b64,
+      DEFAULT_CONTEXT,
+      NOOP_FETCHER,
+      {
+        simulate: true,
+        simulateFn: frozenSimulator("benignSwap"),
+        rpcUrl: "https://frozen.invalid",
+      },
+    );
+    expect(
+      verdict.findings.find((f) => f.id === "simulation-outflow"),
+    ).toBeUndefined();
+  });
+
+  it("S7c.2 malicious swap output owned by non-signer escalates", async () => {
+    const { b64, addresses } = buildSwapMsg();
+    const result = await simulateAssetDiff(
+      b64,
+      [addresses[0]!],
+      frozenSimulator("maliciousSwapOutput"),
+      NOOP_FETCHER,
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.outflowsToNonSigner).toContainEqual({
+      to: addresses[2],
+      amount: 200n,
+      kind: "token",
+    });
+
+    const verdict = await reviewWithEnrichment(
+      b64,
+      DEFAULT_CONTEXT,
+      NOOP_FETCHER,
+      {
+        simulate: true,
+        simulateFn: frozenSimulator("maliciousSwapOutput"),
+        rpcUrl: "https://frozen.invalid",
+      },
+    );
+    expect(
+      verdict.findings.find((f) => f.id === "simulation-outflow"),
+    ).toBeDefined();
+    expect(verdict.decision).not.toBe("SIGN");
+  });
+
+  it("S7c.3 omitted inner and balance arrays use raw token-account fallback", async () => {
+    const { b64, addresses } = buildSwapMsg();
+    const result = await simulateAssetDiff(
+      b64,
+      [addresses[0]!],
+      frozenSimulator("fallbackAccounts"),
+      frozenPreAccountFetcher("fallbackAccounts"),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.tokenDeltas).toContainEqual({
+      account: addresses[2],
+      mint: "YMN9Qj5jPNp7j14VPcML1B6xGgcPWVZUGLFU3Mnyfaf",
+      owner: "QWmroo4YnnMqYW3cnxWkFdaTxGD3P7vMSzwMHGbUzwF",
+      delta: 200n,
+    });
+    expect(result.outflowsToNonSigner).toContainEqual({
+      to: addresses[2],
+      amount: 200n,
+      kind: "token",
+    });
   });
 });
 
@@ -164,7 +378,9 @@ describe("S1: sim SOL drain to non-signer → simulation-outflow HOLD in verdict
 
     const verdict = reviewBase64(b64, ctx);
     // Should gain simulation-outflow finding
-    const simFinding = verdict.findings.find((f) => f.id === "simulation-outflow");
+    const simFinding = verdict.findings.find(
+      (f) => f.id === "simulation-outflow",
+    );
     expect(simFinding).toBeDefined();
     expect(simFinding!.severity).toBe("HOLD");
     // The verdict should be at least HOLD
@@ -190,7 +406,9 @@ describe("S1: sim SOL drain to non-signer → simulation-outflow HOLD in verdict
       rpcUrl: "http://127.0.0.1:8899",
     });
 
-    const simFinding = verdict.findings.find((f) => f.id === "simulation-outflow");
+    const simFinding = verdict.findings.find(
+      (f) => f.id === "simulation-outflow",
+    );
     expect(simFinding).toBeDefined();
     expect(simFinding!.severity).toBe("HOLD");
     expect(verdict.decision).not.toBe("SIGN");
@@ -218,7 +436,9 @@ describe("S2: sim error when simulate requested → simulation-failed HOLD", () 
       },
     };
     const verdict = reviewBase64(b64, ctx);
-    const simFinding = verdict.findings.find((f) => f.id === "simulation-failed");
+    const simFinding = verdict.findings.find(
+      (f) => f.id === "simulation-failed",
+    );
     expect(simFinding).toBeDefined();
     expect(simFinding!.severity).toBe("HOLD");
     expect(verdict.decision).not.toBe("SIGN");
@@ -226,15 +446,23 @@ describe("S2: sim error when simulate requested → simulation-failed HOLD", () 
 
   it("S2.2 reviewWithEnrichment + frozen error sim → simulation-failed HOLD", async () => {
     const { b64 } = buildTransferMsg(100n);
-    const errSim: SimulateFn = async () => makeErrorSimResult("InstructionError at ix 0");
+    const errSim: SimulateFn = async () =>
+      makeErrorSimResult("InstructionError at ix 0");
 
-    const verdict = await reviewWithEnrichment(b64, DEFAULT_CONTEXT, NOOP_FETCHER, {
-      simulate: true,
-      simulateFn: errSim,
-      rpcUrl: "https://api.mainnet-beta.solana.com",
-    });
+    const verdict = await reviewWithEnrichment(
+      b64,
+      DEFAULT_CONTEXT,
+      NOOP_FETCHER,
+      {
+        simulate: true,
+        simulateFn: errSim,
+        rpcUrl: "https://api.mainnet-beta.solana.com",
+      },
+    );
 
-    const simFinding = verdict.findings.find((f) => f.id === "simulation-failed");
+    const simFinding = verdict.findings.find(
+      (f) => f.id === "simulation-failed",
+    );
     expect(simFinding).toBeDefined();
     expect(simFinding!.severity).toBe("HOLD");
     expect(verdict.decision).toBe("HOLD");
@@ -242,16 +470,25 @@ describe("S2: sim error when simulate requested → simulation-failed HOLD", () 
 
   it("S2.3 reviewWithEnrichment + throwing sim → simulation-failed HOLD (fail-closed)", async () => {
     const { b64 } = buildTransferMsg(100n);
-    const throwSim: SimulateFn = async () => { throw new Error("network down"); };
+    const throwSim: SimulateFn = async () => {
+      throw new Error("network down");
+    };
 
-    const verdict = await reviewWithEnrichment(b64, DEFAULT_CONTEXT, NOOP_FETCHER, {
-      simulate: true,
-      simulateFn: throwSim,
-      rpcUrl: "https://api.mainnet-beta.solana.com",
-    });
+    const verdict = await reviewWithEnrichment(
+      b64,
+      DEFAULT_CONTEXT,
+      NOOP_FETCHER,
+      {
+        simulate: true,
+        simulateFn: throwSim,
+        rpcUrl: "https://api.mainnet-beta.solana.com",
+      },
+    );
 
     // Fail-closed: any sim error → simulation-failed HOLD
-    const simFinding = verdict.findings.find((f) => f.id === "simulation-failed");
+    const simFinding = verdict.findings.find(
+      (f) => f.id === "simulation-failed",
+    );
     expect(simFinding).toBeDefined();
     expect(simFinding!.severity).toBe("HOLD");
   });
@@ -290,21 +527,28 @@ describe("S3: benign sim → no extra simulation finding", () => {
     const benignSim: SimulateFn = async (_b64, _addrs) =>
       makeBenignSimResult(5_000_000_000n); // same before and after
 
-    // We need to ensure the sim result has preBalances set to get a zero delta
     const customSim: SimulateFn = async (_b64, _addrs) => ({
       err: null,
       logs: [],
-      accounts: [{ lamports: 5_000_000_000n, data: Buffer.alloc(0), owner: SYSTEM }],
-      preBalances: [5_000_000_000n], // same pre = zero delta
-    } as SimulateResult & { preBalances: bigint[] });
+      accounts: [
+        { lamports: 5_000_000_000n, data: Buffer.alloc(0), owner: SYSTEM },
+      ],
+      preBalances: [5_000_000_000n],
+      postBalances: [5_000_000_000n],
+    });
 
     void signerPk; // used to confirm we got the right address
 
-    const verdict = await reviewWithEnrichment(b64, DEFAULT_CONTEXT, NOOP_FETCHER, {
-      simulate: true,
-      simulateFn: customSim,
-      rpcUrl: "https://api.mainnet-beta.solana.com",
-    });
+    const verdict = await reviewWithEnrichment(
+      b64,
+      DEFAULT_CONTEXT,
+      NOOP_FETCHER,
+      {
+        simulate: true,
+        simulateFn: customSim,
+        rpcUrl: "https://api.mainnet-beta.solana.com",
+      },
+    );
 
     const simFinding = verdict.findings.find(
       (f) => f.id === "simulation-outflow" || f.id === "simulation-failed",
@@ -328,9 +572,9 @@ describe("S4: simulation escalate-only — never downgrades static REJECT", () =
     // Build: SPL Token SetAuthority (disc=6, type=1=MintTokens, new authority set)
     // This is a REJECT in the catalog.
     const setAuthData = [
-      6,   // disc = SetAuthority
-      1,   // authority_type = MintTokens
-      1,   // COption<Pubkey> = Some
+      6, // disc = SetAuthority
+      1, // authority_type = MintTokens
+      1, // COption<Pubkey> = Some
       ...key(0x22), // new authority pubkey (32 bytes)
     ];
     const splTokenBytes = (() => {
@@ -341,7 +585,8 @@ describe("S4: simulation escalate-only — never downgrades static REJECT", () =
       // For test purposes, we inject the simulation directly via ctx.simulation.
       return null;
     })();
-    void setAuthData; void splTokenBytes;
+    void setAuthData;
+    void splTokenBytes;
 
     // Simpler: build a message that we KNOW static analysis will REJECT,
     // then attach a "benign" simulation and verify REJECT is preserved.
@@ -373,7 +618,9 @@ describe("S4: simulation escalate-only — never downgrades static REJECT", () =
     // The benign simulation must NOT downgrade this to SIGN
     expect(verdict.decision).toBe("REJECT");
     // Simulation-outflow finding should NOT be present (benign sim)
-    expect(verdict.findings.find((f) => f.id === "simulation-outflow")).toBeUndefined();
+    expect(
+      verdict.findings.find((f) => f.id === "simulation-outflow"),
+    ).toBeUndefined();
   });
 
   it("S4.2 static REJECT + drain sim → still REJECT (simulation can escalate but not downgrade)", () => {
@@ -393,21 +640,28 @@ describe("S4: simulation escalate-only — never downgrades static REJECT", () =
         ok: true,
         signerSolDelta: -2_000_000_000n,
         tokenDeltas: [],
-        outflowsToNonSigner: [{ to: "_non-signer_", amount: 2_000_000_000n, kind: "sol" }],
+        outflowsToNonSigner: [
+          { to: "_non-signer_", amount: 2_000_000_000n, kind: "sol" },
+        ],
       },
     };
 
     const verdict = reviewBase64(b64, ctx);
     expect(verdict.decision).toBe("REJECT");
     // simulation-outflow finding is added (escalate-only), but verdict stays REJECT
-    expect(verdict.findings.find((f) => f.id === "simulation-outflow")).toBeDefined();
+    expect(
+      verdict.findings.find((f) => f.id === "simulation-outflow"),
+    ).toBeDefined();
   });
 
   it("S4.3 absent simulation (ctx.simulation undefined) → verdict byte-identical to pre-simulation", () => {
     // No simulation → verdict must match the offline baseline exactly.
     const { b64 } = buildTransferMsg(100n);
     const ctxWithoutSim: VerdictContext = DEFAULT_CONTEXT;
-    const ctxWithUndefinedSim: VerdictContext = { ...DEFAULT_CONTEXT, simulation: undefined };
+    const ctxWithUndefinedSim: VerdictContext = {
+      ...DEFAULT_CONTEXT,
+      simulation: undefined,
+    };
 
     const v1 = reviewBase64(b64, ctxWithoutSim);
     const v2 = reviewBase64(b64, ctxWithUndefinedSim);
@@ -417,8 +671,12 @@ describe("S4: simulation escalate-only — never downgrades static REJECT", () =
     expect(v1.findings.length).toBe(v2.findings.length);
     expect(v1.reason).toBe(v2.reason);
     // No simulation findings in either
-    expect(v1.findings.find((f) => f.id.startsWith("simulation-"))).toBeUndefined();
-    expect(v2.findings.find((f) => f.id.startsWith("simulation-"))).toBeUndefined();
+    expect(
+      v1.findings.find((f) => f.id.startsWith("simulation-")),
+    ).toBeUndefined();
+    expect(
+      v2.findings.find((f) => f.id.startsWith("simulation-")),
+    ).toBeUndefined();
   });
 });
 
@@ -442,7 +700,9 @@ describe("S5: sim outflow to blocklisted recipient → REJECT", () => {
     };
 
     const verdict = reviewBase64(b64, ctx);
-    const simFinding = verdict.findings.find((f) => f.id === "simulation-outflow");
+    const simFinding = verdict.findings.find(
+      (f) => f.id === "simulation-outflow",
+    );
     expect(simFinding).toBeDefined();
     expect(simFinding!.severity).toBe("REJECT");
     expect(verdict.decision).toBe("REJECT");
@@ -465,7 +725,9 @@ describe("S5: sim outflow to blocklisted recipient → REJECT", () => {
     };
 
     const verdict = reviewBase64(b64, ctx);
-    const simFinding = verdict.findings.find((f) => f.id === "simulation-outflow");
+    const simFinding = verdict.findings.find(
+      (f) => f.id === "simulation-outflow",
+    );
     expect(simFinding).toBeDefined();
     expect(simFinding!.severity).toBe("HOLD");
   });
@@ -479,17 +741,25 @@ describe("S8: reviewWithEnrichment simulate=true + enrichment provenance", () =>
   it("S8.1 enrichment provenance is set when simulate is used", async () => {
     const { b64 } = buildTransferMsg(100n);
     const benignSim: SimulateFn = async () => ({
-      err: null, logs: [], accounts: [
+      err: null,
+      logs: [],
+      accounts: [
         { lamports: 5_000_000_000n, data: Buffer.alloc(0), owner: SYSTEM },
       ],
       preBalances: [5_000_000_000n],
-    } as SimulateResult & { preBalances: bigint[] });
-
-    const verdict = await reviewWithEnrichment(b64, DEFAULT_CONTEXT, NOOP_FETCHER, {
-      simulate: true,
-      simulateFn: benignSim,
-      rpcUrl: "https://my-rpc.example.com",
+      postBalances: [5_000_000_000n],
     });
+
+    const verdict = await reviewWithEnrichment(
+      b64,
+      DEFAULT_CONTEXT,
+      NOOP_FETCHER,
+      {
+        simulate: true,
+        simulateFn: benignSim,
+        rpcUrl: "https://my-rpc.example.com",
+      },
+    );
 
     expect(verdict.enrichment).toBeDefined();
     expect(verdict.enrichment!.rpcUrl).toBe("https://my-rpc.example.com");
@@ -500,9 +770,14 @@ describe("S8: reviewWithEnrichment simulate=true + enrichment provenance", () =>
 
   it("S8.2 enrichment provenance is set even when simulate=false (not simulated)", async () => {
     const { b64 } = buildTransferMsg(100n);
-    const verdict = await reviewWithEnrichment(b64, DEFAULT_CONTEXT, NOOP_FETCHER, {
-      rpcUrl: "https://my-rpc.example.com",
-    });
+    const verdict = await reviewWithEnrichment(
+      b64,
+      DEFAULT_CONTEXT,
+      NOOP_FETCHER,
+      {
+        rpcUrl: "https://my-rpc.example.com",
+      },
+    );
 
     expect(verdict.enrichment).toBeDefined();
     expect(verdict.enrichment!.simulated).toBe(false);
@@ -519,13 +794,20 @@ describe("S8: reviewWithEnrichment simulate=true + enrichment provenance", () =>
 describe("S9: simulate=true without simulateFn → fail-closed HOLD", () => {
   it("S9.1 simulate=true but no simulateFn → simulation-failed HOLD (fail-closed)", async () => {
     const { b64 } = buildTransferMsg(100n);
-    const verdict = await reviewWithEnrichment(b64, DEFAULT_CONTEXT, NOOP_FETCHER, {
-      simulate: true,
-      // simulateFn intentionally omitted
-      rpcUrl: "https://api.mainnet-beta.solana.com",
-    });
+    const verdict = await reviewWithEnrichment(
+      b64,
+      DEFAULT_CONTEXT,
+      NOOP_FETCHER,
+      {
+        simulate: true,
+        // simulateFn intentionally omitted
+        rpcUrl: "https://api.mainnet-beta.solana.com",
+      },
+    );
     // Should fail-closed: simulation-failed HOLD
-    const simFinding = verdict.findings.find((f) => f.id === "simulation-failed");
+    const simFinding = verdict.findings.find(
+      (f) => f.id === "simulation-failed",
+    );
     expect(simFinding).toBeDefined();
     expect(simFinding!.severity).toBe("HOLD");
     expect(verdict.decision).toBe("HOLD");
@@ -542,7 +824,12 @@ describe("S10: simulation invariant — never SIGN after adding simulation", () 
 
     const ctx: VerdictContext = {
       ...DEFAULT_CONTEXT,
-      simulation: { ok: true, signerSolDelta: 0n, tokenDeltas: [], outflowsToNonSigner: [] },
+      simulation: {
+        ok: true,
+        signerSolDelta: 0n,
+        tokenDeltas: [],
+        outflowsToNonSigner: [],
+      },
     };
     const withSim = reviewBase64(b64, ctx);
     // Still SIGN — benign sim adds nothing
@@ -561,12 +848,16 @@ describe("S10: simulation invariant — never SIGN after adding simulation", () 
         ok: true,
         signerSolDelta: -1_000_000_000n, // 1 SOL drain
         tokenDeltas: [],
-        outflowsToNonSigner: [{ to: "_non-signer_", amount: 1_000_000_000n, kind: "sol" }],
+        outflowsToNonSigner: [
+          { to: "_non-signer_", amount: 1_000_000_000n, kind: "sol" },
+        ],
       },
     };
     const withSim = reviewBase64(b64, ctx);
     expect(withSim.decision).toBe("HOLD");
     // The simulation finding is there
-    expect(withSim.findings.find((f) => f.id === "simulation-outflow")).toBeDefined();
+    expect(
+      withSim.findings.find((f) => f.id === "simulation-outflow"),
+    ).toBeDefined();
   });
 });

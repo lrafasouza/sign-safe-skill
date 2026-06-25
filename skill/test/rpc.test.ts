@@ -64,10 +64,15 @@ describe("A5a: makeRpcAccountFetcher", () => {
     const fakeFetch = vi.fn(async (url: string, init?: RequestInit) => {
       capturedUrl = url;
       capturedBody = JSON.parse(init?.body as string);
-      return new Response(makeSuccessResponse([0x01, 0x02, 0x03]), { status: 200 });
+      return new Response(makeSuccessResponse([0x01, 0x02, 0x03]), {
+        status: 200,
+      });
     });
 
-    const fetcher = makeRpcAccountFetcher(TEST_RPC_URL, fakeFetch as unknown as typeof fetch);
+    const fetcher = makeRpcAccountFetcher(
+      TEST_RPC_URL,
+      fakeFetch as unknown as typeof fetch,
+    );
     await fetcher(TEST_PUBKEY);
 
     expect(capturedUrl).toBe(TEST_RPC_URL);
@@ -83,11 +88,15 @@ describe("A5a: makeRpcAccountFetcher", () => {
   it("A5a.2 decodes base64 data from response to the correct Uint8Array bytes", async () => {
     const expectedBytes = [0xde, 0xad, 0xbe, 0xef, 0x42];
 
-    const fakeFetch = vi.fn(async () =>
-      new Response(makeSuccessResponse(expectedBytes), { status: 200 }),
+    const fakeFetch = vi.fn(
+      async () =>
+        new Response(makeSuccessResponse(expectedBytes), { status: 200 }),
     );
 
-    const fetcher = makeRpcAccountFetcher(TEST_RPC_URL, fakeFetch as unknown as typeof fetch);
+    const fetcher = makeRpcAccountFetcher(
+      TEST_RPC_URL,
+      fakeFetch as unknown as typeof fetch,
+    );
     const result = await fetcher(TEST_PUBKEY);
 
     expect(result).not.toBeNull();
@@ -96,31 +105,43 @@ describe("A5a: makeRpcAccountFetcher", () => {
   });
 
   it("A5a.3 returns null when result.value is null (account not found)", async () => {
-    const fakeFetch = vi.fn(async () =>
-      new Response(makeNullResponse(), { status: 200 }),
+    const fakeFetch = vi.fn(
+      async () => new Response(makeNullResponse(), { status: 200 }),
     );
 
-    const fetcher = makeRpcAccountFetcher(TEST_RPC_URL, fakeFetch as unknown as typeof fetch);
+    const fetcher = makeRpcAccountFetcher(
+      TEST_RPC_URL,
+      fakeFetch as unknown as typeof fetch,
+    );
     const result = await fetcher(TEST_PUBKEY);
 
     expect(result).toBeNull();
   });
 
   it("A5a.4 throws when the RPC returns an error object", async () => {
-    const fakeFetch = vi.fn(async () =>
-      new Response(makeErrorResponse(-32600, "Invalid request"), { status: 200 }),
+    const fakeFetch = vi.fn(
+      async () =>
+        new Response(makeErrorResponse(-32600, "Invalid request"), {
+          status: 200,
+        }),
     );
 
-    const fetcher = makeRpcAccountFetcher(TEST_RPC_URL, fakeFetch as unknown as typeof fetch);
+    const fetcher = makeRpcAccountFetcher(
+      TEST_RPC_URL,
+      fakeFetch as unknown as typeof fetch,
+    );
     await expect(fetcher(TEST_PUBKEY)).rejects.toThrow();
   });
 
   it("A5a.5 throws on HTTP error status (non-2xx)", async () => {
-    const fakeFetch = vi.fn(async () =>
-      new Response("Internal Server Error", { status: 500 }),
+    const fakeFetch = vi.fn(
+      async () => new Response("Internal Server Error", { status: 500 }),
     );
 
-    const fetcher = makeRpcAccountFetcher(TEST_RPC_URL, fakeFetch as unknown as typeof fetch);
+    const fetcher = makeRpcAccountFetcher(
+      TEST_RPC_URL,
+      fakeFetch as unknown as typeof fetch,
+    );
     await expect(fetcher(TEST_PUBKEY)).rejects.toThrow();
   });
 
@@ -135,11 +156,15 @@ describe("A5a: makeRpcAccountFetcher", () => {
 
     const fakeFetch = vi.fn(async (_url: string, init?: RequestInit) => {
       const headers = init?.headers as Record<string, string> | undefined;
-      capturedContentType = headers?.["Content-Type"] ?? headers?.["content-type"];
+      capturedContentType =
+        headers?.["Content-Type"] ?? headers?.["content-type"];
       return new Response(makeSuccessResponse([0xab]), { status: 200 });
     });
 
-    const fetcher = makeRpcAccountFetcher(TEST_RPC_URL, fakeFetch as unknown as typeof fetch);
+    const fetcher = makeRpcAccountFetcher(
+      TEST_RPC_URL,
+      fakeFetch as unknown as typeof fetch,
+    );
     await fetcher(TEST_PUBKEY);
 
     expect(capturedContentType).toBe("application/json");
@@ -157,11 +182,15 @@ describe("v0.5 Part 1a: URL scheme validation (makeRpcAccountFetcher)", () => {
   });
 
   it("P1a.2 https:// URL is accepted", () => {
-    expect(() => makeRpcAccountFetcher("https://api.mainnet-beta.solana.com")).not.toThrow();
+    expect(() =>
+      makeRpcAccountFetcher("https://api.mainnet-beta.solana.com"),
+    ).not.toThrow();
   });
 
   it("P1a.3 ws:// URL throws (websocket scheme not supported)", () => {
-    expect(() => makeRpcAccountFetcher("ws://api.mainnet-beta.solana.com")).toThrow(/http/i);
+    expect(() =>
+      makeRpcAccountFetcher("ws://api.mainnet-beta.solana.com"),
+    ).toThrow(/http/i);
   });
 
   it("P1a.4 file:// URL throws", () => {
@@ -169,7 +198,9 @@ describe("v0.5 Part 1a: URL scheme validation (makeRpcAccountFetcher)", () => {
   });
 
   it("P1a.5 data: URL throws", () => {
-    expect(() => makeRpcAccountFetcher("data:text/plain,hello")).toThrow(/http/i);
+    expect(() => makeRpcAccountFetcher("data:text/plain,hello")).toThrow(
+      /http/i,
+    );
   });
 
   it("P1a.6 unparseable string throws with clear message", () => {
@@ -178,7 +209,9 @@ describe("v0.5 Part 1a: URL scheme validation (makeRpcAccountFetcher)", () => {
 
   it("P1a.7 RFC-1918 private-network http:// URL is accepted (proportionate fix: scheme only)", () => {
     // We block by scheme, not by host. A private-network RPC is a valid use case.
-    expect(() => makeRpcAccountFetcher("http://192.168.1.1:8899")).not.toThrow();
+    expect(() =>
+      makeRpcAccountFetcher("http://192.168.1.1:8899"),
+    ).not.toThrow();
   });
 });
 
@@ -187,7 +220,10 @@ describe("v0.5 Part 1b: AbortController timeout (makeRpcAccountFetcher)", () => 
     // Use a very short timeout (20 ms) so the test runs fast.
     // The fetchImpl returns a promise that never settles.
     const hangingFetch = vi.fn(
-      () => new Promise<Response>(() => { /* never resolves */ }),
+      () =>
+        new Promise<Response>(() => {
+          /* never resolves */
+        }),
     );
 
     const fetcher = makeRpcAccountFetcher(
@@ -200,8 +236,8 @@ describe("v0.5 Part 1b: AbortController timeout (makeRpcAccountFetcher)", () => 
   }, 2000 /* test-level timeout of 2 s */);
 
   it("P1b.2 fast-responding fetch (within timeout) -> succeeds normally", async () => {
-    const fastFetch = vi.fn(async () =>
-      new Response(makeSuccessResponse([0x01]), { status: 200 }),
+    const fastFetch = vi.fn(
+      async () => new Response(makeSuccessResponse([0x01]), { status: 200 }),
     );
 
     const fetcher = makeRpcAccountFetcher(
@@ -216,8 +252,8 @@ describe("v0.5 Part 1b: AbortController timeout (makeRpcAccountFetcher)", () => 
   });
 
   it("P1b.3 default timeout is 10000 ms (smoke: factory does not throw with no opts)", () => {
-    const fakeFetch = vi.fn(async () =>
-      new Response(makeSuccessResponse([]), { status: 200 }),
+    const fakeFetch = vi.fn(
+      async () => new Response(makeSuccessResponse([]), { status: 200 }),
     );
     // Construct without opts -- uses default 10000 ms.
     expect(() =>
@@ -228,7 +264,9 @@ describe("v0.5 Part 1b: AbortController timeout (makeRpcAccountFetcher)", () => 
 
 describe("v0.5 Part 1c: URL scheme validation (makeRpcSimulator)", () => {
   it("P1c.1 https:// URL is accepted", () => {
-    expect(() => makeRpcSimulator("https://api.mainnet-beta.solana.com")).not.toThrow();
+    expect(() =>
+      makeRpcSimulator("https://api.mainnet-beta.solana.com"),
+    ).not.toThrow();
   });
 
   it("P1c.2 ws:// URL throws", () => {
@@ -263,35 +301,48 @@ describe("v0.5 Part 1d: makeRpcSimulator basic request shape", () => {
       return new Response(makeSimResponse(), { status: 200 });
     });
 
-    const simulator = makeRpcSimulator(TEST_RPC_URL, fakeFetch as unknown as typeof fetch);
+    const simulator = makeRpcSimulator(
+      TEST_RPC_URL,
+      fakeFetch as unknown as typeof fetch,
+    );
     const result = await simulator("AQAAABBB==", ["addr1", "addr2"]);
 
-    expect((capturedBody as { method: string }).method).toBe("simulateTransaction");
+    expect((capturedBody as { method: string }).method).toBe(
+      "simulateTransaction",
+    );
     const params = (capturedBody as { params: unknown[] }).params;
     expect(params[0]).toBe("AQAAABBB==");
     const opts = params[1] as Record<string, unknown>;
     expect(opts["sigVerify"]).toBe(false);
     expect(opts["replaceRecentBlockhash"]).toBe(true);
     expect(opts["encoding"]).toBe("base64");
+    expect(opts["innerInstructions"]).toBe(true);
     const accounts = opts["accounts"] as Record<string, unknown>;
-    expect(accounts["encoding"]).toBe("base64");
+    expect(accounts["encoding"]).toBe("jsonParsed");
     expect(accounts["addresses"]).toEqual(["addr1", "addr2"]);
 
     expect(result.err).toBeNull();
   });
 
   it("P1d.2 simulator returns SimulateResult with err field when simulation fails", async () => {
-    const fakeFetch = vi.fn(async () =>
-      new Response(makeSimResponse("InstructionError"), { status: 200 }),
+    const fakeFetch = vi.fn(
+      async () =>
+        new Response(makeSimResponse("InstructionError"), { status: 200 }),
     );
-    const simulator = makeRpcSimulator(TEST_RPC_URL, fakeFetch as unknown as typeof fetch);
+    const simulator = makeRpcSimulator(
+      TEST_RPC_URL,
+      fakeFetch as unknown as typeof fetch,
+    );
     const result = await simulator("AQAAABBB==", []);
     expect(result.err).toBe("InstructionError");
   });
 
   it("P1d.3 simulator timeout -> rejects with clear message", async () => {
     const hangingFetch = vi.fn(
-      () => new Promise<Response>(() => { /* never resolves */ }),
+      () =>
+        new Promise<Response>(() => {
+          /* never resolves */
+        }),
     );
     const simulator = makeRpcSimulator(
       TEST_RPC_URL,
@@ -300,4 +351,65 @@ describe("v0.5 Part 1d: makeRpcSimulator basic request shape", () => {
     );
     await expect(simulator("AQAAABBB==", [])).rejects.toThrow(/timeout/i);
   }, 2000);
+
+  it("P1d.4 parses inner instructions, native balances, token balances, and jsonParsed accounts", async () => {
+    const response = {
+      jsonrpc: "2.0",
+      id: 1,
+      result: {
+        value: {
+          err: null,
+          logs: [],
+          accounts: [
+            {
+              lamports: 2039280,
+              data: {
+                program: "spl-token",
+                parsed: {
+                  type: "account",
+                  info: {
+                    mint: "mint1",
+                    owner: "owner1",
+                    tokenAmount: { amount: "42" },
+                  },
+                },
+                space: 165,
+              },
+              owner: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+            },
+          ],
+          innerInstructions: [{ index: 0, instructions: [] }],
+          preBalances: [100],
+          postBalances: [90],
+          preTokenBalances: [],
+          postTokenBalances: [
+            {
+              accountIndex: 0,
+              mint: "mint1",
+              owner: "owner1",
+              uiTokenAmount: { amount: "42" },
+            },
+          ],
+        },
+      },
+    };
+    const fakeFetch = vi.fn(
+      async () => new Response(JSON.stringify(response), { status: 200 }),
+    );
+    const simulator = makeRpcSimulator(
+      TEST_RPC_URL,
+      fakeFetch as unknown as typeof fetch,
+    );
+    const result = await simulator("AQAAABBB==", ["addr1"]);
+
+    expect(result.innerInstructions).toEqual([{ index: 0, instructions: [] }]);
+    expect(result.preBalances).toEqual([100n]);
+    expect(result.postBalances).toEqual([90n]);
+    expect(result.postTokenBalances?.[0]?.owner).toBe("owner1");
+    expect(result.accounts[0]?.parsedToken).toEqual({
+      mint: "mint1",
+      owner: "owner1",
+      amount: 42n,
+    });
+  });
 });

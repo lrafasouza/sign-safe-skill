@@ -27,7 +27,11 @@
  */
 
 import { DecodeError, decodeInput, base58Encode } from "./decode.ts";
-import { deriveRoles, hasUnverifiedRoles, RESERVED_ACCOUNT_KEYS } from "./roles.ts";
+import {
+  deriveRoles,
+  hasUnverifiedRoles,
+  RESERVED_ACCOUNT_KEYS,
+} from "./roles.ts";
 import { classify } from "./classify.ts";
 import { computeOutflow } from "./outflow.ts";
 import { assertNoBannedPhrase, findBannedPhrase } from "./banned.ts";
@@ -69,15 +73,15 @@ function buildSignRecipientNote(outflow: StaticOutflow): string | null {
   const parts: string[] = [];
 
   for (const t of transfers) {
-    const to = t.toUnresolved
-      ? "unresolved ALT address"
-      : (t.to ?? "unknown");
+    const to = t.toUnresolved ? "unresolved ALT address" : (t.to ?? "unknown");
     parts.push(`sends ${lamportsToDisplay(t.amount)} to ${to}`);
   }
 
   for (const s of splTransfers) {
     const dst = s.destination;
-    const to = dst.addressUnresolved ? "unresolved ALT address" : (dst.address ?? "unknown");
+    const to = dst.addressUnresolved
+      ? "unresolved ALT address"
+      : (dst.address ?? "unknown");
     parts.push(`sends ${s.amount} token units to ${to}`);
   }
 
@@ -129,7 +133,11 @@ function collectScreenCandidates(
   msg: DecodedMessage,
   outflow: StaticOutflow,
   roles: AccountRole[],
-): Array<{ address: string | null; category: ScreenHit["category"]; instructionIndex: number }> {
+): Array<{
+  address: string | null;
+  category: ScreenHit["category"];
+  instructionIndex: number;
+}> {
   const candidates: Array<{
     address: string | null;
     category: ScreenHit["category"];
@@ -186,19 +194,33 @@ function collectScreenCandidates(
       if (disc === 4 && data.length >= 9) {
         // Approve: delegate is accounts[1]
         const delegateIdx = ix.accountIndexes[1];
-        const addr = delegateIdx !== undefined ? resolveForScreen(delegateIdx) : null;
-        candidates.push({ address: addr, category: "delegate", instructionIndex });
+        const addr =
+          delegateIdx !== undefined ? resolveForScreen(delegateIdx) : null;
+        candidates.push({
+          address: addr,
+          category: "delegate",
+          instructionIndex,
+        });
       } else if (disc === 13 && data.length >= 10) {
         // ApproveChecked: delegate is accounts[2]
         const delegateIdx = ix.accountIndexes[2];
-        const addr = delegateIdx !== undefined ? resolveForScreen(delegateIdx) : null;
-        candidates.push({ address: addr, category: "delegate", instructionIndex });
+        const addr =
+          delegateIdx !== undefined ? resolveForScreen(delegateIdx) : null;
+        candidates.push({
+          address: addr,
+          category: "delegate",
+          instructionIndex,
+        });
       } else if (disc === 6 && data.length >= 3) {
         // SetAuthority (disc=6): new_authority in data bytes [3..35] when COption=Some (flag=1 at data[2])
         const optionFlag = data[2] as number;
         if (optionFlag === 1 && data.length >= 35) {
           const newAuthority = base58Encode(data.subarray(3, 35));
-          candidates.push({ address: newAuthority, category: "new-authority", instructionIndex });
+          candidates.push({
+            address: newAuthority,
+            category: "new-authority",
+            instructionIndex,
+          });
         }
       }
     } else if (pid === SYSTEM_PID && data.length >= 4) {
@@ -211,7 +233,11 @@ function collectScreenCandidates(
         0;
       if (tag === 1 && data.length >= 36) {
         const newOwner = base58Encode(data.subarray(4, 36));
-        candidates.push({ address: newOwner, category: "new-authority", instructionIndex });
+        candidates.push({
+          address: newOwner,
+          category: "new-authority",
+          instructionIndex,
+        });
       }
     }
   });
@@ -362,7 +388,9 @@ export function buildVerdict(args: {
     "anchor-inner-update_authority",
     "anchor-inner-set_upgrade_authority",
   ]);
-  const innerAuthorityChange = findings.some((f) => INNER_AUTHORITY_FINDING_IDS.has(f.id));
+  const innerAuthorityChange = findings.some((f) =>
+    INNER_AUTHORITY_FINDING_IDS.has(f.id),
+  );
   const anyAuthorityChange = authorityOrOwnershipChange || innerAuthorityChange;
 
   // V3 (the Drift signature): a durable-nonce carrier (marker at ix0) PLUS a
@@ -384,7 +412,9 @@ export function buildVerdict(args: {
   // unless governanceContext is set (which escalates it to REJECT regardless of mode).
 
   const hasNonInfoFindingBeyondNonce = findings.some(
-    (f) => f.id !== "durable-nonce-advance" && (f.severity === "HOLD" || f.severity === "REJECT"),
+    (f) =>
+      f.id !== "durable-nonce-advance" &&
+      (f.severity === "HOLD" || f.severity === "REJECT"),
   );
 
   // "REJECT-class finding beyond nonce" used in DEFAULT mode: only findings whose
@@ -396,7 +426,9 @@ export function buildVerdict(args: {
   // STRICT drift composite: broad formula (current / today's behavior).
   const driftCompositeStrict =
     durableNonceMarker &&
-    (anyAuthorityChange || hasNonInfoFindingBeyondNonce || unknownProgramPresent);
+    (anyAuthorityChange ||
+      hasNonInfoFindingBeyondNonce ||
+      unknownProgramPresent);
 
   // DEFAULT drift composite: narrowed formula (only genuine Drift dangers).
   const driftCompositeDefault =
@@ -417,9 +449,19 @@ export function buildVerdict(args: {
   let decision: Decision;
   let reason: string;
 
-  if (worst === "REJECT" || unknownWritableReject || driftComposite || governanceNonceReject) {
+  if (
+    worst === "REJECT" ||
+    unknownWritableReject ||
+    driftComposite ||
+    governanceNonceReject
+  ) {
     decision = "REJECT";
-    if (governanceNonceReject && !driftComposite && worst !== "REJECT" && !unknownWritableReject) {
+    if (
+      governanceNonceReject &&
+      !driftComposite &&
+      worst !== "REJECT" &&
+      !unknownWritableReject
+    ) {
       reason =
         "Durable-nonce carrier (non-expiring transaction) rejected by governance policy: this signing context prohibits non-expiring transactions regardless of payload.";
     } else if (driftComposite) {
@@ -428,8 +470,7 @@ export function buildVerdict(args: {
         INNER_AUTHORITY_FINDING_IDS.has(f.id),
       );
       if (innerAdminFinding) {
-        reason =
-          `Durable-nonce carrier (non-expiring transaction) combined with an authority/ownership change via a Squads vault inner instruction (${innerAdminFinding.label}) -- the Drift blind-signing attack class. The dangerous instruction was hidden inside a Squads VaultTransaction PDA and executed via CPI, not visible in the signed top-level message. A signed message like this can be held and replayed to seize control later.`;
+        reason = `Durable-nonce carrier (non-expiring transaction) combined with an authority/ownership change via a Squads vault inner instruction (${innerAdminFinding.label}) -- the Drift blind-signing attack class. The dangerous instruction was hidden inside a Squads VaultTransaction PDA and executed via CPI, not visible in the signed top-level message. A signed message like this can be held and replayed to seize control later.`;
       } else if (anyAuthorityChange) {
         reason =
           "Durable-nonce carrier (non-expiring transaction) combined with an authority/ownership change -- the Drift blind-signing attack class. A signed message like this can be held and replayed to seize control later.";
@@ -461,7 +502,9 @@ export function buildVerdict(args: {
     decision = "HOLD";
     const reasons: string[] = [];
     if (worst === "HOLD") {
-      const holds = findings.filter((f) => f.severity === "HOLD").map((f) => f.label);
+      const holds = findings
+        .filter((f) => f.severity === "HOLD")
+        .map((f) => f.label);
       reasons.push(`HOLD-class primitive(s): ${holds.join(", ")}`);
     }
     if (unknownWritableHold) {
@@ -483,7 +526,9 @@ export function buildVerdict(args: {
           `declared SOL outflow ${outflow.lamports} lamports exceeds threshold (${recipientSummary})`,
         );
       } else {
-        reasons.push(`declared SOL outflow ${outflow.lamports} lamports exceeds threshold`);
+        reasons.push(
+          `declared SOL outflow ${outflow.lamports} lamports exceeds threshold`,
+        );
       }
     }
     reason = `Manual review required: ${reasons.join("; ")}.`;
@@ -592,8 +637,11 @@ export function reviewBase64(
     // Accept a bare base64 message OR a full signed transaction (signatures are
     // stripped, never verified). decodeInput is fail-closed: unparseable input
     // throws a DecodeError, which the catch below turns into a REJECT.
-    const { message: msg, inputWasFullTransaction, signatureCount } =
-      decodeInput(b64);
+    const {
+      message: msg,
+      inputWasFullTransaction,
+      signatureCount,
+    } = decodeInput(b64);
     // Runtime-accurate writability: apply the SIMD-0105 reserved-account-keys
     // demotion (R5/R6). Both partition and runtime writability are exposed on
     // each role; the verdict consumes the runtime (demoted) mode.
@@ -617,7 +665,10 @@ export function reviewBase64(
     if (hasSquadsExecute && vaultTransactionBytes !== undefined) {
       try {
         const decoded = decodeVaultTransaction(vaultTransactionBytes);
-        squadsInnerFindings = classifyInnerInstructions(decoded.instructions, ctx);
+        squadsInnerFindings = classifyInnerInstructions(
+          decoded.instructions,
+          ctx,
+        );
       } catch (e) {
         // Decode failure of the vault transaction is fail-closed: treat as
         // unverified. We record the failure so operators can distinguish
@@ -635,7 +686,8 @@ export function reviewBase64(
     if (squadsDecodeFailed) {
       topLevelFindings.push({
         id: "squads-inner-decode-failed",
-        label: "Squads VaultTransaction PDA: supplied bytes could not be decoded",
+        label:
+          "Squads VaultTransaction PDA: supplied bytes could not be decoded",
         severity: "HOLD",
         instructionIndex: -1,
         programId: "SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf",
@@ -671,7 +723,8 @@ export function reviewBase64(
     if (ctx.holdOutboundTransfers && outflow.outboundToNonSigner) {
       topLevelFindings.push({
         id: "policy-outbound-transfer",
-        label: "Outbound transfer to non-signer: manual review required by policy",
+        label:
+          "Outbound transfer to non-signer: manual review required by policy",
         severity: "HOLD",
         instructionIndex: -1,
         programId: "",
@@ -760,7 +813,8 @@ export function reviewBase64(
         // Simulation was requested but could not complete → fail-closed HOLD.
         topLevelFindings.push({
           id: "simulation-failed",
-          label: "Transaction simulation requested but could not complete — economic outcome unverified",
+          label:
+            "Transaction simulation requested but could not complete — economic outcome unverified",
           severity: "HOLD",
           instructionIndex: -1,
           programId: "",
@@ -775,11 +829,9 @@ export function reviewBase64(
         });
       } else {
         // Simulation succeeded: check for SOL outflows to non-signers.
-        const hasStaticOutflow = outflow.outboundToNonSigner || outflow.exceedsLamportThreshold;
         const simHasOutflow = sim.outflowsToNonSigner.length > 0;
-        const simSolLoss = sim.signerSolDelta < 0n;
 
-        if (simHasOutflow || (simSolLoss && !hasStaticOutflow)) {
+        if (simHasOutflow) {
           // Determine severity: REJECT if any outflow recipient appears in the blocklist.
           let severity: Severity = "HOLD";
           if (ctx.recipientBlocklist !== undefined) {
@@ -793,7 +845,10 @@ export function reviewBase64(
             if (anyBlocklisted) severity = "REJECT";
           }
 
-          const solLoss = sim.signerSolDelta < 0n ? ` Net signer SOL delta: ${sim.signerSolDelta.toString()} lamports.` : "";
+          const solLoss =
+            sim.signerSolDelta < 0n
+              ? ` Net signer SOL delta: ${sim.signerSolDelta.toString()} lamports.`
+              : "";
           const outflowCount = sim.outflowsToNonSigner.length;
 
           topLevelFindings.push({
