@@ -23,6 +23,8 @@ export interface McpResponse {
   };
 }
 
+export type McpLineResponse = McpResponse | McpResponse[];
+
 type McpValidationResult =
   | { ok: true; request: McpRequest }
   | { ok: false; response: McpResponse };
@@ -233,7 +235,9 @@ export async function handleMcpRequest(
   };
 }
 
-export async function handleMcpLine(line: string): Promise<McpResponse | null> {
+export async function handleMcpLine(
+  line: string,
+): Promise<McpLineResponse | null> {
   if (line.trim() === "") return null;
   if (line.length > MAX_MCP_LINE_LENGTH) {
     return errorResponse(null, -32600, "Invalid Request: line too large");
@@ -244,12 +248,23 @@ export async function handleMcpLine(line: string): Promise<McpResponse | null> {
   } catch {
     return errorResponse(null, -32700, "Parse error");
   }
+  if (Array.isArray(parsed)) {
+    if (parsed.length === 0) {
+      return errorResponse(null, -32600, "Invalid Request");
+    }
+    const responses: McpResponse[] = [];
+    for (const item of parsed) {
+      const response = await handleMcpRequest(item);
+      if (response !== null) responses.push(response);
+    }
+    return responses.length === 0 ? null : responses;
+  }
   return handleMcpRequest(parsed);
 }
 
 export function createMcpLineProcessor(
   writeResponse: (line: string) => void,
-  handler: (line: string) => Promise<McpResponse | null> = handleMcpLine,
+  handler: (line: string) => Promise<McpLineResponse | null> = handleMcpLine,
   maxPending = MAX_MCP_PENDING_REQUESTS,
 ): (line: string) => void {
   let pending = 0;

@@ -29,7 +29,7 @@ REJECT** verdict plus a machine-readable `verdict.json` for autonomous-agent gat
 - **More coverage**: durable-nonce fee-payer asymmetry (the Drift council shape), the
   Lighthouse guard as an INFO-only positive signal, and Marginfi v2 + Squads v4 in
   the registry.
-- **725 tests across 35 files** (up from 607/29 in v0.4), including a 13-case adversarial
+- **728 tests across 35 files** (up from 607/29 in v0.4), including a 13-case adversarial
   threat sweep; the precision report now leads with benign SIGN precision + HOLD rate.
 
 ## What's new in v0.4
@@ -188,7 +188,7 @@ git clone https://github.com/lrafasouza/sign-safe-skill sign-safe
 cd sign-safe
 npm install
 npm run gen-fixtures   # (re)generate the 10 synthetic .b64 fixtures from @solana/web3.js
-npm test               # 725 tests across 35 files
+npm test               # 728 tests across 35 files
 ```
 
 ### Offline (no RPC required)
@@ -548,7 +548,7 @@ a blob *is*; you still confirm it is what you *meant*.
 
 Most skills are prose. This one ships a small, **pure-function** TypeScript core
 with a deterministic, fully **offline** test suite (`vitest` + `fast-check`),
-**725 tests across 35 files** (`npm test`):
+**728 tests across 35 files** (`npm test`):
 
 - **10 synthetic golden fixtures** -- serialized messages built with
   `@solana/web3.js`, decoded by *our own* parser, verdicts deep-equal-checked
@@ -629,7 +629,7 @@ $ npm test            # vitest run -- the full suite (exits nonzero on any fail)
  ✓ skill/test/catalog-coverage.test.ts           (29 tests)   dangerous shapes never SIGN (SPL+T22 + confidential + permissioned)
  ✓ skill/test/verdict.test.ts                    (12 tests)   durable nonce ix0 gate, Drift composite, prompt-injection, V2
  ✓ skill/test/squads.test.ts                     (28 tests)   VaultTransaction borsh decode, discriminator math, ALT-unresolved fail-closed
- ✓ skill/test/squad-verdict.test.ts              (13 tests)   Squads execute verdict integration, durable-nonce+execute REJECT, governanceContext
+ ✓ skill/test/squad-verdict.test.ts              (13 tests)   Squads execute verdict integration, nonce+unverified execute HOLD by default, strict/decoded-inner REJECT
  ✓ skill/test/digest.test.ts                     (14 tests)   SHA-256 digest, short-code format, determinism, out-of-band byte identity
  ✓ skill/test/pbt.test.ts                        ( 7 tests)   round-trip, fail-closed, no-trailing, compact-u16 (fast-check)
  ✓ skill/test/fixtures.test.ts                   (52 tests)   golden + web3.js + kit differential + disagreement + no-network
@@ -647,8 +647,8 @@ $ npm test            # vitest run -- the full suite (exits nonzero on any fail)
  ✓ skill/test/extract-vault-address.test.ts      ( 4 tests)   auto-extract Squads vault PDA from account index 2
  ... (additional files)
 
- Test Files  29 passed (29)
-      Tests  725 passed (725)
+ Test Files  35 passed (35)
+      Tests  728 passed (728)
 ```
 
 There are two entry points: `npm test` (vitest, the full suite) and
@@ -687,14 +687,14 @@ commands and no network access at test time:
 ```bash
 npm install            # deps for generation + cross-validation only (no postinstall, no curl)
 npm run gen-fixtures   # rebuild the 10 synthetic .b64 from @solana/web3.js (deterministic, byte-identical)
-npm test               # 725 checks, 35 files, fully offline; exits nonzero on any failure
+npm test               # 728 checks, 35 files, fully offline; exits nonzero on any failure
 ```
 
-Expected: `Tests  725 passed (725)`, and `git status` clean afterward (the
+Expected: `Tests  728 passed (728)`, and `git status` clean afterward (the
 deterministic generator reproduces the committed `.b64` byte-for-byte). To also
 confirm the type contract: `npx tsc --noEmit` (exit 0).
 
-What those 725 checks actually validate:
+What those 728 checks actually validate:
 
 | Coverage area | Where | What it proves |
 |---|---|---|
@@ -706,7 +706,7 @@ What those 725 checks actually validate:
 | **Full-tx input + untrusted data (W011)** | `fulltx.test.ts` | A full signed transaction (signatures + message) is detected, signatures stripped (never verified), and the inner message reaches the same verdict as the bare message; garbage fails closed. |
 | **Catalog coverage (never false-SIGN)** | `catalog-coverage.test.ts` | Dangerous shapes most easily missed — Token-2022 `Approve`/`CloseAccount`/`Freeze`/`MintTo`, `Burn`, System `WithdrawNonceAccount`, large `CreateAccount` — must **never** return SIGN. |
 | **Squads VaultTransaction decode** | `squads.test.ts` | Discriminator math, borsh decode of frozen real mainnet PDA fixture, ALT-space program-id resolution (fail-closed null when index >= accountKeys.len), structural fail-closed. |
-| **Squads + verdict integration** | `squad-verdict.test.ts` | Execute without inner bytes -> HOLD; with inner `update_admin` -> REJECT; durable-nonce + execute -> REJECT (Drift composite); `governanceContext` -> REJECT. |
+| **Squads + verdict integration** | `squad-verdict.test.ts` | Execute without inner bytes -> HOLD; with inner `update_admin` -> REJECT; durable-nonce + unverified execute -> HOLD by default, REJECT under `--strict`; `governanceContext` -> REJECT. |
 | **Transaction digest** | `digest.test.ts` | SHA-256 correctness, short-code format and determinism, out-of-band identity confirmation, no-network purity. |
 | **Fail-closed / adversarial** | `decode.test.ts`, `verdict.test.ts` | Truncation, trailing garbage, out-of-range index, unsupported version `0x81`, empty/single-byte → REJECT; unresolved ALT never SIGN; prompt-injection (V8); banned reassurance phrases fail loud. |
 | **DeFi/NFT program registry** | `program-registry.test.ts` | 14 programs with verified per-instruction discriminators; safe instructions SIGN; dangerous instructions labeled; unrecognized-instruction HOLD (fail-closed); truly-unknown-program REJECT unchanged (strict) / HOLD (default). |

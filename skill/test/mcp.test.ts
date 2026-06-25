@@ -115,6 +115,88 @@ describe("review_transaction MCP server", () => {
     expect(result.isError).toBe(false);
   });
 
+  it("returns batch review_transaction responses in request order", async () => {
+    const response = await handleMcpLine(
+      JSON.stringify([
+        {
+          jsonrpc: "2.0",
+          id: "first",
+          method: "tools/call",
+          params: {
+            name: "review_transaction",
+            arguments: {
+              transaction: readFixtureB64("01_safe_sol_transfer"),
+            },
+          },
+        },
+        {
+          jsonrpc: "2.0",
+          id: "second",
+          method: "tools/call",
+          params: {
+            name: "review_transaction",
+            arguments: {
+              transaction: readFixtureB64("02_setauthority_reject"),
+            },
+          },
+        },
+      ]),
+    );
+
+    if (!Array.isArray(response)) throw new Error("expected batch response");
+    const responses = response;
+    expect(responses.map((item) => item.id)).toEqual(["first", "second"]);
+    expect(
+      responses.map(
+        (item) =>
+          (
+            item.result as {
+              structuredContent: { decision: string };
+            }
+          ).structuredContent.decision,
+      ),
+    ).toEqual(["SIGN", "REJECT"]);
+  });
+
+  it("omits notification responses from a mixed JSON-RPC batch", async () => {
+    const response = await handleMcpLine(
+      JSON.stringify([
+        {
+          jsonrpc: "2.0",
+          method: "tools/list",
+        },
+        {
+          jsonrpc: "2.0",
+          id: 12,
+          method: "tools/list",
+        },
+      ]),
+    );
+
+    expect(response).toEqual([
+      {
+        jsonrpc: "2.0",
+        id: 12,
+        result: {
+          tools: expect.any(Array),
+        },
+      },
+    ]);
+  });
+
+  it("rejects an empty JSON-RPC batch as invalid request", async () => {
+    const response = await handleMcpLine("[]");
+
+    expect(response).toEqual({
+      jsonrpc: "2.0",
+      id: null,
+      error: {
+        code: -32600,
+        message: "Invalid Request",
+      },
+    });
+  });
+
   it("rejects oversize review_transaction input with invalid params", async () => {
     const response = await handleMcpRequest({
       jsonrpc: "2.0",
@@ -134,6 +216,7 @@ describe("review_transaction MCP server", () => {
   it("rejects oversize JSON-RPC lines before parsing", async () => {
     const response = await handleMcpLine("x".repeat(MAX_MCP_LINE_LENGTH + 1));
 
+    if (Array.isArray(response)) throw new Error("expected single response");
     expect(response?.error?.code).toBe(-32600);
   });
 
@@ -144,6 +227,9 @@ describe("review_transaction MCP server", () => {
       JSON.stringify({ jsonrpc: "1.0", id: 4, method: "tools/list" }),
     );
 
+    if (Array.isArray(badJson)) throw new Error("expected single response");
+    if (Array.isArray(nullRequest)) throw new Error("expected single response");
+    if (Array.isArray(badJsonrpc)) throw new Error("expected single response");
     expect(badJson?.error?.code).toBe(-32700);
     expect(nullRequest?.error?.code).toBe(-32600);
     expect(badJsonrpc?.error?.code).toBe(-32600);
