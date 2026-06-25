@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { handleMcpRequest } from "../src/mcp.ts";
+import packageJson from "../../package.json" with { type: "json" };
+import {
+  MAX_MCP_LINE_LENGTH,
+  MAX_MCP_TRANSACTION_BASE64_LENGTH,
+  createMcpLineProcessor,
+  handleMcpLine,
+  handleMcpRequest,
+} from "../src/mcp.ts";
 import { readFixtureB64 } from "./helpers.ts";
 
 describe("review_transaction MCP server", () => {
@@ -23,10 +30,22 @@ describe("review_transaction MCP server", () => {
         capabilities: { tools: {} },
         serverInfo: {
           name: "sign-safe",
-          version: "0.4.0",
+          version: packageJson.version,
         },
       },
     });
+  });
+
+  it("reports an MCP server version matching package.json", async () => {
+    const response = await handleMcpRequest({
+      jsonrpc: "2.0",
+      id: 11,
+      method: "initialize",
+    });
+    const result = response?.result as {
+      serverInfo: { version: string };
+    };
+    expect(result.serverInfo.version).toBe(packageJson.version);
   });
 
   it("lists only the review_transaction tool with its input schema", async () => {
@@ -94,5 +113,82 @@ describe("review_transaction MCP server", () => {
     expect(result.structuredContent.decision).toBe("REJECT");
     expect(JSON.parse(result.content[0]!.text).decision).toBe("REJECT");
     expect(result.isError).toBe(false);
+  });
+
+  it("rejects oversize review_transaction input with invalid params", async () => {
+    const response = await handleMcpRequest({
+      jsonrpc: "2.0",
+      id: 3,
+      method: "tools/call",
+      params: {
+        name: "review_transaction",
+        arguments: {
+          transaction: "A".repeat(MAX_MCP_TRANSACTION_BASE64_LENGTH + 1),
+        },
+      },
+    });
+
+    expect(response?.error?.code).toBe(-32602);
+  });
+
+  it("rejects oversize JSON-RPC lines before parsing", async () => {
+    const response = await handleMcpLine("x".repeat(MAX_MCP_LINE_LENGTH + 1));
+
+    expect(response?.error?.code).toBe(-32600);
+  });
+
+  it("maps malformed, null, and bad-jsonrpc envelopes to spec error codes", async () => {
+    const badJson = await handleMcpLine("{");
+    const nullRequest = await handleMcpLine("null");
+    const badJsonrpc = await handleMcpLine(
+      JSON.stringify({ jsonrpc: "1.0", id: 4, method: "tools/list" }),
+    );
+
+    expect(badJson?.error?.code).toBe(-32700);
+    expect(nullRequest?.error?.code).toBe(-32600);
+    expect(badJsonrpc?.error?.code).toBe(-32600);
+  });
+
+  it("returns method-not-found for a valid unknown method", async () => {
+    const response = await handleMcpRequest({
+      jsonrpc: "2.0",
+      id: 5,
+      method: "unknown/method",
+    });
+
+    expect(response?.error?.code).toBe(-32601);
+  });
+
+  it("processes line requests sequentially and writes responses in request order", async () => {
+    const writes: string[] = [];
+    const seen: number[] = [];
+    let releaseFirst: (() => void) | undefined;
+    const processor = createMcpLineProcessor(
+      (line) => writes.push(line),
+      async (line) => {
+        const request = JSON.parse(line) as { id: number };
+        seen.push(request.id);
+        if (request.id === 1) {
+          await new Promise<void>((resolve) => {
+            releaseFirst = resolve;
+          });
+        }
+        return {
+          jsonrpc: "2.0",
+          id: request.id,
+          result: { id: request.id },
+        };
+      },
+    );
+
+    processor(JSON.stringify({ jsonrpc: "2.0", id: 1, method: "a" }));
+    processor(JSON.stringify({ jsonrpc: "2.0", id: 2, method: "b" }));
+    await Promise.resolve();
+    expect(seen).toEqual([1]);
+    releaseFirst?.();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(writes.map((line) => JSON.parse(line).id)).toEqual([1, 2]);
   });
 });

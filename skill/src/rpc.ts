@@ -67,6 +67,48 @@ function jsonIntegerToBigInt(value: number, label: string): bigint {
   return BigInt(value);
 }
 
+function rpcTimeoutError(
+  timeoutMs: number,
+  label: string,
+  failClosedDecision: string,
+): Error {
+  return new Error(
+    `RPC timeout after ${timeoutMs}ms for ${label}: ` +
+      `request was aborted. The caller is fail-closed (${failClosedDecision}) on timeout.`,
+  );
+}
+
+async function fetchWithTimeout(
+  fetchImpl: typeof fetch,
+  rpcUrl: string,
+  init: RequestInit,
+  timeoutMs: number,
+  label: string,
+  failClosedDecision: string,
+): Promise<Response> {
+  const controller = new AbortController();
+  let timedOut = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const timeoutPromise = new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => {
+        timedOut = true;
+        reject(rpcTimeoutError(timeoutMs, label, failClosedDecision));
+        controller.abort();
+      }, timeoutMs);
+    });
+    return await Promise.race([
+      fetchImpl(rpcUrl, { ...init, signal: controller.signal }),
+      timeoutPromise,
+    ]);
+  } catch (err) {
+    if (!timedOut) controller.abort();
+    throw err;
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
 /**
  * Create an injectable `AccountFetcher` backed by a JSON-RPC `getAccountInfo`
  * call to `rpcUrl`.
@@ -100,40 +142,18 @@ export function makeRpcAccountFetcher(
       params: [pubkey, { encoding: "base64" }],
     });
 
-    const controller = new AbortController();
-
-    // Race the fetch against a timeout. We use Promise.race so that a stub
-    // fetchImpl that doesn't natively respect the AbortSignal (as in tests)
-    // is still correctly cancelled by the timeout on the calling side.
-    const timeoutPromise = new Promise<never>((_resolve, reject) =>
-      setTimeout(
-        () =>
-          reject(
-            new Error(
-              `RPC timeout after ${timeoutMs}ms for getAccountInfo(${pubkey}): ` +
-                `request was aborted. The caller is fail-closed (HOLD/REJECT) on timeout.`,
-            ),
-          ),
-        timeoutMs,
-      ),
+    const response = await fetchWithTimeout(
+      fetchImpl,
+      rpcUrl,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+      },
+      timeoutMs,
+      `getAccountInfo(${pubkey})`,
+      "HOLD/REJECT",
     );
-
-    let response: Response;
-    try {
-      response = await Promise.race([
-        fetchImpl(rpcUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body,
-          signal: controller.signal,
-        }),
-        timeoutPromise,
-      ]);
-    } catch (err) {
-      controller.abort(); // cancel the in-flight fetch if timeout fired
-      throw err;
-    }
-    controller.abort(); // cancel if fetch won the race (frees signal listener)
 
     if (!response.ok) {
       throw new Error(
@@ -223,38 +243,18 @@ export function makeRpcSimulator(
       ],
     });
 
-    const controller = new AbortController();
-
-    // Race the fetch against a timeout (same pattern as makeRpcAccountFetcher).
-    const timeoutPromise = new Promise<never>((_resolve, reject) =>
-      setTimeout(
-        () =>
-          reject(
-            new Error(
-              `RPC timeout after ${timeoutMs}ms for simulateTransaction: ` +
-                `request was aborted. The caller is fail-closed (HOLD) on timeout.`,
-            ),
-          ),
-        timeoutMs,
-      ),
+    const response = await fetchWithTimeout(
+      fetchImpl,
+      rpcUrl,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+      },
+      timeoutMs,
+      "simulateTransaction",
+      "HOLD",
     );
-
-    let response: Response;
-    try {
-      response = await Promise.race([
-        fetchImpl(rpcUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body,
-          signal: controller.signal,
-        }),
-        timeoutPromise,
-      ]);
-    } catch (err) {
-      controller.abort();
-      throw err;
-    }
-    controller.abort();
 
     if (!response.ok) {
       throw new Error(

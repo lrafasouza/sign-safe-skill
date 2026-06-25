@@ -260,6 +260,51 @@ describe("v0.5 Part 1b: AbortController timeout (makeRpcAccountFetcher)", () => 
       makeRpcAccountFetcher(TEST_RPC_URL, fakeFetch as unknown as typeof fetch),
     ).not.toThrow();
   });
+
+  it("P1b.4 slow response body still parses after headers arrive before timeout", async () => {
+    let signal: AbortSignal | undefined;
+    const slowBodyFetch = vi.fn(async (_url: string, init?: RequestInit) => {
+      signal = init?.signal ?? undefined;
+      return {
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: async () => {
+          await new Promise((resolve) => setTimeout(resolve, 30));
+          if (signal?.aborted) throw new Error("body aborted");
+          return JSON.parse(makeSuccessResponse([0x44]));
+        },
+      } as Response;
+    });
+
+    const fetcher = makeRpcAccountFetcher(
+      TEST_RPC_URL,
+      slowBodyFetch as unknown as typeof fetch,
+      { timeoutMs: 5 },
+    );
+    const result = await fetcher(TEST_PUBKEY);
+
+    expect(result).not.toBeNull();
+    expect(Array.from(result!.data)).toEqual([0x44]);
+    expect(signal?.aborted).toBe(false);
+  });
+
+  it("P1b.5 clears the timeout timer after a successful response", async () => {
+    const clearSpy = vi.spyOn(globalThis, "clearTimeout");
+    const fastFetch = vi.fn(
+      async () => new Response(makeSuccessResponse([0x01]), { status: 200 }),
+    );
+
+    const fetcher = makeRpcAccountFetcher(
+      TEST_RPC_URL,
+      fastFetch as unknown as typeof fetch,
+      { timeoutMs: 5000 },
+    );
+    await fetcher(TEST_PUBKEY);
+
+    expect(clearSpy).toHaveBeenCalled();
+    clearSpy.mockRestore();
+  });
 });
 
 describe("v0.5 Part 1c: URL scheme validation (makeRpcSimulator)", () => {
@@ -438,4 +483,62 @@ describe("v0.5 Part 1d: makeRpcSimulator basic request shape", () => {
       /safe integer/i,
     );
   });
+
+  it("P1d.6 slow simulator response body still parses after headers arrive before timeout", async () => {
+    let signal: AbortSignal | undefined;
+    const slowBodyFetch = vi.fn(async (_url: string, init?: RequestInit) => {
+      signal = init?.signal ?? undefined;
+      return {
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: async () => {
+          await new Promise((resolve) => setTimeout(resolve, 30));
+          if (signal?.aborted) throw new Error("body aborted");
+          return {
+            jsonrpc: "2.0",
+            id: 1,
+            result: {
+              value: {
+                err: null,
+                logs: [],
+                accounts: [],
+              },
+            },
+          };
+        },
+      } as Response;
+    });
+
+    const simulator = makeRpcSimulator(
+      TEST_RPC_URL,
+      slowBodyFetch as unknown as typeof fetch,
+      { timeoutMs: 5 },
+    );
+    const result = await simulator("AQAAABBB==", []);
+
+    expect(result.err).toBeNull();
+    expect(signal?.aborted).toBe(false);
+  });
+
+  it("P1d.7 timeout aborts the in-flight simulator fetch and clears the timer", async () => {
+    const clearSpy = vi.spyOn(globalThis, "clearTimeout");
+    let signal: AbortSignal | undefined;
+    const hangingFetch = vi.fn((_url: string, init?: RequestInit) => {
+      signal = init?.signal ?? undefined;
+      return new Promise<Response>(() => {
+        /* never resolves */
+      });
+    });
+    const simulator = makeRpcSimulator(
+      TEST_RPC_URL,
+      hangingFetch as unknown as typeof fetch,
+      { timeoutMs: 20 },
+    );
+
+    await expect(simulator("AQAAABBB==", [])).rejects.toThrow(/timeout/i);
+    expect(signal?.aborted).toBe(true);
+    expect(clearSpy).toHaveBeenCalled();
+    clearSpy.mockRestore();
+  }, 2000);
 });

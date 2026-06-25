@@ -1,6 +1,6 @@
 {
   "$schema": "sign-safe/danger-catalog@1",
-  "description": "Machine-readable catalog of signing-time danger primitives. Each entry matches by canonical mainnet programId plus a leading instruction discriminator byte. Severity drives the verdict: any REJECT entry forces REJECT; any HOLD entry forces at-least HOLD. mapsToLoss is the concrete real-world loss the primitive enables. See ../references/danger-catalog.md for rationale.",
+  "description": "Machine-readable catalog of signing-time danger primitives. Each entry matches by canonical mainnet programId plus the program-specific leading instruction discriminator bytes (u8 for SPL/System-style instructions, u32-LE where the native program ABI uses a u32 tag). Severity drives the verdict: any REJECT entry forces REJECT; any HOLD entry forces at-least HOLD. mapsToLoss is the concrete real-world loss the primitive enables. See ../references/danger-catalog.md for rationale.",
   "knownPrograms": {
     "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA": "spl-token",
     "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb": "token-2022",

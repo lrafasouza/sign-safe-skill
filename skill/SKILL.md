@@ -1,6 +1,6 @@
 ---
 name: sign-safe
-description: Signing-time safety gate for Solana transactions. Decodes an opaque base64 transaction/message (legacy + v0 with Address Lookup Tables), classifies its instructions against a danger-primitive catalog (37 native-program entries + 11-entry Anchor authority-mutation registry + 14-program DeFi/NFT clear-signing registry with verified per-instruction safe/dangerous discriminators), surfaces transfer recipients and screens them against an injectable drainer blocklist, computes the signer-perspective statically-declared outflow, and emits a SIGN / HOLD / REJECT verdict plus a machine-readable verdict.json for autonomous-agent gating. With an optional --rpc endpoint it resolves Address Lookup Tables, clear-signs Squads v4 VaultTransaction proposals (decodes the inner CPI instruction), and screens Token-2022 mint extensions (PermanentDelegate / TransferHook) -- all fail-closed, with the deterministic core staying fully offline. Two-tier by default (an unknown program writing a value account -> HOLD); --strict restores reject-on-unknown for institutional signing. Trigger phrases include "is this transaction safe to sign", "review this tx before I sign", "what does this base64 transaction do", "blind signing", "sign-review", "squads proposal review". Offline, deterministic, and tested (704 checks, 35 files), with a precision study on real mainnet traffic (0 false-REJECTs, 100% recall on authority-transfer drainers). Motivated by the April-2026 Drift blind-signing / durable-nonce incident.
+description: Signing-time safety gate for Solana transactions. Decodes an opaque base64 transaction/message (legacy + v0 with Address Lookup Tables), classifies its instructions against a danger-primitive catalog (37 native-program entries + 11-entry Anchor authority-mutation registry + 14-program DeFi/NFT clear-signing registry with verified per-instruction safe/dangerous discriminators), surfaces transfer recipients and screens them against an injectable drainer blocklist, computes the signer-perspective statically-declared outflow, and emits a SIGN / HOLD / REJECT verdict plus a machine-readable verdict.json for autonomous-agent gating. With an optional --rpc endpoint it resolves Address Lookup Tables, clear-signs Squads v4 VaultTransaction proposals (decodes the inner CPI instruction), and screens Token-2022 mint extensions (PermanentDelegate / TransferHook) -- all fail-closed, with the deterministic core staying fully offline. Two-tier by default (an unknown program writing a value account -> HOLD); --strict restores reject-on-unknown for institutional signing. Trigger phrases include "is this transaction safe to sign", "review this tx before I sign", "what does this base64 transaction do", "blind signing", "sign-review", "squads proposal review". Offline, deterministic, and tested (725 checks, 35 files), with a precision study on real mainnet traffic (0 false-REJECTs, 100% recall on authority-transfer drainers). Motivated by the April-2026 Drift blind-signing / durable-nonce incident.
 user-invocable: true
 ---
 
@@ -96,12 +96,14 @@ no RPC, no simulation. Same bytes in, same JSON out:
    ADDR").
 8. **verdict** (`src/verdict.ts`) -- `Finding[]` + context -> `Verdict` +
    `verdict.json`. Durable-nonce escalation policy: bare nonce = HOLD; nonce +
-   any non-INFO finding or unknown program = REJECT (Drift composite);
-   `governanceContext` flag escalates even a bare nonce to REJECT.
+   a REJECT-class companion = REJECT by default; `--strict` broadens this to
+   nonce + any non-INFO finding or unknown program = REJECT; `governanceContext`
+   flag escalates even a bare nonce to REJECT.
 
 **Fail-closed by construction:** malformed/truncated input -> `REJECT`; any
 unresolved ALT reference forces roles `unverified` so the verdict can never be
-`SIGN`; a truly unknown program forbids `SIGN` and forces REJECT when writable;
+`SIGN`; a truly unknown program forbids `SIGN` and, when writable on a
+value-bearing account, forces HOLD by default or REJECT under `--strict`;
 a recognized DeFi/NFT program with an unrecognized instruction is HOLD (never
 SIGN); a recognized dangerous instruction (e.g. Metaplex Transfer NFT) forces
 the listed severity; a Squads execute without PDA bytes injects a mandatory HOLD
@@ -223,8 +225,10 @@ the VaultTransaction PDA.
   HOLD, regardless of payload.
 - **Squads execute without inner bytes is NEVER SIGN.** The offline core
   injects `squads-execute-unverified` (HOLD) when PDA bytes are not supplied.
-- **Nonce + any non-INFO finding = REJECT (Drift composite).** Nonce + the
-  mandatory Squads HOLD already triggers REJECT before any deeper analysis.
+- **Nonce + REJECT-class inner danger = REJECT (Drift composite).** In default
+  mode, nonce + the mandatory unverified-Squads HOLD remains HOLD until the PDA
+  is fetched or another REJECT-class danger is present. `--strict` broadens
+  nonce + any non-INFO finding to REJECT.
 - **With the PDA bytes, the `update_admin` is decoded and named.** The core
   borsh-decodes the VaultTransaction, resolves inner program IDs, and matches
   `a1b028d53cb8b3e4` in the Anchor registry -> finding
@@ -232,9 +236,9 @@ the VaultTransaction PDA.
   (...`update_admin`) -- the Drift blind-signing attack class." The signer sees
   exactly what they are about to sign: not a Squads shell, but an admin handoff.
 
-Verdict path: nonce at ix0 + `squads-execute-unverified` -> `driftComposite=true`
--> **REJECT**, exit 20. With PDA bytes: nonce + `anchor-inner-update_admin`
-(REJECT) -> **REJECT** with inner authority transfer named explicitly.
+Verdict path: nonce at ix0 + `squads-execute-unverified` -> **HOLD** by default
+(REJECT under `--strict`). With PDA bytes: nonce + `anchor-inner-update_admin`
+(REJECT) -> **REJECT**, exit 20, with inner authority transfer named explicitly.
 
 ## What sign-safe catches and what it does not (honest coverage)
 
@@ -246,7 +250,7 @@ close (`bpf-upgrade`, `bpf-close`), hidden Squads inner authority transfers
 (inner `update_admin` / `set_admin` / … via VaultTransaction PDA), NFT theft
 via named transfers (Metaplex Transfer NFT disc 49, Bubblegum Transfer cNFT
 disc `a334c8e7…`), NFT delegate grants and burns, unknown DeFi programs writing
-value (REJECT), recognized DeFi programs with unrecognized instructions (HOLD),
+value (HOLD by default, REJECT under `--strict`), recognized DeFi programs with unrecognized instructions (HOLD),
 transfer recipients on an injected drainer blocklist (REJECT), all external
 transfers when `holdOutboundTransfers` is set (HOLD).
 

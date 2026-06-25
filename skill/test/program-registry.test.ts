@@ -8,7 +8,7 @@
  *   3. Metaplex Delegate (disc 44 = 0x2c) -> HOLD, named.
  *   4. Bubblegum cNFT Transfer -> REJECT, named.
  *   5. Recognized program + unknown instruction -> HOLD, NOT SIGN.
- *   6. Truly unknown program writing value -> still REJECT (unchanged path).
+ *   6. Truly unknown program writing value -> HOLD by default, REJECT under strict.
  *   7. Benign native SPL Transfer -> still SIGN (no regression).
  *   8. Invariant: registry catalog validation (discHex format correctness).
  *   9. Recognized program NOT added to unknownPrograms list.

@@ -509,7 +509,6 @@ describe("S7c: frozen realistic swap simulation", () => {
           owner: signer,
           uiTokenAmount: { amount: "100" },
         },
-        { accountIndex: 5, mint, uiTokenAmount: { amount: "0" } },
       ],
       postTokenBalances: [
         {

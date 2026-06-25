@@ -37,6 +37,13 @@ const TOKEN_2022 = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
 const SPL_TRANSFER_DISC = 3;
 const SPL_TRANSFER_CHECKED_DISC = 12;
 
+function safeThreshold(ctx: VerdictContext): bigint {
+  if (!Number.isSafeInteger(ctx.lamportThreshold)) {
+    throw new Error("lamportThreshold must be an exact integer");
+  }
+  return BigInt(ctx.lamportThreshold);
+}
+
 /**
  * Resolve an account index to a RecipientRef. Static-key indices are resolved
  * to their base58 address directly. ALT-loaded indices (accountIndex >=
@@ -259,7 +266,7 @@ export function computeOutflow(
     // threshold comparison stays in BigInt for the same reason.
     lamports: lamports.toString(),
     splTransfers,
-    exceedsLamportThreshold: lamports > BigInt(ctx.lamportThreshold),
+    exceedsLamportThreshold: lamports > safeThreshold(ctx),
     lamportTransfers,
     outboundToNonSigner,
   };

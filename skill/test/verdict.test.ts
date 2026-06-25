@@ -554,3 +554,20 @@ describe("T_A4.9 A4 hardening: mintExtensions findings order is insertion-order 
     expect(labelsLoHi).toEqual(labelsHiLo);
   });
 });
+
+describe("programmatic threshold validation", () => {
+  it("rejects unsafe lamportThreshold values fail-closed", () => {
+    const msg = buildMessage(
+      [1, 0, 1],
+      [1, 2, SYSTEM],
+      [{ prog: 2, accts: [0, 1], data: [...u32le(2), ...u64le(1n)] }],
+    );
+    const verdict = reviewBase64(toB64(msg), {
+      lamportThreshold: Number.MAX_SAFE_INTEGER + 1,
+    });
+
+    expect(verdict.decision).toBe("REJECT");
+    expect(verdict.flags.decodeFailed).toBe(true);
+    expect(verdict.reason).toMatch(/lamportThreshold must be an exact integer/);
+  });
+});

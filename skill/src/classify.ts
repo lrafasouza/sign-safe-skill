@@ -6,12 +6,10 @@
  *   2. the instruction's leading discriminator byte(s) must match.
  *
  * Discriminator note (see ../references/decode-notes.md): the native programs
- * in this catalog (System, SPL Token, Token-2022, BPF Loader Upgradeable) all
- * use a SINGLE leading byte (u8 for SPL/Token-2022, u32-le whose first byte is
- * the tag for System/BPF where the value is small enough that the first byte
- * is the discriminator). We match on the first byte. Anchor's 8-byte and
- * Pinocchio's 1-byte discriminators are discussed in decode-notes.md; none of
- * the catalogued primitives are Anchor instructions.
+ * in this catalog use program-specific leading discriminator bytes: u8 for
+ * SPL/Token-2022 and u32-le tags for System/BPF/Stake-style native ABIs.
+ * Anchor's 8-byte and Pinocchio's 1-byte discriminators are discussed in
+ * decode-notes.md; none of the catalogued primitives are Anchor instructions.
  *
  * The system-large-transfer entry is threshold-gated: a System Transfer only
  * becomes a HOLD finding when its lamport amount exceeds the context
@@ -43,6 +41,13 @@ import { base58Encode } from "./decode.ts";
 
 const ENTRIES = catalog.entries as CatalogEntry[];
 const KNOWN_PROGRAMS = catalog.knownPrograms as Record<string, string>;
+
+function safeThreshold(ctx: VerdictContext): bigint {
+  if (!Number.isSafeInteger(ctx.lamportThreshold)) {
+    throw new Error("lamportThreshold must be an exact integer");
+  }
+  return BigInt(ctx.lamportThreshold);
+}
 
 const SYSTEM_PROGRAM = "11111111111111111111111111111111";
 const STAKE_PROGRAM = "Stake11111111111111111111111111111111111111";
@@ -587,7 +592,7 @@ export function classify(
       // lamport amount exceeds the configured threshold.
       if (entry.id === "system-large-transfer") {
         const lamports = parseSystemTransferLamports(ix.data);
-        if (lamports === null || lamports <= BigInt(ctx.lamportThreshold)) {
+        if (lamports === null || lamports <= safeThreshold(ctx)) {
           continue; // below threshold -> not a danger finding
         }
         findings.push({

@@ -27,8 +27,9 @@ REJECT** verdict plus a machine-readable `verdict.json` for autonomous-agent gat
 - **Verdict schema**: a `requiresHumanReview` boolean + a closed `Finding.category` taxonomy
   for machine consumers.
 - **More coverage**: durable-nonce fee-payer asymmetry (the Drift council shape), the
-  Lighthouse guard as an INFO-only positive signal, and Marginfi v2 in the registry.
-- **704 tests across 35 files** (up from 607/29 in v0.4), including a 13-case adversarial
+  Lighthouse guard as an INFO-only positive signal, and Marginfi v2 + Squads v4 in
+  the registry.
+- **725 tests across 35 files** (up from 607/29 in v0.4), including a 13-case adversarial
   threat sweep; the precision report now leads with benign SIGN precision + HOLD rate.
 
 ## What's new in v0.4
@@ -41,11 +42,11 @@ REJECT** verdict plus a machine-readable `verdict.json` for autonomous-agent gat
   is now HOLD instead of REJECT, calibrated by a precision study on 100 real benign
   mainnet transactions (0 false-REJECTs). Use `--strict` to restore the aggressive
   single-tier posture for institutional signing.
-- **Clear-signing registry expanded to 14 programs**: Metaplex Token Metadata,
+- **Clear-signing registry expanded to 12 programs**: Metaplex Token Metadata,
   Metaplex Bubblegum, Jupiter v6, Orca Whirlpools, Raydium AMM v4, Pump.fun,
   Pump AMM/PumpSwap, Raydium CLMM, Raydium CPMM, Drift, Kamino klend, Meteora DLMM,
-  Marginfi v2, and Squads v4. Programs may have safe and dangerous instruction
-  tiers or recognize-only coverage; unlisted instructions remain HOLD.
+  Programs may have safe and dangerous instruction tiers or recognize-only coverage;
+  unlisted instructions remain HOLD.
 - **Precision study** (`docs/precision-report.md`): 100 real frozen mainnet benign
   transactions + 37 synthetic malicious patterns. Default: 33% SIGN / 67% HOLD /
   0% false-REJECT. Malicious recall: 100%.
@@ -99,10 +100,10 @@ With sign-safe:
    and injects a mandatory HOLD finding (`squads-execute-unverified`). A signer
    cannot approve without first fetching the VaultTransaction PDA bytes.
 
-3. **Durable nonce + any REJECT-class finding = REJECT (Drift composite).** Because
-   the mandatory Squads HOLD is present alongside the durable-nonce marker, the
-   verdict escalates to REJECT -- not mere HOLD. Both pieces together are the
-   $285M attack class.
+3. **Durable nonce + a REJECT-class inner danger = REJECT (Drift composite).** In
+   default mode, nonce + the mandatory unverified-Squads HOLD remains HOLD until
+   the VaultTransaction is fetched or another REJECT-class danger is present.
+   `--strict` broadens nonce + any non-INFO finding to REJECT.
 
 4. **With `--rpc` (or the VaultTransaction PDA bytes), the inner `update_admin` is
    decoded and named.** The offline core borsh-decodes the `VaultTransaction`,
@@ -113,7 +114,8 @@ With sign-safe:
    now sees exactly what they are about to approve: not a Squads shell, but an admin handoff.
 
 Verdict path summary: `durable-nonce at ix0` + `squads-execute-unverified` ->
-`driftComposite = true` -> **REJECT**, exit code 20, before any key is touched.
+**HOLD** by default (REJECT under `--strict`). With the PDA bytes, nonce +
+`anchor-inner-update_admin` -> **REJECT**, exit code 20, before any key is touched.
 
 ## What it does
 
@@ -186,7 +188,7 @@ git clone https://github.com/lrafasouza/sign-safe-skill sign-safe
 cd sign-safe
 npm install
 npm run gen-fixtures   # (re)generate the 10 synthetic .b64 fixtures from @solana/web3.js
-npm test               # 704 tests across 35 files
+npm test               # 725 tests across 35 files
 ```
 
 ### Offline (no RPC required)
@@ -546,7 +548,7 @@ a blob *is*; you still confirm it is what you *meant*.
 
 Most skills are prose. This one ships a small, **pure-function** TypeScript core
 with a deterministic, fully **offline** test suite (`vitest` + `fast-check`),
-**704 tests across 35 files** (`npm test`):
+**725 tests across 35 files** (`npm test`):
 
 - **10 synthetic golden fixtures** -- serialized messages built with
   `@solana/web3.js`, decoded by *our own* parser, verdicts deep-equal-checked
@@ -646,7 +648,7 @@ $ npm test            # vitest run -- the full suite (exits nonzero on any fail)
  ... (additional files)
 
  Test Files  29 passed (29)
-      Tests  704 passed (704)
+      Tests  725 passed (725)
 ```
 
 There are two entry points: `npm test` (vitest, the full suite) and
@@ -685,14 +687,14 @@ commands and no network access at test time:
 ```bash
 npm install            # deps for generation + cross-validation only (no postinstall, no curl)
 npm run gen-fixtures   # rebuild the 10 synthetic .b64 from @solana/web3.js (deterministic, byte-identical)
-npm test               # 704 checks, 35 files, fully offline; exits nonzero on any failure
+npm test               # 725 checks, 35 files, fully offline; exits nonzero on any failure
 ```
 
-Expected: `Tests  704 passed (704)`, and `git status` clean afterward (the
+Expected: `Tests  725 passed (725)`, and `git status` clean afterward (the
 deterministic generator reproduces the committed `.b64` byte-for-byte). To also
 confirm the type contract: `npx tsc --noEmit` (exit 0).
 
-What those 704 checks actually validate:
+What those 725 checks actually validate:
 
 | Coverage area | Where | What it proves |
 |---|---|---|

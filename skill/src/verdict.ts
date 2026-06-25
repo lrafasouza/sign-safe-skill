@@ -6,11 +6,12 @@
  *   REJECT if:
  *     - any Finding.severity === "REJECT", OR
  *     - decode failed (malformed/truncated input), OR
- *     - an unknown program is writable on a value-bearing account.
+ *     - strict mode and an unknown program is writable on a value-bearing account.
  *
  *   else HOLD if:
  *     - any Finding.severity === "HOLD", OR
  *     - any unknown program is present, OR
+ *     - default mode and an unknown program is writable on a value-bearing account, OR
  *     - (altLookupsPresent && rolesUnverified), OR
  *     - staticOutflow.lamports > threshold.
  *
@@ -61,6 +62,13 @@ function lamportsToDisplay(lamports: string): string {
   if (sol > 0n && rem === 0n) return `${sol} SOL`;
   if (sol > 0n) return `${lamports} lamports (~${sol} SOL)`;
   return `${lamports} lamports`;
+}
+
+function safeThreshold(ctx: VerdictContext): bigint {
+  if (!Number.isSafeInteger(ctx.lamportThreshold)) {
+    throw new Error("lamportThreshold must be an exact integer");
+  }
+  return BigInt(ctx.lamportThreshold);
 }
 
 /**
@@ -638,6 +646,7 @@ export function reviewBase64(
   vaultTransactionBytes?: Uint8Array,
 ): Verdict {
   try {
+    safeThreshold(ctx);
     // Accept a bare base64 message OR a full signed transaction (signatures are
     // stripped, never verified). decodeInput is fail-closed: unparseable input
     // throws a DecodeError, which the catch below turns into a REJECT.
@@ -747,14 +756,14 @@ export function reviewBase64(
       topLevelFindings.push({
         id: "oversized-token-transfer",
         label:
-          "Outbound token transfer exceeds the context-free safe integer range",
+          "Outbound token transfer exceeds the context-free exact integer range",
         severity: "HOLD",
         category: "value-outflow",
         instructionIndex: transfer.instructionIndex,
         programId: transfer.programId,
         detail:
           `This transaction sends ${transfer.amount} raw token units to a non-signer account. ` +
-          `The amount exceeds JavaScript's exact safe-integer range and cannot be treated as a routine transfer without mint decimals and value context.`,
+          `The amount exceeds JavaScript's exact integer range and cannot be treated as a routine transfer without mint decimals and value context.`,
         mapsToLoss:
           "An extremely large raw token amount can represent a full-balance drain or an amount that downstream displays round incorrectly.",
       });
@@ -866,7 +875,7 @@ export function reviewBase64(
         );
         const simHasOutflow =
           sim.outflowsToNonSigner.length > 0 ||
-          worstSignerSolDelta < -BigInt(ctx.lamportThreshold);
+          worstSignerSolDelta < -safeThreshold(ctx);
 
         if (simHasOutflow) {
           // Determine severity: REJECT if any outflow recipient appears in the blocklist.
