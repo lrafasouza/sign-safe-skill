@@ -43,6 +43,7 @@ const ENTRIES = catalog.entries as CatalogEntry[];
 const KNOWN_PROGRAMS = catalog.knownPrograms as Record<string, string>;
 
 const SYSTEM_PROGRAM = "11111111111111111111111111111111";
+const STAKE_PROGRAM = "Stake11111111111111111111111111111111111111";
 const COMPUTE_BUDGET = "ComputeBudget111111111111111111111111111111";
 const BPF_LOADER_UPGRADEABLE = "BPFLoaderUpgradeab1e11111111111111111111111";
 
@@ -59,7 +60,11 @@ const BPF_LOADER_UPGRADEABLE = "BPFLoaderUpgradeab1e11111111111111111111111";
  * (handled separately and treated as benign), so the u32-LE rule must NEVER be
  * applied to it.
  */
-const U32_TAG_PROGRAMS = new Set<string>([SYSTEM_PROGRAM, BPF_LOADER_UPGRADEABLE]);
+const U32_TAG_PROGRAMS = new Set<string>([
+  SYSTEM_PROGRAM,
+  STAKE_PROGRAM,
+  BPF_LOADER_UPGRADEABLE,
+]);
 
 /** Read a little-endian u64 from data at offset; returns a bigint. */
 function readU64LE(data: Uint8Array, offset: number): bigint {
@@ -79,11 +84,12 @@ function readU32LE(data: Uint8Array, offset: number): number {
     throw new RangeError("instruction data too short for u32");
   }
   return (
-    (data[offset] as number) |
-    ((data[offset + 1] as number) << 8) |
-    ((data[offset + 2] as number) << 16) |
-    ((data[offset + 3] as number) << 24)
-  ) >>> 0;
+    ((data[offset] as number) |
+      ((data[offset + 1] as number) << 8) |
+      ((data[offset + 2] as number) << 16) |
+      ((data[offset + 3] as number) << 24)) >>>
+    0
+  );
 }
 
 /**
@@ -156,13 +162,70 @@ function buildSetAuthorityDetail(
   }
 
   const isClassicSplToken = programId === SPL_TOKEN;
-  const invalidOnClassic =
-    isClassicSplToken && authType >= 4 && authType <= 17;
+  const invalidOnClassic = isClassicSplToken && authType >= 4 && authType <= 17;
   const invalidNote = invalidOnClassic
     ? ` -- AuthorityType ${authType} (${typeName}) is INVALID on classic SPL Token (only 0-3 valid)`
     : "";
 
   return `SetAuthority on ${programLabel}: authority_type=${authType} (${typeName}), new_authority=${newAuthority}${invalidNote}.`;
+}
+
+const STAKE_AUTHORIZE_NAMES: Record<number, string> = {
+  0: "Staker",
+  1: "Withdrawer",
+};
+
+function buildStakeAuthorizeDetail(
+  data: Uint8Array,
+  accountIndexes: number[],
+  staticAccountKeys: string[],
+): string | null {
+  const tag = u32TagDiscriminator(data);
+  if (tag === 1) {
+    if (data.length < 40) return null;
+    const role = readU32LE(data, 36);
+    const roleName = STAKE_AUTHORIZE_NAMES[role];
+    if (roleName === undefined) return null;
+    const newAuthority = base58Encode(data.subarray(4, 36));
+    return `Stake Authorize: role=${role} (${roleName}), new_authority=${newAuthority}.`;
+  }
+  if (tag === 8) {
+    if (data.length < 48) return null;
+    const role = readU32LE(data, 36);
+    const roleName = STAKE_AUTHORIZE_NAMES[role];
+    const seedLength = readU64LE(data, 40);
+    if (roleName === undefined || seedLength > BigInt(Number.MAX_SAFE_INTEGER))
+      return null;
+    const requiredLength = 48 + Number(seedLength) + 32;
+    if (data.length < requiredLength) return null;
+    const newAuthority = base58Encode(data.subarray(4, 36));
+    return `Stake AuthorizeWithSeed: role=${role} (${roleName}), new_authority=${newAuthority}.`;
+  }
+  if (tag === 10) {
+    if (data.length < 8) return null;
+    const role = readU32LE(data, 4);
+    const roleName = STAKE_AUTHORIZE_NAMES[role];
+    const newAuthorityIndex = accountIndexes[3];
+    if (roleName === undefined || newAuthorityIndex === undefined) return null;
+    const newAuthority = staticAccountKeys[newAuthorityIndex];
+    if (newAuthority === undefined) return null;
+    return `Stake AuthorizeChecked: role=${role} (${roleName}), new_authority=${newAuthority}.`;
+  }
+  return null;
+}
+
+function buildStakeWithdrawDetail(
+  data: Uint8Array,
+  accountIndexes: number[],
+  staticAccountKeys: string[],
+): string | null {
+  if (data.length < 12 || readU32LE(data, 0) !== 4) return null;
+  const destinationIndex = accountIndexes[1];
+  if (destinationIndex === undefined) return null;
+  const destination =
+    staticAccountKeys[destinationIndex] ?? "unresolved ALT account";
+  const lamports = readU64LE(data, 4);
+  return `Stake Withdraw: amount=${lamports.toString()} lamports, destination=${destination}.`;
 }
 
 /**
@@ -246,6 +309,7 @@ const AUTHORITY_CHANGE_FINDING_IDS: ReadonlySet<string> = new Set<string>([
   "bpf-close",
   "system-assign",
   "system-assign-with-seed",
+  "stake-authorize",
 ]);
 
 export function classify(
@@ -375,6 +439,7 @@ export function classify(
     const usesU32Tag = U32_TAG_PROGRAMS.has(pid);
     const u32Disc = usesU32Tag ? u32TagDiscriminator(ix.data) : null;
     const byteDisc = ix.data.length > 0 ? (ix.data[0] as number) : null;
+    const findingsBeforeInstruction = findings.length;
 
     for (const entry of ENTRIES) {
       if (entry.programId !== pid) continue;
@@ -455,14 +520,59 @@ export function classify(
       // SetAuthority (C4/C5/V1): decode authority_type + new_authority into the
       // detail so the operator sees WHICH authority is being handed over (and we
       // flag an invalid Token-2022 AuthorityType used on classic SPL Token).
-      if (entry.id === "spl-set-authority" || entry.id === "token2022-set-authority") {
+      if (
+        entry.id === "spl-set-authority" ||
+        entry.id === "token2022-set-authority"
+      ) {
         findings.push({
           id: entry.id,
           label: entry.label,
           severity: entry.severity,
           instructionIndex,
           programId: pid,
-          detail: buildSetAuthorityDetail(KNOWN_PROGRAMS[pid] as string, pid, ix.data),
+          detail: buildSetAuthorityDetail(
+            KNOWN_PROGRAMS[pid] as string,
+            pid,
+            ix.data,
+          ),
+          mapsToLoss: entry.mapsToLoss,
+        });
+        continue;
+      }
+
+      if (entry.id === "stake-authorize") {
+        const detail = buildStakeAuthorizeDetail(
+          ix.data,
+          ix.accountIndexes,
+          msg.staticAccountKeys,
+        );
+        if (detail === null) continue;
+        findings.push({
+          id: entry.id,
+          label: entry.label,
+          severity: entry.severity,
+          instructionIndex,
+          programId: pid,
+          detail,
+          mapsToLoss: entry.mapsToLoss,
+        });
+        continue;
+      }
+
+      if (entry.id === "stake-withdraw") {
+        const detail = buildStakeWithdrawDetail(
+          ix.data,
+          ix.accountIndexes,
+          msg.staticAccountKeys,
+        );
+        if (detail === null) continue;
+        findings.push({
+          id: entry.id,
+          label: entry.label,
+          severity: ctx.strict ? "REJECT" : entry.severity,
+          instructionIndex,
+          programId: pid,
+          detail,
           mapsToLoss: entry.mapsToLoss,
         });
         continue;
@@ -474,8 +584,32 @@ export function classify(
         severity: entry.severity,
         instructionIndex,
         programId: pid,
-        detail: buildDetail(entry, KNOWN_PROGRAMS[pid] as string, u32Disc, byteDisc),
+        detail: buildDetail(
+          entry,
+          KNOWN_PROGRAMS[pid] as string,
+          u32Disc,
+          byteDisc,
+        ),
         mapsToLoss: entry.mapsToLoss,
+      });
+    }
+
+    if (
+      pid === STAKE_PROGRAM &&
+      findings.length === findingsBeforeInstruction
+    ) {
+      findings.push({
+        id: "stake-unverified-instruction",
+        label: "Stake: recognized instruction requiring review",
+        severity: "HOLD",
+        instructionIndex,
+        programId: pid,
+        detail:
+          u32Disc === null
+            ? "Instruction sent to the Native Stake program but the u32-LE instruction tag could not be decoded."
+            : `Instruction sent to the Native Stake program with u32-LE tag ${u32Disc}; it is recognized but not classified as an authority transfer or withdrawal.`,
+        mapsToLoss:
+          "Stake-account effects are recognized but not fully decoded; manual review is required before signing.",
       });
     }
   });

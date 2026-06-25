@@ -30,6 +30,7 @@ import type {
 import { readU64LE, readU32LE } from "./classify.ts";
 
 const SYSTEM_PROGRAM = "11111111111111111111111111111111";
+const STAKE_PROGRAM = "Stake11111111111111111111111111111111111111";
 const SPL_TOKEN = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 const TOKEN_2022 = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
 
@@ -104,7 +105,9 @@ export function computeOutflow(
 
   const signerIndexes = new Set(
     roles
-      .filter((r) => r.role === "signer-writable" || r.role === "signer-readonly")
+      .filter(
+        (r) => r.role === "signer-writable" || r.role === "signer-readonly",
+      )
       .map((r) => r.index),
   );
 
@@ -134,7 +137,12 @@ export function computeOutflow(
             // an account creation so we track it too for completeness.
             const recipientAccountIndex = ix.accountIndexes[1];
             if (recipientAccountIndex !== undefined) {
-              const recipient = resolveRecipient(recipientAccountIndex, msg, signerIndexes, roles);
+              const recipient = resolveRecipient(
+                recipientAccountIndex,
+                msg,
+                signerIndexes,
+                roles,
+              );
               lamportTransfers.push({
                 instructionIndex,
                 to: recipient.address,
@@ -156,7 +164,12 @@ export function computeOutflow(
               // CreateAccountWithSeed recipient = accounts[1]
               const recipientAccountIndex = ix.accountIndexes[1];
               if (recipientAccountIndex !== undefined) {
-                const recipient = resolveRecipient(recipientAccountIndex, msg, signerIndexes, roles);
+                const recipient = resolveRecipient(
+                  recipientAccountIndex,
+                  msg,
+                  signerIndexes,
+                  roles,
+                );
                 lamportTransfers.push({
                   instructionIndex,
                   to: recipient.address,
@@ -167,6 +180,30 @@ export function computeOutflow(
               }
             }
           }
+        }
+      }
+      return;
+    }
+
+    if (ix.programId === STAKE_PROGRAM) {
+      if (ix.data.length >= 12 && readU32LE(ix.data, 0) === 4) {
+        const amount = readU64LE(ix.data, 4);
+        const recipientAccountIndex = ix.accountIndexes[1];
+        if (recipientAccountIndex !== undefined) {
+          const recipient = resolveRecipient(
+            recipientAccountIndex,
+            msg,
+            signerIndexes,
+            roles,
+          );
+          lamports += amount;
+          lamportTransfers.push({
+            instructionIndex,
+            to: recipient.address,
+            toUnresolved: recipient.addressUnresolved,
+            amount: amount.toString(),
+            outboundToNonSigner: recipient.outboundToNonSigner,
+          });
         }
       }
       return;

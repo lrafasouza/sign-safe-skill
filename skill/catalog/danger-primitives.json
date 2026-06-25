@@ -6,6 +6,7 @@
     "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb": "token-2022",
     "BPFLoaderUpgradeab1e11111111111111111111111": "bpf-loader-upgradeable",
     "11111111111111111111111111111111": "system",
+    "Stake11111111111111111111111111111111111111": "stake",
     "ComputeBudget111111111111111111111111111111": "compute-budget",
     "SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf": "squads-v4"
   },
@@ -33,7 +34,10 @@
       "label": "Token-2022 PermanentDelegate (configure/use)",
       "program": "token-2022",
       "programId": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
-      "detection": { "instructionType": "PermanentDelegate", "discriminator": [35] },
+      "detection": {
+        "instructionType": "PermanentDelegate",
+        "discriminator": [35]
+      },
       "severity": "HOLD",
       "mapsToLoss": "A permanent delegate can move or burn tokens from any holder irrevocably; configuring or exercising it is a seizure vector."
     },
@@ -60,7 +64,10 @@
       "label": "BPF Loader Upgradeable: SetAuthorityChecked",
       "program": "bpf-loader-upgradeable",
       "programId": "BPFLoaderUpgradeab1e11111111111111111111111",
-      "detection": { "instructionType": "SetAuthorityChecked", "discriminator": [7] },
+      "detection": {
+        "instructionType": "SetAuthorityChecked",
+        "discriminator": [7]
+      },
       "severity": "REJECT",
       "mapsToLoss": "Transfers a program's upgrade authority (checked variant), enabling a later upgrade-rug under attacker control."
     },
@@ -87,7 +94,10 @@
       "label": "System: AssignWithSeed (ownership change)",
       "program": "system",
       "programId": "11111111111111111111111111111111",
-      "detection": { "instructionType": "AssignWithSeed", "discriminator": [10] },
+      "detection": {
+        "instructionType": "AssignWithSeed",
+        "discriminator": [10]
+      },
       "severity": "REJECT",
       "mapsToLoss": "Reassigns a seed-derived account's owner program to an arbitrary program, handing over control of the account."
     },
@@ -96,7 +106,10 @@
       "label": "System: TransferWithSeed",
       "program": "system",
       "programId": "11111111111111111111111111111111",
-      "detection": { "instructionType": "TransferWithSeed", "discriminator": [11] },
+      "detection": {
+        "instructionType": "TransferWithSeed",
+        "discriminator": [11]
+      },
       "severity": "HOLD",
       "mapsToLoss": "Transfers lamports out of a seed-derived account whose authority the signer controls; direct SOL outflow via a less-obvious path than a plain Transfer."
     },
@@ -105,7 +118,10 @@
       "label": "System: AdvanceNonceAccount (durable nonce)",
       "program": "system",
       "programId": "11111111111111111111111111111111",
-      "detection": { "instructionType": "AdvanceNonceAccount", "discriminator": [4] },
+      "detection": {
+        "instructionType": "AdvanceNonceAccount",
+        "discriminator": [4]
+      },
       "severity": "HOLD",
       "mapsToLoss": "Durable nonces remove blockhash expiry, so a signed transaction can be held and replayed later -- the core enabling vector of the Drift 2026 blind-signing incident."
     },
@@ -114,9 +130,33 @@
       "label": "System: Initialize/Authorize NonceAccount",
       "program": "system",
       "programId": "11111111111111111111111111111111",
-      "detection": { "instructionType": "InitializeOrAuthorizeNonce", "discriminator": [6, 7] },
+      "detection": {
+        "instructionType": "InitializeOrAuthorizeNonce",
+        "discriminator": [6, 7]
+      },
       "severity": "HOLD",
       "mapsToLoss": "Initializes a nonce account or redirects its authority, setting up or hijacking a durable-nonce hold/replay vector."
+    },
+    {
+      "id": "stake-authorize",
+      "label": "Stake: Authorize",
+      "program": "stake",
+      "programId": "Stake11111111111111111111111111111111111111",
+      "detection": {
+        "instructionType": "Authorize",
+        "discriminator": [1, 8, 10]
+      },
+      "severity": "REJECT",
+      "mapsToLoss": "Transfers staker or withdrawer authority over a stake account; withdrawer authority controls withdrawal of the account's SOL."
+    },
+    {
+      "id": "stake-withdraw",
+      "label": "Stake: Withdraw",
+      "program": "stake",
+      "programId": "Stake11111111111111111111111111111111111111",
+      "detection": { "instructionType": "Withdraw", "discriminator": [4] },
+      "severity": "HOLD",
+      "mapsToLoss": "Withdraws SOL from a stake account to an arbitrary recipient."
     },
     {
       "id": "spl-approve-delegate",
@@ -159,7 +199,10 @@
       "label": "SPL Token FreezeAccount",
       "program": "spl-token",
       "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
-      "detection": { "instructionType": "FreezeAccount", "discriminator": [10] },
+      "detection": {
+        "instructionType": "FreezeAccount",
+        "discriminator": [10]
+      },
       "severity": "HOLD",
       "mapsToLoss": "Freezes a holder's token account (the freeze authority's power); used to build sell-side honeypots and to deny transfers."
     },
@@ -168,7 +211,10 @@
       "label": "Token-2022 FreezeAccount",
       "program": "token-2022",
       "programId": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
-      "detection": { "instructionType": "FreezeAccount", "discriminator": [10] },
+      "detection": {
+        "instructionType": "FreezeAccount",
+        "discriminator": [10]
+      },
       "severity": "HOLD",
       "mapsToLoss": "Freezes a holder's Token-2022 account; used to build sell-side honeypots and to deny transfers."
     },
@@ -213,7 +259,10 @@
       "label": "SPL Token WithdrawExcessLamports",
       "program": "spl-token",
       "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
-      "detection": { "instructionType": "WithdrawExcessLamports", "discriminator": [38] },
+      "detection": {
+        "instructionType": "WithdrawExcessLamports",
+        "discriminator": [38]
+      },
       "severity": "HOLD",
       "mapsToLoss": "Sweeps lamports above rent-exemption out of a token-program-owned account to an arbitrary destination -- a direct SOL outflow via a less-obvious path than a plain Transfer."
     },
@@ -222,7 +271,10 @@
       "label": "Token-2022 WithdrawExcessLamports",
       "program": "token-2022",
       "programId": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
-      "detection": { "instructionType": "WithdrawExcessLamports", "discriminator": [38] },
+      "detection": {
+        "instructionType": "WithdrawExcessLamports",
+        "discriminator": [38]
+      },
       "severity": "HOLD",
       "mapsToLoss": "Sweeps lamports above rent-exemption out of a Token-2022-owned account to an arbitrary destination -- a direct SOL outflow."
     },
@@ -231,7 +283,10 @@
       "label": "SPL Token UnwrapLamports",
       "program": "spl-token",
       "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
-      "detection": { "instructionType": "UnwrapLamports", "discriminator": [45] },
+      "detection": {
+        "instructionType": "UnwrapLamports",
+        "discriminator": [45]
+      },
       "severity": "HOLD",
       "mapsToLoss": "Transfers lamports out of a native (wrapped-SOL) account to a destination that may be attacker-controlled -- a direct SOL outflow."
     },
@@ -240,7 +295,10 @@
       "label": "Token-2022 UnwrapLamports",
       "program": "token-2022",
       "programId": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
-      "detection": { "instructionType": "UnwrapLamports", "discriminator": [45] },
+      "detection": {
+        "instructionType": "UnwrapLamports",
+        "discriminator": [45]
+      },
       "severity": "HOLD",
       "mapsToLoss": "Transfers lamports out of a native (wrapped-SOL) Token-2022 account to a destination that may be attacker-controlled -- a direct SOL outflow."
     },
@@ -267,7 +325,11 @@
       "label": "Token-2022 ConfidentialMintBurn: Mint",
       "program": "token-2022",
       "programId": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
-      "detection": { "instructionType": "ConfidentialMintBurn::Mint", "discriminator": [42], "subDiscriminator": [3] },
+      "detection": {
+        "instructionType": "ConfidentialMintBurn::Mint",
+        "discriminator": [42],
+        "subDiscriminator": [3]
+      },
       "severity": "HOLD",
       "mapsToLoss": "Mints tokens to a confidential balance (extension tag 42, sub 3) -- the confidential-supply encoding of MintTo; same supply-inflation loss class."
     },
@@ -276,7 +338,11 @@
       "label": "Token-2022 ConfidentialMintBurn: Burn",
       "program": "token-2022",
       "programId": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
-      "detection": { "instructionType": "ConfidentialMintBurn::Burn", "discriminator": [42], "subDiscriminator": [4] },
+      "detection": {
+        "instructionType": "ConfidentialMintBurn::Burn",
+        "discriminator": [42],
+        "subDiscriminator": [4]
+      },
       "severity": "HOLD",
       "mapsToLoss": "Irreversibly burns tokens from a confidential balance (extension tag 42, sub 4) -- same permanent-loss class as Burn."
     },
@@ -285,7 +351,11 @@
       "label": "Token-2022 TransferFee: WithdrawWithheldTokens",
       "program": "token-2022",
       "programId": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
-      "detection": { "instructionType": "TransferFee::WithdrawWithheld", "discriminator": [26], "subDiscriminator": [2, 3] },
+      "detection": {
+        "instructionType": "TransferFee::WithdrawWithheld",
+        "discriminator": [26],
+        "subDiscriminator": [2, 3]
+      },
       "severity": "HOLD",
       "mapsToLoss": "Transfers withheld transfer-fee tokens out to a destination (extension tag 26, sub 2/3) -- a token outflow controlled by the withdraw-withheld authority."
     },
@@ -294,7 +364,11 @@
       "label": "Token-2022 ConfidentialTransferFee: WithdrawWithheldTokens",
       "program": "token-2022",
       "programId": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
-      "detection": { "instructionType": "ConfidentialTransferFee::WithdrawWithheld", "discriminator": [37], "subDiscriminator": [1, 2] },
+      "detection": {
+        "instructionType": "ConfidentialTransferFee::WithdrawWithheld",
+        "discriminator": [37],
+        "subDiscriminator": [1, 2]
+      },
       "severity": "HOLD",
       "mapsToLoss": "Confidential variant of the withheld-fee token outflow (extension tag 37, sub 1/2) -- moves withheld tokens out under the withdraw-withheld authority."
     },
@@ -303,7 +377,11 @@
       "label": "Token-2022 PermissionedBurn: Burn/BurnChecked/ConfidentialBurn",
       "program": "token-2022",
       "programId": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
-      "detection": { "instructionType": "PermissionedBurn::Burn", "discriminator": [46], "subDiscriminator": [1, 2, 3] },
+      "detection": {
+        "instructionType": "PermissionedBurn::Burn",
+        "discriminator": [46],
+        "subDiscriminator": [1, 2, 3]
+      },
       "severity": "HOLD",
       "mapsToLoss": "Irreversibly burns tokens from the account under the permissioned-burn extension (extension tag 46, sub 1/2/3) -- same permanent-loss class as Burn; InitializePermissionedBurn (46, sub 0) is config and stays SIGN."
     },
@@ -312,7 +390,10 @@
       "label": "System: WithdrawNonceAccount",
       "program": "system",
       "programId": "11111111111111111111111111111111",
-      "detection": { "instructionType": "WithdrawNonceAccount", "discriminator": [5] },
+      "detection": {
+        "instructionType": "WithdrawNonceAccount",
+        "discriminator": [5]
+      },
       "severity": "HOLD",
       "mapsToLoss": "Withdraws lamports out of a nonce account to an arbitrary recipient -- a direct SOL outflow via a less-obvious path than a plain Transfer."
     },
