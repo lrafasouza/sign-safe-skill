@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 /**
  * cli.ts -- thin node entry point. Reads a base64 message from a .b64 file
  * argument or from stdin, runs the OFFLINE core (or online enrichment when
@@ -133,7 +134,9 @@ export function parseArgs(argv: string[]): ParsedArgs {
     } else if (a === "--rpc") {
       const v = argv[++i];
       if (v === undefined || v.startsWith("--")) {
-        throw new Error("--rpc requires a URL value (e.g. --rpc https://api.mainnet-beta.solana.com)");
+        throw new Error(
+          "--rpc requires a URL value (e.g. --rpc https://api.mainnet-beta.solana.com)",
+        );
       }
       rpcUrl = v;
     } else if (a === "--vault-pda") {
@@ -154,7 +157,16 @@ export function parseArgs(argv: string[]): ParsedArgs {
     );
   }
 
-  return { file, threshold, jsonOnly, digestOnly, rpcUrl, vaultPda, strict, simulate };
+  return {
+    file,
+    threshold,
+    jsonOnly,
+    digestOnly,
+    rpcUrl,
+    vaultPda,
+    strict,
+    simulate,
+  };
 }
 
 function readInput(file: string | undefined): string {
@@ -246,7 +258,7 @@ async function main(): Promise<void> {
         process.stdout.write(`short code      : ${dig.shortCode}\n`);
         process.stdout.write(
           `\nVerify this short code independently on a second device to confirm the\n` +
-          `transaction bytes have not been modified in transit.\n`,
+            `transaction bytes have not been modified in transit.\n`,
         );
         process.exitCode = 0;
       } catch (err) {
@@ -266,7 +278,8 @@ async function main(): Promise<void> {
       // Online enrichment path: fetch ALT/Squads/mint accounts via RPC.
       // These imports are deferred here so they are NEVER loaded in the pure
       // offline path -- rpc.ts and review-online.ts are host-layer only.
-      const { makeRpcAccountFetcher, makeRpcSimulator } = await import("./rpc.ts");
+      const { makeRpcAccountFetcher, makeRpcSimulator } =
+        await import("./rpc.ts");
       const { reviewWithEnrichment } = await import("./review-online.ts");
 
       try {
@@ -282,18 +295,25 @@ async function main(): Promise<void> {
           const vaultPdaAddr = args.vaultPda;
           try {
             const { decodeInput } = await import("./decode.ts");
-            const { extractVaultTransactionAddress } = await import("./squads.ts");
+            const { extractVaultTransactionAddress } =
+              await import("./squads.ts");
             const decoded = decodeInput(b64);
             const vtAddr = extractVaultTransactionAddress(decoded.message);
             const vaultPdaAccount = await fetcher(vaultPdaAddr);
-            activeFetcher = buildVaultPdaFetcher(vtAddr, vaultPdaAccount, fetcher);
+            activeFetcher = buildVaultPdaFetcher(
+              vtAddr,
+              vaultPdaAccount,
+              fetcher,
+            );
           } catch {
             // If decode fails, review-online handles it gracefully (fail-closed).
           }
         }
 
         // Build simulate transport if --simulate flag was given.
-        const simulateFn = args.simulate ? makeRpcSimulator(args.rpcUrl) : undefined;
+        const simulateFn = args.simulate
+          ? makeRpcSimulator(args.rpcUrl)
+          : undefined;
 
         verdict = await reviewWithEnrichment(b64, ctx, activeFetcher, {
           simulate: args.simulate,
@@ -320,7 +340,8 @@ async function main(): Promise<void> {
 
   // Exit code mirrors the verdict so scripts can gate on it.
   // 0 = SIGN, 10 = HOLD, 20 = REJECT.
-  process.exitCode = verdict!.decision === "SIGN" ? 0 : verdict!.decision === "HOLD" ? 10 : 20;
+  process.exitCode =
+    verdict!.decision === "SIGN" ? 0 : verdict!.decision === "HOLD" ? 10 : 20;
 }
 
 // Guard: only run main() when executed directly, not when imported by tests.
