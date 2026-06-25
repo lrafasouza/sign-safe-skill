@@ -255,6 +255,23 @@ export async function simulateAssetDiff(
       };
     }
 
+    const hasSimulationEvidence =
+      simResult.accounts.length > 0 ||
+      (simResult.innerInstructions?.length ?? 0) > 0 ||
+      (simResult.preBalances?.length ?? 0) > 0 ||
+      (simResult.postBalances?.length ?? 0) > 0 ||
+      (simResult.preTokenBalances?.length ?? 0) > 0 ||
+      (simResult.postTokenBalances?.length ?? 0) > 0;
+    if (!hasSimulationEvidence) {
+      return {
+        ok: false,
+        err: "simulateTransaction returned no balance, account, or inner-instruction evidence",
+        signerSolDelta: 0n,
+        tokenDeltas: [],
+        outflowsToNonSigner: [],
+      };
+    }
+
     let signerSolDelta = 0n;
     if (
       simResult.preBalances !== undefined &&

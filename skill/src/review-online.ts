@@ -68,6 +68,28 @@ export interface ReviewEnrichmentOpts {
   rpcUrl?: string;
 }
 
+function mergeSimulation(
+  existing: VerdictContext["simulation"] | undefined,
+  fresh: VerdictContext["simulation"] | undefined,
+): VerdictContext["simulation"] | undefined {
+  if (existing === undefined) return fresh;
+  if (fresh === undefined) return existing;
+  if (!existing.ok) return existing;
+  if (!fresh.ok) return fresh;
+  return {
+    ok: true,
+    signerSolDelta:
+      existing.signerSolDelta < fresh.signerSolDelta
+        ? existing.signerSolDelta
+        : fresh.signerSolDelta,
+    tokenDeltas: [...existing.tokenDeltas, ...fresh.tokenDeltas],
+    outflowsToNonSigner: [
+      ...existing.outflowsToNonSigner,
+      ...fresh.outflowsToNonSigner,
+    ],
+  };
+}
+
 /**
  * Review a base64-encoded transaction message with online enrichment.
  *
@@ -112,18 +134,29 @@ export async function reviewWithEnrichment(
   // Step 2: ALT enrichment.
   // For each v0 addressTableLookup, attempt to fetch and decode the table.
   // Missing/broken tables are silently omitted (fail-closed).
-  const resolvedAltTables = new Map<string, readonly string[]>();
+  const resolvedAltTables = new Map<string, readonly string[]>(
+    ctx.resolvedAltTables ?? [],
+  );
+  let resolvedAltTablesFetched = 0;
   for (const lut of msg.addressTableLookups) {
+    if (resolvedAltTables.has(lut.accountKey)) continue;
     try {
       const account = await fetcher(lut.accountKey);
       if (account === null) continue; // table not found → omit (fail-closed)
       const decodedLut = decodeAddressLookupTable(account.data);
       resolvedAltTables.set(lut.accountKey, decodedLut.addresses);
+      resolvedAltTablesFetched++;
     } catch {
       // Decode threw: omit this table (fail-closed).
       continue;
     }
   }
+
+  const enrichedRoles = deriveRoles(msg, {
+    reservedAccountKeys: RESERVED_ACCOUNT_KEYS,
+    resolvedAltTables:
+      resolvedAltTables.size > 0 ? resolvedAltTables : undefined,
+  });
 
   // Step 3: Squads enrichment.
   // Extract the VaultTransaction PDA address and fetch its bytes.
@@ -148,8 +181,12 @@ export async function reviewWithEnrichment(
   // Layout: accounts[0]=source, accounts[1]=mint, accounts[2]=dest, accounts[3]=owner
   const mintExtensions = new Map<
     string,
-    { permanentDelegate?: string; transferHook?: string; nonTransferable?: boolean }
-  >();
+    {
+      permanentDelegate?: string;
+      transferHook?: string;
+      nonTransferable?: boolean;
+    }
+  >(ctx.mintExtensions ?? []);
   const candidateMints = new Set<string>();
 
   for (const ix of msg.instructions) {
@@ -160,8 +197,9 @@ export async function reviewWithEnrichment(
     // mint is at accountIndexes[1]
     const mintIdx = ix.accountIndexes[1];
     if (mintIdx === undefined) continue;
-    if (mintIdx >= msg.staticAccountKeys.length) continue; // ALT-sourced → skip (can't probe offline)
-    const mintAddr = msg.staticAccountKeys[mintIdx];
+    const mintRole = enrichedRoles[mintIdx];
+    if (mintRole === undefined || !mintRole.addressVerified) continue;
+    const mintAddr = mintRole.address;
     if (mintAddr !== undefined) candidateMints.add(mintAddr);
   }
 
@@ -203,13 +241,10 @@ export async function reviewWithEnrichment(
       };
     } else {
       try {
-        // Derive signer pubkeys from the message.
-        const roles = deriveRoles(msg, {
-          reservedAccountKeys: RESERVED_ACCOUNT_KEYS,
-          resolvedAltTables: resolvedAltTables.size > 0 ? resolvedAltTables : undefined,
-        });
-        const signerPubkeys = roles
-          .filter((r) => r.role === "signer-writable" || r.role === "signer-readonly")
+        const signerPubkeys = enrichedRoles
+          .filter(
+            (r) => r.role === "signer-writable" || r.role === "signer-readonly",
+          )
           .filter((r) => r.addressVerified)
           .map((r) => r.address);
 
@@ -234,11 +269,12 @@ export async function reviewWithEnrichment(
   }
 
   // Step 6: Assemble enriched context and call the offline verdict.
+  const mergedSimulation = mergeSimulation(ctx.simulation, simulationResult);
   const enrichedCtx: VerdictContext = {
     ...ctx,
     ...(resolvedAltTables.size > 0 ? { resolvedAltTables } : {}),
     ...(mintExtensions.size > 0 ? { mintExtensions } : {}),
-    ...(simulationResult !== undefined ? { simulation: simulationResult } : {}),
+    ...(mergedSimulation !== undefined ? { simulation: mergedSimulation } : {}),
   };
 
   const verdict = reviewBase64(b64, enrichedCtx, vaultTransactionBytes);
@@ -249,7 +285,7 @@ export async function reviewWithEnrichment(
 
   verdict.enrichment = {
     rpcUrl,
-    resolvedAltTables: resolvedAltTables.size,
+    resolvedAltTables: resolvedAltTablesFetched,
     squadsPdaFetched,
     mintsScreened: candidateMints.size,
     simulated,

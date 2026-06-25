@@ -741,9 +741,31 @@ export function reviewBase64(
       });
     }
 
+    const oversizedTokenTransfers = outflow.splTransfers.filter(
+      (transfer) =>
+        transfer.destination.outboundToNonSigner &&
+        BigInt(transfer.amount) > BigInt(Number.MAX_SAFE_INTEGER),
+    );
+    for (const transfer of oversizedTokenTransfers) {
+      topLevelFindings.push({
+        id: "oversized-token-transfer",
+        label:
+          "Outbound token transfer exceeds the context-free safe integer range",
+        severity: "HOLD",
+        category: "value-outflow",
+        instructionIndex: transfer.instructionIndex,
+        programId: transfer.programId,
+        detail:
+          `This transaction sends ${transfer.amount} raw token units to a non-signer account. ` +
+          `The amount exceeds JavaScript's exact safe-integer range and cannot be treated as a routine transfer without mint decimals and value context.`,
+        mapsToLoss:
+          "An extremely large raw token amount can represent a full-balance drain or an amount that downstream displays round incorrectly.",
+      });
+    }
+
     // ── FEATURE A4: Token-2022 mint extension danger screening ──
     // When ctx.mintExtensions is provided, check each mint address that is a KEY
-    // in the map against the transaction's static account key set. Because
+    // in the map against the transaction's verified account roles. Because
     // permanent-delegate and transfer-hook danger is an INHERENT property of the
     // token mint (not specific to any one instruction), the screening fires
     // whenever the dangerous mint appears anywhere in the transaction's account
@@ -752,8 +774,11 @@ export function reviewBase64(
     // ESCALATE-ONLY: absence of the map leaves verdict byte-identical.
     if (ctx.mintExtensions !== undefined) {
       const mintExtMap = ctx.mintExtensions;
-      // Build the set of static account addresses for O(1) membership checks.
-      const staticKeySet = new Set(msg.staticAccountKeys);
+      const verifiedAccountSet = new Set(
+        roles
+          .filter((role) => role.addressVerified)
+          .map((role) => role.address),
+      );
 
       // Iterate in deterministic (sorted) order so findings are insertion-order
       // independent. Without sorting, Map iteration order (insertion order) can
@@ -763,7 +788,7 @@ export function reviewBase64(
       );
 
       for (const [mintAddr, exts] of sortedMintEntries) {
-        if (!staticKeySet.has(mintAddr)) continue; // mint not referenced in this tx
+        if (!verifiedAccountSet.has(mintAddr)) continue; // mint not referenced in this tx
 
         if (exts.permanentDelegate !== undefined) {
           topLevelFindings.push({
@@ -838,7 +863,9 @@ export function reviewBase64(
         });
       } else {
         // Simulation succeeded: check for SOL outflows to non-signers.
-        const simHasOutflow = sim.outflowsToNonSigner.length > 0;
+        const simHasOutflow =
+          sim.outflowsToNonSigner.length > 0 ||
+          sim.signerSolDelta < -BigInt(ctx.lamportThreshold);
 
         if (simHasOutflow) {
           // Determine severity: REJECT if any outflow recipient appears in the blocklist.
