@@ -23,8 +23,13 @@
  */
 
 import anchorDanger from "../catalog/anchor-danger.json" with { type: "json" };
-import type { Finding, VerdictContext } from "./types.ts";
-import type { VaultInnerInstruction } from "./squads.ts";
+import { classify } from "./classify.ts";
+import { deriveRoles, RESERVED_ACCOUNT_KEYS } from "./roles.ts";
+import type { DecodedMessage, Finding, VerdictContext } from "./types.ts";
+import type {
+  DecodedVaultTransaction,
+  VaultInnerInstruction,
+} from "./squads.ts";
 
 /** One entry in the Anchor danger catalog. */
 interface AnchorDangerEntry {
@@ -97,7 +102,8 @@ function matchesDisc8(data: Uint8Array, disc: Uint8Array): boolean {
 export function classifyInnerInstruction(
   innerIx: VaultInnerInstruction,
   innerIndex: number,
-  _ctx: VerdictContext,
+  ctx: VerdictContext,
+  vault: DecodedVaultTransaction,
 ): Finding[] {
   // Case 1: unresolved program id (lives in ALT space; cannot know the program
   // without an on-chain fetch). This is always HOLD, never silent.
@@ -152,6 +158,44 @@ export function classifyInnerInstruction(
     ];
   }
 
+  const msg: DecodedMessage = {
+    version: "legacy",
+    header: {
+      numRequiredSignatures: vault.numSigners,
+      numReadonlySignedAccounts: vault.numSigners - vault.numWritableSigners,
+      numReadonlyUnsignedAccounts:
+        vault.accountKeys.length -
+        vault.numSigners -
+        vault.numWritableNonSigners,
+    },
+    staticAccountKeys: vault.accountKeys,
+    recentBlockhash: "",
+    instructions: [
+      {
+        programIdIndex: innerIx.programIdIndex,
+        programId: pid,
+        accountIndexes: innerIx.accountIndexes,
+        data,
+      },
+    ],
+    addressTableLookups: [],
+    altLookupsPresent: false,
+  };
+  const roles = deriveRoles(msg, {
+    reservedAccountKeys: RESERVED_ACCOUNT_KEYS,
+  });
+  const nativeFindings = classify(msg, roles, ctx).findings;
+  if (nativeFindings.length > 0) {
+    return nativeFindings.map((finding) => ({
+      ...finding,
+      label: `${finding.label} [inner, via Squads vault]`,
+      instructionIndex: innerIndex,
+      detail:
+        `Inner instruction at index ${innerIndex} is executed via CPI inside a Squads VaultTransaction. ` +
+        finding.detail,
+    }));
+  }
+
   // Case 4: unknown program, no catalog match. Emit an opaque HOLD finding so
   // the verdict is never SIGN (fail-closed). This covers inner instructions to
   // programs we have not catalogued: we cannot know if they are dangerous, so
@@ -183,12 +227,17 @@ export function classifyInnerInstruction(
  * @param ctx VerdictContext for threshold-gated rules.
  */
 export function classifyInnerInstructions(
-  instructions: VaultInnerInstruction[],
+  vault: DecodedVaultTransaction,
   ctx: VerdictContext,
 ): Finding[] {
   const findings: Finding[] = [];
-  for (let i = 0; i < instructions.length; i++) {
-    const innerFindings = classifyInnerInstruction(instructions[i]!, i, ctx);
+  for (let i = 0; i < vault.instructions.length; i++) {
+    const innerFindings = classifyInnerInstruction(
+      vault.instructions[i]!,
+      i,
+      ctx,
+      vault,
+    );
     findings.push(...innerFindings);
   }
   return findings;

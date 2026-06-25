@@ -82,6 +82,10 @@ function mergeSimulation(
       existing.signerSolDelta < fresh.signerSolDelta
         ? existing.signerSolDelta
         : fresh.signerSolDelta,
+    signerSolDeltas: [
+      ...(existing.signerSolDeltas ?? []),
+      ...(fresh.signerSolDeltas ?? []),
+    ],
     tokenDeltas: [...existing.tokenDeltas, ...fresh.tokenDeltas],
     outflowsToNonSigner: [
       ...existing.outflowsToNonSigner,
@@ -253,6 +257,7 @@ export async function reviewWithEnrichment(
           signerPubkeys,
           opts.simulateFn,
           fetcher,
+          resolvedAltTables.size > 0 ? resolvedAltTables : undefined,
         );
         simulationResult = simDiff;
       } catch (err) {

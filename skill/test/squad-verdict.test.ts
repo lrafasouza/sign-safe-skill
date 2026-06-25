@@ -117,6 +117,7 @@ function buildMessage(
 function buildSyntheticVaultTx(opts: {
   instrProgramIdIndex: number;
   instrData: number[];
+  instrProgramId?: string;
   numKeys?: number;
 }): Uint8Array {
   const numKeys = opts.numKeys ?? 3;
@@ -141,7 +142,11 @@ function buildSyntheticVaultTx(opts: {
   // account_keys Vec<Pubkey>: numKeys entries (each 32 bytes, filled with 0x10+i)
   bytes.push(...u32le(numKeys));
   for (let i = 0; i < numKeys; i++) {
-    bytes.push(...new Array(32).fill(0x10 + i));
+    bytes.push(
+      ...(i === opts.instrProgramIdIndex && opts.instrProgramId !== undefined
+        ? Array.from(base58ToBytes(opts.instrProgramId))
+        : new Array(32).fill(0x10 + i)),
+    );
   }
 
   // instructions Vec: 1 entry
@@ -227,10 +232,16 @@ describe("H: Squads vaultTransactionExecute verdict integration", () => {
       instrProgramIdIndex: 0,
       instrData: UPDATE_ADMIN_DISC,
     });
-    const v = reviewBase64(toB64(msg), { lamportThreshold: 1_000_000_000 }, vaultTxBytes);
+    const v = reviewBase64(
+      toB64(msg),
+      { lamportThreshold: 1_000_000_000 },
+      vaultTxBytes,
+    );
     expect(v.decision).toBe("REJECT");
     // The reason should surface the inner authority transfer
-    const innerFinding = v.findings.find((f) => f.id === "anchor-inner-update_admin");
+    const innerFinding = v.findings.find(
+      (f) => f.id === "anchor-inner-update_admin",
+    );
     expect(innerFinding).toBeTruthy();
     expect(innerFinding!.severity).toBe("REJECT");
     // Reason text mentions the inner CPI danger
@@ -244,12 +255,40 @@ describe("H: Squads vaultTransactionExecute verdict integration", () => {
       [{ prog: 1, accts: [0], data: VAULT_TX_EXECUTE_DISC }],
     );
     const vaultTxBytes = buildUnresolvedVaultTx();
-    const v = reviewBase64(toB64(msg), { lamportThreshold: 1_000_000_000 }, vaultTxBytes);
+    const v = reviewBase64(
+      toB64(msg),
+      { lamportThreshold: 1_000_000_000 },
+      vaultTxBytes,
+    );
     // Unresolved inner -> squads-inner-unresolved HOLD finding
     const f = v.findings.find((x) => x.id === "squads-inner-unresolved");
     expect(f).toBeTruthy();
     expect(f!.severity).toBe("HOLD");
     expect(v.decision === "HOLD" || v.decision === "REJECT").toBe(true);
+  });
+
+  it("H4 execute WITH inner SPL SetAuthority -> REJECT and names SetAuthority", () => {
+    const msg = buildMessage(
+      [1, 0, 1],
+      [1, SQUADS_V4],
+      [{ prog: 1, accts: [0], data: VAULT_TX_EXECUTE_DISC }],
+    );
+    const vaultTxBytes = buildSyntheticVaultTx({
+      numKeys: 3,
+      instrProgramIdIndex: 2,
+      instrProgramId: SPL_TOKEN,
+      instrData: [6, 2, 1, ...new Array(32).fill(0xaa)],
+    });
+    const v = reviewBase64(
+      toB64(msg),
+      { lamportThreshold: 1_000_000_000 },
+      vaultTxBytes,
+    );
+    const finding = v.findings.find((f) => f.id === "spl-set-authority");
+    expect(v.decision).toBe("REJECT");
+    expect(finding).toBeTruthy();
+    expect(finding!.label).toContain("SetAuthority");
+    expect(finding!.detail).toContain("AccountOwner");
   });
 });
 
@@ -266,14 +305,16 @@ describe("I: real-Drift shape (durable-nonce + Squads vaultTransactionExecute)",
       [1, 0, 1],
       [1, SYSTEM, SQUADS_V4, 3],
       [
-        { prog: 1, accts: [2, 0], data: u32le(4) },       // ix0: AdvanceNonce (System=idx1)
+        { prog: 1, accts: [2, 0], data: u32le(4) }, // ix0: AdvanceNonce (System=idx1)
         { prog: 2, accts: [0], data: VAULT_TX_EXECUTE_DISC }, // ix1: vaultTransactionExecute
       ],
     );
     const v = reviewBase64(toB64(msg));
     expect(v.decision).toBe("HOLD");
     // squads-execute-unverified HOLD finding is still present
-    expect(v.findings.some((f) => f.id === "squads-execute-unverified")).toBe(true);
+    expect(v.findings.some((f) => f.id === "squads-execute-unverified")).toBe(
+      true,
+    );
   });
 
   it("I1-strict: durable-nonce + Squads execute WITHOUT inner + strict=true -> REJECT (broad driftComposite)", () => {
@@ -286,10 +327,15 @@ describe("I: real-Drift shape (durable-nonce + Squads vaultTransactionExecute)",
         { prog: 2, accts: [0], data: VAULT_TX_EXECUTE_DISC },
       ],
     );
-    const ctx: VerdictContext = { lamportThreshold: 1_000_000_000, strict: true };
+    const ctx: VerdictContext = {
+      lamportThreshold: 1_000_000_000,
+      strict: true,
+    };
     const v = reviewBase64(toB64(msg), ctx);
     expect(v.decision).toBe("REJECT");
-    expect(v.findings.some((f) => f.id === "squads-execute-unverified")).toBe(true);
+    expect(v.findings.some((f) => f.id === "squads-execute-unverified")).toBe(
+      true,
+    );
   });
 
   it("I2 durable-nonce + execute WITH inner update_admin -> REJECT, reason mentions authority", () => {
@@ -306,13 +352,19 @@ describe("I: real-Drift shape (durable-nonce + Squads vaultTransactionExecute)",
       instrProgramIdIndex: 0,
       instrData: UPDATE_ADMIN_DISC,
     });
-    const v = reviewBase64(toB64(msg), { lamportThreshold: 1_000_000_000 }, vaultTxBytes);
+    const v = reviewBase64(
+      toB64(msg),
+      { lamportThreshold: 1_000_000_000 },
+      vaultTxBytes,
+    );
     expect(v.decision).toBe("REJECT");
     // Should mention the inner authority transfer in the reason
     expect(v.reason).toContain("inner instruction");
     expect(v.reason.toLowerCase()).toMatch(/authority|admin/);
     // The inner finding should be present
-    expect(v.findings.some((f) => f.id === "anchor-inner-update_admin")).toBe(true);
+    expect(v.findings.some((f) => f.id === "anchor-inner-update_admin")).toBe(
+      true,
+    );
   });
 });
 
@@ -353,7 +405,10 @@ describe("K: governanceContext flag escalates bare durable nonce to REJECT", () 
       [1, SYSTEM, 3],
       [{ prog: 1, accts: [2, 0], data: u32le(4) }],
     );
-    const ctx: VerdictContext = { lamportThreshold: 1_000_000_000, governanceContext: true };
+    const ctx: VerdictContext = {
+      lamportThreshold: 1_000_000_000,
+      governanceContext: true,
+    };
     const v = reviewBase64(toB64(msg), ctx);
     expect(v.decision).toBe("REJECT");
   });
@@ -364,7 +419,10 @@ describe("K: governanceContext flag escalates bare durable nonce to REJECT", () 
       [1, SYSTEM, 3],
       [{ prog: 1, accts: [2, 0], data: u32le(4) }],
     );
-    const ctx: VerdictContext = { lamportThreshold: 1_000_000_000, governanceContext: true };
+    const ctx: VerdictContext = {
+      lamportThreshold: 1_000_000_000,
+      governanceContext: true,
+    };
     const v = reviewBase64(toB64(msg), ctx);
     expect(v.reason.toLowerCase()).toMatch(/governance|policy/);
   });
@@ -378,7 +436,10 @@ describe("K: governanceContext flag escalates bare durable nonce to REJECT", () 
         { prog: 2, accts: [0], data: VAULT_TX_EXECUTE_DISC },
       ],
     );
-    const ctx: VerdictContext = { lamportThreshold: 1_000_000_000, governanceContext: true };
+    const ctx: VerdictContext = {
+      lamportThreshold: 1_000_000_000,
+      governanceContext: true,
+    };
     const v = reviewBase64(toB64(msg), ctx);
     expect(v.decision).toBe("REJECT");
   });
@@ -411,7 +472,11 @@ describe("L: fail-closed: Squads execute never SIGN", () => {
       instrProgramIdIndex: 0,
       instrData: [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08],
     });
-    const v = reviewBase64(toB64(msg), { lamportThreshold: 1_000_000_000 }, vaultTxBytes);
+    const v = reviewBase64(
+      toB64(msg),
+      { lamportThreshold: 1_000_000_000 },
+      vaultTxBytes,
+    );
     // Even with unrecognized inner data, must not be SIGN (opaque inner -> HOLD)
     expect(v.decision).not.toBe("SIGN");
   });
@@ -429,9 +494,15 @@ describe("L: fail-closed: Squads execute never SIGN", () => {
       [{ prog: 1, accts: [0], data: VAULT_TX_EXECUTE_DISC }],
     );
     const emptyVaultTx = buildEmptyVaultTx();
-    const v = reviewBase64(toB64(msg), { lamportThreshold: 1_000_000_000 }, emptyVaultTx);
+    const v = reviewBase64(
+      toB64(msg),
+      { lamportThreshold: 1_000_000_000 },
+      emptyVaultTx,
+    );
     expect(v.decision).not.toBe("SIGN");
-    expect(v.findings.some((f) => f.id === "squads-execute-unverified")).toBe(true);
+    expect(v.findings.some((f) => f.id === "squads-execute-unverified")).toBe(
+      true,
+    );
   });
 });
 
@@ -460,7 +531,7 @@ describe("M: Squads inner ALT-sourced program → squads-inner-unresolved HOLD f
     out.push(1, 0, 1); // header: 1 signer, 0 ro-signed, 1 ro-unsigned
     out.push(3); // 3 static keys
     out.push(...new Array(32).fill(0x01)); // [0] feePayer
-    out.push(...squadsKeyBytes);            // [1] SquadsV4
+    out.push(...squadsKeyBytes); // [1] SquadsV4
     out.push(...new Array(32).fill(0xaa)); // [2] VaultTxPDA
     out.push(...new Array(32).fill(0xfa)); // blockhash
     out.push(1); // 1 instruction
@@ -486,19 +557,27 @@ describe("M: Squads inner ALT-sourced program → squads-inner-unresolved HOLD f
   it("M1 inner instruction with ALT-sourced programId → squads-inner-unresolved HOLD (not generic)", () => {
     const msg = buildTopLevelMessage();
     const vaultTxBytes = buildAltSpaceVaultTx();
-    const v = reviewBase64(toB64(msg), { lamportThreshold: 1_000_000_000 }, vaultTxBytes);
+    const v = reviewBase64(
+      toB64(msg),
+      { lamportThreshold: 1_000_000_000 },
+      vaultTxBytes,
+    );
 
     // Must not be SIGN — an ALT-sourced inner program is unresolvable offline.
     expect(v.decision).not.toBe("SIGN");
 
     // The specific finding for ALT-space inner programs must be present.
-    const altFinding = v.findings.find((f) => f.id === "squads-inner-unresolved");
+    const altFinding = v.findings.find(
+      (f) => f.id === "squads-inner-unresolved",
+    );
     expect(altFinding).toBeDefined();
     expect(altFinding!.severity).toBe("HOLD");
 
     // The "bytes not provided" finding must NOT be present — we DID provide bytes
     // and they decoded successfully; the HOLD is the per-class ALT-space reason.
-    expect(v.findings.some((f) => f.id === "squads-execute-unverified")).toBe(false);
+    expect(v.findings.some((f) => f.id === "squads-execute-unverified")).toBe(
+      false,
+    );
   });
 
   it("M2 inner instruction with ALT-sourced programId → decision is HOLD (not REJECT)", () => {
@@ -506,7 +585,11 @@ describe("M: Squads inner ALT-sourced program → squads-inner-unresolved HOLD f
     // no durable-nonce marker and no REJECT-class findings, so HOLD is the result.
     const msg = buildTopLevelMessage();
     const vaultTxBytes = buildAltSpaceVaultTx();
-    const v = reviewBase64(toB64(msg), { lamportThreshold: 1_000_000_000 }, vaultTxBytes);
+    const v = reviewBase64(
+      toB64(msg),
+      { lamportThreshold: 1_000_000_000 },
+      vaultTxBytes,
+    );
     expect(v.decision).toBe("HOLD");
   });
 
@@ -514,14 +597,28 @@ describe("M: Squads inner ALT-sourced program → squads-inner-unresolved HOLD f
     // Contrast: when NO vaultTransactionBytes are provided at all, we get
     // squads-execute-unverified (the bytes-missing case), not squads-inner-unresolved.
     const msg = buildTopLevelMessage();
-    const vNoBytes = reviewBase64(toB64(msg), { lamportThreshold: 1_000_000_000 });
-    expect(vNoBytes.findings.some((f) => f.id === "squads-execute-unverified")).toBe(true);
-    expect(vNoBytes.findings.some((f) => f.id === "squads-inner-unresolved")).toBe(false);
+    const vNoBytes = reviewBase64(toB64(msg), {
+      lamportThreshold: 1_000_000_000,
+    });
+    expect(
+      vNoBytes.findings.some((f) => f.id === "squads-execute-unverified"),
+    ).toBe(true);
+    expect(
+      vNoBytes.findings.some((f) => f.id === "squads-inner-unresolved"),
+    ).toBe(false);
 
     // Contrast: when bytes are provided but inner prog is in ALT space, we get
     // squads-inner-unresolved, not squads-execute-unverified.
-    const vWithBytes = reviewBase64(toB64(msg), { lamportThreshold: 1_000_000_000 }, buildAltSpaceVaultTx());
-    expect(vWithBytes.findings.some((f) => f.id === "squads-inner-unresolved")).toBe(true);
-    expect(vWithBytes.findings.some((f) => f.id === "squads-execute-unverified")).toBe(false);
+    const vWithBytes = reviewBase64(
+      toB64(msg),
+      { lamportThreshold: 1_000_000_000 },
+      buildAltSpaceVaultTx(),
+    );
+    expect(
+      vWithBytes.findings.some((f) => f.id === "squads-inner-unresolved"),
+    ).toBe(true);
+    expect(
+      vWithBytes.findings.some((f) => f.id === "squads-execute-unverified"),
+    ).toBe(false);
   });
 });

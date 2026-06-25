@@ -38,7 +38,10 @@ function compactU16(n: number): number[] {
   for (;;) {
     const byte = rem & 0x7f;
     rem >>= 7;
-    if (rem === 0) { out.push(byte); break; }
+    if (rem === 0) {
+      out.push(byte);
+      break;
+    }
     out.push(byte | 0x80);
   }
   return out;
@@ -56,10 +59,16 @@ function b58ToBytes32(b58: string): Uint8Array {
       bytes[j] = c & 0xff;
       c >>= 8;
     }
-    while (c > 0) { bytes.push(c & 0xff); c >>= 8; }
+    while (c > 0) {
+      bytes.push(c & 0xff);
+      c >>= 8;
+    }
   }
   let lz = 0;
-  for (const ch of b58) { if (ch === "1") lz++; else break; }
+  for (const ch of b58) {
+    if (ch === "1") lz++;
+    else break;
+  }
   const out = new Uint8Array(32);
   const body = bytes.reverse();
   const off = 32 - body.length - lz;
@@ -72,9 +81,15 @@ function b58Encode(bytes: Uint8Array): string {
   for (const b of bytes) n = n * 256n + BigInt(b);
   if (n === 0n && bytes.length > 0) return "1".repeat(bytes.length);
   let s = "";
-  while (n > 0n) { s = B58_ALPHA[Number(n % 58n)]! + s; n /= 58n; }
+  while (n > 0n) {
+    s = B58_ALPHA[Number(n % 58n)]! + s;
+    n /= 58n;
+  }
   let lz = 0;
-  for (const b of bytes) { if (b === 0) lz++; else break; }
+  for (const b of bytes) {
+    if (b === 0) lz++;
+    else break;
+  }
   return "1".repeat(lz) + s;
 }
 
@@ -87,14 +102,14 @@ function toB64(bytes: Uint8Array): string {
 }
 
 // Program IDs
-const SYSTEM   = "11111111111111111111111111111111";
+const SYSTEM = "11111111111111111111111111111111";
 const SPL_TOKEN = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 const TOKEN_2022 = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
-const SQUADS_V4  = "SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf";
+const SQUADS_V4 = "SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf";
 
 const VAULT_TX_EXECUTE_DISC = [0xc2, 0x08, 0xa1, 0x57, 0x99, 0xa4, 0x19, 0xab];
 const VAULT_TX_ACCOUNT_DISC = [0xa8, 0xfa, 0xa2, 0x64, 0x51, 0x0e, 0xa2, 0xcf];
-const UPDATE_ADMIN_DISC      = [0xa1, 0xb0, 0x28, 0xd5, 0x3c, 0xb8, 0xb3, 0xe4];
+const UPDATE_ADMIN_DISC = [0xa1, 0xb0, 0x28, 0xd5, 0x3c, 0xb8, 0xb3, 0xe4];
 
 /**
  * Build a legacy message with:
@@ -128,23 +143,27 @@ function buildLegacyMsg(
 }
 
 /** Build a synthetic VaultTransaction account bytes with one inner instruction. */
-function buildVaultTxBytes(instrProgramIdIndex: number, instrData: number[], numKeys = 3): Uint8Array {
+function buildVaultTxBytes(
+  instrProgramIdIndex: number,
+  instrData: number[],
+  numKeys = 3,
+): Uint8Array {
   const bytes: number[] = [];
   bytes.push(...VAULT_TX_ACCOUNT_DISC);
   bytes.push(...new Array(32).fill(0x01)); // multisig
   bytes.push(...new Array(32).fill(0x02)); // creator
-  bytes.push(1, 0, 0, 0, 0, 0, 0, 0);     // index u64-LE
-  bytes.push(255, 0, 254);                  // bump, vault_index, vault_bump
-  bytes.push(0, 0, 0, 0);                   // ephemeral_signer_bumps Vec<u8> len=0
-  bytes.push(1, 1, 1);                      // num_signers, num_writable_signers, num_writable_non_signers
+  bytes.push(1, 0, 0, 0, 0, 0, 0, 0); // index u64-LE
+  bytes.push(255, 0, 254); // bump, vault_index, vault_bump
+  bytes.push(0, 0, 0, 0); // ephemeral_signer_bumps Vec<u8> len=0
+  bytes.push(1, 1, 1); // num_signers, num_writable_signers, num_writable_non_signers
   bytes.push(...u32le(numKeys));
   for (let i = 0; i < numKeys; i++) bytes.push(...new Array(32).fill(0x10 + i));
-  bytes.push(...u32le(1));                  // 1 instruction
+  bytes.push(...u32le(1)); // 1 instruction
   bytes.push(instrProgramIdIndex);
-  bytes.push(...u32le(0));                   // accountIndexes: empty
+  bytes.push(...u32le(0)); // accountIndexes: empty
   bytes.push(...u32le(instrData.length));
   bytes.push(...instrData);
-  bytes.push(...u32le(0));                   // address_table_lookups: empty
+  bytes.push(...u32le(0)); // address_table_lookups: empty
   return new Uint8Array(bytes);
 }
 
@@ -167,7 +186,10 @@ export interface MaliciousFixture {
 // Expect REJECT
 // ---------------------------------------------------------------------------
 
-function setAuthorityMsg(newAuthByte: number, tokenProg: string = SPL_TOKEN): string {
+function setAuthorityMsg(
+  newAuthByte: number,
+  tokenProg: string = SPL_TOKEN,
+): string {
   // SPL Token SetAuthority: disc=6, authorityType=2 (AccountOwner), newAuthority=Some(key)
   const newAuthKey = new Uint8Array(32).fill(newAuthByte);
   const setAuth = [6, 2, 1, ...Array.from(newAuthKey)]; // disc=6, type=2, Some, 32 bytes
@@ -186,7 +208,7 @@ function setAuthorityMsg(newAuthByte: number, tokenProg: string = SPL_TOKEN): st
 
 function systemAssignMsg(variant: "assign" | "assignWithSeed"): string {
   // System Assign: disc=1, then 32-byte programId
-  // System AssignWithSeed: disc=11 (0x0b), then base, seed, owner
+  // System AssignWithSeed: disc=10 (0x0a), then base, seed, owner
   if (variant === "assign") {
     const newOwner = new Uint8Array(32).fill(0x77);
     const data = [...u32le(1), ...Array.from(newOwner)];
@@ -197,12 +219,12 @@ function systemAssignMsg(variant: "assign" | "assignWithSeed"): string {
     );
     return toB64(bytes);
   } else {
-    // AssignWithSeed disc=11, base(32), seed_len(u64le), seed(bytes), owner(32)
+    // AssignWithSeed disc=10, base(32), seed_len(u64le), seed(bytes), owner(32)
     const base = new Uint8Array(32).fill(0x01);
     const seed = Buffer.from("evil");
     const owner = new Uint8Array(32).fill(0x88);
     const data = [
-      ...u32le(11),
+      ...u32le(10),
       ...Array.from(base),
       ...u64le(BigInt(seed.length)),
       ...Array.from(seed),
@@ -223,7 +245,10 @@ function systemAssignMsg(variant: "assign" | "assignWithSeed"): string {
 // Per catalog: Approve is HOLD (delegate can drain)
 // ---------------------------------------------------------------------------
 
-function splApproveMsg(variant: "approve" | "approveChecked", tokenProg: string = SPL_TOKEN): string {
+function splApproveMsg(
+  variant: "approve" | "approveChecked",
+  tokenProg: string = SPL_TOKEN,
+): string {
   if (variant === "approve") {
     // SPL Approve disc=4: source(0), delegate(non-signer=2), owner(signer=0), amount u64
     const data = [4, ...u64le(999_000_000_000n)];
@@ -257,11 +282,7 @@ function multiTransferMsg(numTransfers: number): string {
     const data = [...u32le(2), ...u64le(1_000_000_000n)];
     ixs.push({ prog: 1, accts: [0, 2], data });
   }
-  const bytes = buildLegacyMsg(
-    [1, 0, 1],
-    [1, SYSTEM, 3],
-    ixs,
-  );
+  const bytes = buildLegacyMsg([1, 0, 1], [1, SYSTEM, 3], ixs);
   return toB64(bytes);
 }
 
@@ -270,14 +291,12 @@ function multiTransferMsg(numTransfers: number): string {
 // Expect HOLD (durable-nonce alone) or REJECT (with dangerous ix)
 // ---------------------------------------------------------------------------
 
-function durableNonceMsg(variant: "bare" | "with-setauth" | "with-assign"): string {
+function durableNonceMsg(
+  variant: "bare" | "with-setauth" | "with-assign",
+): string {
   const nonceAdvance = { prog: 1, accts: [2, 0], data: u32le(4) };
   if (variant === "bare") {
-    const bytes = buildLegacyMsg(
-      [1, 0, 1],
-      [1, SYSTEM, 3],
-      [nonceAdvance],
-    );
+    const bytes = buildLegacyMsg([1, 0, 1], [1, SYSTEM, 3], [nonceAdvance]);
     return toB64(bytes);
   } else if (variant === "with-setauth") {
     const newKey = new Uint8Array(32).fill(0xcc);
@@ -285,10 +304,7 @@ function durableNonceMsg(variant: "bare" | "with-setauth" | "with-assign"): stri
     const bytes = buildLegacyMsg(
       [1, 0, 1],
       [1, SYSTEM, 3, SPL_TOKEN, 5],
-      [
-        nonceAdvance,
-        { prog: 3, accts: [4, 0], data: setAuth },
-      ],
+      [nonceAdvance, { prog: 3, accts: [4, 0], data: setAuth }],
     );
     return toB64(bytes);
   } else {
@@ -298,10 +314,7 @@ function durableNonceMsg(variant: "bare" | "with-setauth" | "with-assign"): stri
     const bytes = buildLegacyMsg(
       [1, 0, 1],
       [1, SYSTEM, 3],
-      [
-        nonceAdvance,
-        { prog: 1, accts: [2], data },
-      ],
+      [nonceAdvance, { prog: 1, accts: [2], data }],
     );
     return toB64(bytes);
   }
@@ -335,8 +348,8 @@ function buildMintWithPermanentDelegate(): Uint8Array {
   while (bytes.length < 165) bytes.push(0);
   bytes.push(0x01); // accountType = Mint
   // PermanentDelegate TLV: type=12 (u16-LE) + length=32 (u16-LE) + 32 bytes delegate
-  bytes.push(12, 0);  // type u16-LE = 12
-  bytes.push(32, 0);  // length u16-LE = 32
+  bytes.push(12, 0); // type u16-LE = 12
+  bytes.push(32, 0); // length u16-LE = 32
   bytes.push(...Array.from(DELEGATE_BYTES_0xdd)); // delegate pubkey
   return new Uint8Array(bytes);
 }
@@ -349,10 +362,10 @@ function token2022TransferMsg(mintB58: string): string {
   const out: number[] = [];
   out.push(1, 0, 1); // header
   out.push(...compactU16(4)); // 4 keys
-  out.push(...key(1));  // idx0: signer/source
-  out.push(...Array.from(b58ToBytes32(TOKEN_2022)));  // idx1: Token-2022 program
-  out.push(...Array.from(mintBytes));  // idx2: mint (dangerous!)
-  out.push(...key(3));  // idx3: dest
+  out.push(...key(1)); // idx0: signer/source
+  out.push(...Array.from(b58ToBytes32(TOKEN_2022))); // idx1: Token-2022 program
+  out.push(...Array.from(mintBytes)); // idx2: mint (dangerous!)
+  out.push(...key(3)); // idx3: dest
   out.push(...key(250)); // blockhash
   out.push(...compactU16(1)); // 1 ix
   out.push(1); // programIdIndex = Token-2022 (idx1)
@@ -374,7 +387,7 @@ function squadsHiddenAuthorityMsg(): string {
   const out: number[] = [];
   out.push(1, 0, 1); // header
   out.push(...compactU16(3)); // 3 static keys
-  out.push(...key(1));  // idx0: feePayer (signer-writable)
+  out.push(...key(1)); // idx0: feePayer (signer-writable)
   out.push(...Array.from(b58ToBytes32(SQUADS_V4))); // idx1: Squads program
   out.push(...key(0x77)); // idx2: VaultTransaction PDA
   out.push(...key(250)); // blockhash
@@ -459,7 +472,13 @@ export const MALICIOUS_CORPUS: MaliciousFixture[] = [
       // Assign to the BPFLoader
       const newOwner = new Uint8Array(32).fill(0x55);
       const data = [...u32le(1), ...Array.from(newOwner)];
-      return toB64(buildLegacyMsg([1, 0, 1], [1, SYSTEM, 3], [{ prog: 1, accts: [0], data }]));
+      return toB64(
+        buildLegacyMsg(
+          [1, 0, 1],
+          [1, SYSTEM, 3],
+          [{ prog: 1, accts: [0], data }],
+        ),
+      );
     })(),
     expectedDecision: "REJECT",
     note: "System Assign to BPFLoader-like owner",
@@ -472,14 +491,16 @@ export const MALICIOUS_CORPUS: MaliciousFixture[] = [
       const data = [...u32le(1), ...Array.from(newOwner)];
       const COMPUTE_BUDGET = "ComputeBudget111111111111111111111111111111";
       const setLimit = [2, 128, 134, 1, 0]; // SetComputeUnitLimit(100000)
-      return toB64(buildLegacyMsg(
-        [1, 0, 1],
-        [1, SYSTEM, 3, COMPUTE_BUDGET],
-        [
-          { prog: 3, accts: [], data: setLimit },
-          { prog: 1, accts: [0], data },
-        ],
-      ));
+      return toB64(
+        buildLegacyMsg(
+          [1, 0, 1],
+          [1, SYSTEM, 3, COMPUTE_BUDGET],
+          [
+            { prog: 3, accts: [], data: setLimit },
+            { prog: 1, accts: [0], data },
+          ],
+        ),
+      );
     })(),
     expectedDecision: "REJECT",
     note: "ComputeBudget + System Assign — compute prefix doesn't launder danger",
@@ -489,7 +510,13 @@ export const MALICIOUS_CORPUS: MaliciousFixture[] = [
     txB64: (() => {
       const newOwner = new Uint8Array(32).fill(0x22);
       const data = [...u32le(1), ...Array.from(newOwner)];
-      return toB64(buildLegacyMsg([1, 0, 1], [1, SYSTEM, 3], [{ prog: 1, accts: [2], data }]));
+      return toB64(
+        buildLegacyMsg(
+          [1, 0, 1],
+          [1, SYSTEM, 3],
+          [{ prog: 1, accts: [2], data }],
+        ),
+      );
     })(),
     expectedDecision: "REJECT",
     note: "System Assign on a non-signer account (still dangerous)",
@@ -525,11 +552,13 @@ export const MALICIOUS_CORPUS: MaliciousFixture[] = [
     txB64: (() => {
       // Approve with very large amount
       const data = [4, ...u64le(u64Max())];
-      return toB64(buildLegacyMsg(
-        [1, 0, 1],
-        [1, SPL_TOKEN, 3, 4],
-        [{ prog: 1, accts: [0, 3, 0], data }],
-      ));
+      return toB64(
+        buildLegacyMsg(
+          [1, 0, 1],
+          [1, SPL_TOKEN, 3, 4],
+          [{ prog: 1, accts: [0, 3, 0], data }],
+        ),
+      );
     })(),
     expectedDecision: "HOLD",
     note: "SPL Token Approve with max u64 amount",
@@ -591,8 +620,14 @@ export const MALICIOUS_CORPUS: MaliciousFixture[] = [
     txB64: (() => {
       // Durable nonce + large transfer
       const nonceAdvance = { prog: 1, accts: [2, 0], data: u32le(4) };
-      const transfer = { prog: 1, accts: [0, 3], data: [...u32le(2), ...u64le(2_000_000_000n)] };
-      return toB64(buildLegacyMsg([1, 0, 1], [1, SYSTEM, 3, 4], [nonceAdvance, transfer]));
+      const transfer = {
+        prog: 1,
+        accts: [0, 3],
+        data: [...u32le(2), ...u64le(2_000_000_000n)],
+      };
+      return toB64(
+        buildLegacyMsg([1, 0, 1], [1, SYSTEM, 3, 4], [nonceAdvance, transfer]),
+      );
     })(),
     expectedDecision: "HOLD",
     note: "Durable-nonce + large SOL transfer — at least HOLD from nonce detection",
@@ -603,11 +638,13 @@ export const MALICIOUS_CORPUS: MaliciousFixture[] = [
       // Durable nonce + SPL Approve
       const nonceAdvance = { prog: 1, accts: [2, 0], data: u32le(4) };
       const approve = [4, ...u64le(999_000_000_000n)];
-      return toB64(buildLegacyMsg(
-        [1, 0, 1],
-        [1, SYSTEM, 3, SPL_TOKEN, 5],
-        [nonceAdvance, { prog: 3, accts: [0, 4, 0], data: approve }],
-      ));
+      return toB64(
+        buildLegacyMsg(
+          [1, 0, 1],
+          [1, SYSTEM, 3, SPL_TOKEN, 5],
+          [nonceAdvance, { prog: 3, accts: [0, 4, 0], data: approve }],
+        ),
+      );
     })(),
     expectedDecision: "HOLD",
     note: "Durable-nonce + SPL Approve — dual danger (nonce HOLD + approve HOLD)",
@@ -618,7 +655,9 @@ export const MALICIOUS_CORPUS: MaliciousFixture[] = [
     family: "Token2022-PermanentDelegate",
     txB64: token2022TransferMsg(MINT_B58),
     accounts: {
-      [MINT_B58]: Buffer.from(buildMintWithPermanentDelegate()).toString("base64"),
+      [MINT_B58]: Buffer.from(buildMintWithPermanentDelegate()).toString(
+        "base64",
+      ),
     },
     expectedDecision: "HOLD",
     note: "Token-2022 TransferChecked with PermanentDelegate mint extension → HOLD",
@@ -627,7 +666,9 @@ export const MALICIOUS_CORPUS: MaliciousFixture[] = [
     family: "Token2022-PermanentDelegate",
     txB64: token2022TransferMsg(MINT_B58), // Second variant: same mint key, different amount
     accounts: {
-      [MINT_B58]: Buffer.from(buildMintWithPermanentDelegate()).toString("base64"),
+      [MINT_B58]: Buffer.from(buildMintWithPermanentDelegate()).toString(
+        "base64",
+      ),
     },
     expectedDecision: "HOLD",
     note: "Token-2022 TransferChecked with PermanentDelegate — second variant (same mint, different fixture)",
@@ -637,7 +678,11 @@ export const MALICIOUS_CORPUS: MaliciousFixture[] = [
     txB64: token2022TransferMsg(b58Encode(new Uint8Array(32).fill(0x55))),
     accounts: (() => {
       const mintB58 = b58Encode(new Uint8Array(32).fill(0x55));
-      return { [mintB58]: Buffer.from(buildMintWithPermanentDelegate()).toString("base64") };
+      return {
+        [mintB58]: Buffer.from(buildMintWithPermanentDelegate()).toString(
+          "base64",
+        ),
+      };
     })(),
     expectedDecision: "HOLD",
     note: "Token-2022 TransferChecked with PermanentDelegate — different mint",
@@ -655,7 +700,9 @@ export const MALICIOUS_CORPUS: MaliciousFixture[] = [
       bytes.push(64, 0); // length u16-LE = 64 (hookProgramId(32) + hookAuthority(32))
       bytes.push(...new Array(32).fill(0xbb)); // hook program id
       bytes.push(...new Array(32).fill(0xcc)); // hook authority
-      return { [mintB58]: Buffer.from(new Uint8Array(bytes)).toString("base64") };
+      return {
+        [mintB58]: Buffer.from(new Uint8Array(bytes)).toString("base64"),
+      };
     })(),
     expectedDecision: "HOLD",
     note: "Token-2022 TransferChecked with TransferHook extension → HOLD",
@@ -675,7 +722,9 @@ export const MALICIOUS_CORPUS: MaliciousFixture[] = [
       bytes.push(14, 0); // TransferHook type
       bytes.push(64, 0);
       bytes.push(...new Array(64).fill(0xee));
-      return { [mintB58]: Buffer.from(new Uint8Array(bytes)).toString("base64") };
+      return {
+        [mintB58]: Buffer.from(new Uint8Array(bytes)).toString("base64"),
+      };
     })(),
     expectedDecision: "HOLD",
     note: "Token-2022 with both PermanentDelegate AND TransferHook — dual extension danger",
@@ -699,7 +748,9 @@ export const MALICIOUS_CORPUS: MaliciousFixture[] = [
   {
     family: "Squads-Hidden-Authority",
     txB64: squadsHiddenAuthorityMsg(),
-    vaultTxBytes: Array.from(buildVaultTxBytes(0, [6, 2, 1, ...new Array(32).fill(0xaa)])),
+    vaultTxBytes: Array.from(
+      buildVaultTxBytes(0, [6, 2, 1, ...new Array(32).fill(0xaa)]),
+    ),
     expectedDecision: "REJECT",
     note: "Squads execute with inner SetAuthority(AccountOwner) → REJECT",
   },
@@ -710,9 +761,9 @@ export const MALICIOUS_CORPUS: MaliciousFixture[] = [
       const out: number[] = [];
       out.push(1, 0, 1); // header
       out.push(...compactU16(4)); // 4 keys
-      out.push(...key(1));  // idx0: feePayer
-      out.push(...Array.from(b58ToBytes32(SYSTEM)));  // idx1: System
-      out.push(...key(3));  // idx2: nonce account
+      out.push(...key(1)); // idx0: feePayer
+      out.push(...Array.from(b58ToBytes32(SYSTEM))); // idx1: System
+      out.push(...key(3)); // idx2: nonce account
       out.push(...Array.from(b58ToBytes32(SQUADS_V4))); // idx3: Squads
       // VT PDA would be passed as idx3 account in execute, but we use 2-key setup for simplicity
       out.push(...key(250)); // blockhash

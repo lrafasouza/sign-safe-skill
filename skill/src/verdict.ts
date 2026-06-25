@@ -669,10 +669,7 @@ export function reviewBase64(
     if (hasSquadsExecute && vaultTransactionBytes !== undefined) {
       try {
         const decoded = decodeVaultTransaction(vaultTransactionBytes);
-        squadsInnerFindings = classifyInnerInstructions(
-          decoded.instructions,
-          ctx,
-        );
+        squadsInnerFindings = classifyInnerInstructions(decoded, ctx);
       } catch (e) {
         // Decode failure of the vault transaction is fail-closed: treat as
         // unverified. We record the failure so operators can distinguish
@@ -863,9 +860,13 @@ export function reviewBase64(
         });
       } else {
         // Simulation succeeded: check for SOL outflows to non-signers.
+        const worstSignerSolDelta = (sim.signerSolDeltas ?? []).reduce(
+          (worst, signer) => (signer.delta < worst ? signer.delta : worst),
+          sim.signerSolDelta,
+        );
         const simHasOutflow =
           sim.outflowsToNonSigner.length > 0 ||
-          sim.signerSolDelta < -BigInt(ctx.lamportThreshold);
+          worstSignerSolDelta < -BigInt(ctx.lamportThreshold);
 
         if (simHasOutflow) {
           // Determine severity: REJECT if any outflow recipient appears in the blocklist.
@@ -882,8 +883,8 @@ export function reviewBase64(
           }
 
           const solLoss =
-            sim.signerSolDelta < 0n
-              ? ` Net signer SOL delta: ${sim.signerSolDelta.toString()} lamports.`
+            worstSignerSolDelta < 0n
+              ? ` Worst signer SOL delta: ${worstSignerSolDelta.toString()} lamports.`
               : "";
           const outflowCount = sim.outflowsToNonSigner.length;
 

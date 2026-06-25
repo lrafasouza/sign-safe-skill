@@ -235,6 +235,24 @@ function buildStakeAuthorizeDetail(
     if (newAuthority === undefined) return null;
     return `Stake AuthorizeChecked: role=${role} (${roleName}), new_authority=${newAuthority}.`;
   }
+  if (tag === 11) {
+    if (data.length < 48) return null;
+    const role = readU32LE(data, 4);
+    const roleName = STAKE_AUTHORIZE_NAMES[role];
+    const seedLength = readU64LE(data, 8);
+    const newAuthorityIndex = accountIndexes[3];
+    if (
+      roleName === undefined ||
+      seedLength > BigInt(Number.MAX_SAFE_INTEGER) ||
+      newAuthorityIndex === undefined
+    )
+      return null;
+    const requiredLength = 48 + Number(seedLength);
+    if (data.length < requiredLength) return null;
+    const newAuthority = staticAccountKeys[newAuthorityIndex];
+    if (newAuthority === undefined) return null;
+    return `Stake AuthorizeCheckedWithSeed: role=${role} (${roleName}), new_authority=${newAuthority}.`;
+  }
   return null;
 }
 
@@ -433,7 +451,7 @@ export function classify(
       }
     }
 
-    if (!(pid in KNOWN_PROGRAMS)) {
+    if (isRegisteredProgram(pid) || !(pid in KNOWN_PROGRAMS)) {
       // --- RECOGNIZED DeFi/NFT program tier (GAP 3 fix) ---
       // Programs in the registry are known but not native. They must NEVER
       // produce a SIGN outcome. Recognition only adds/escalates:

@@ -35,7 +35,7 @@
  * for another deterministic offline pass.
  */
 
-import type { AddressTableLookup, Verdict } from "./types.ts";
+import type { AccountFetcher, AddressTableLookup, Verdict } from "./types.ts";
 import { decodeAddressLookupTable, resolveAltIndexes } from "./alt.ts";
 import { decodeMintDangerExtensions } from "./tlv.ts";
 
@@ -48,7 +48,7 @@ import { decodeMintDangerExtensions } from "./tlv.ts";
  * account data bytes, or null if the account does not exist. The host is
  * responsible for supplying an implementation (RPC, MCP, cache, etc.).
  */
-export type AccountFetcher = (pubkey: string) => Promise<{ data: Uint8Array } | null>;
+export type { AccountFetcher } from "./types.ts";
 
 // ---------------------------------------------------------------------------
 // ALT resolution
@@ -98,8 +98,14 @@ export async function enrichAlt(
   const decoded = decodeAddressLookupTable(account.data);
   // Resolve the writable and readonly indexes into concrete base58 addresses.
   // resolveAltIndexes returns null for out-of-range indexes (fail-closed).
-  const writableResolved = resolveAltIndexes(decoded.addresses, lookup.writableIndexes);
-  const readonlyResolved = resolveAltIndexes(decoded.addresses, lookup.readonlyIndexes);
+  const writableResolved = resolveAltIndexes(
+    decoded.addresses,
+    lookup.writableIndexes,
+  );
+  const readonlyResolved = resolveAltIndexes(
+    decoded.addresses,
+    lookup.readonlyIndexes,
+  );
   return {
     table: lookup.accountKey,
     writable: writableResolved.filter((a): a is string => a !== null),

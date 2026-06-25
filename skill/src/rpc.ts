@@ -58,6 +58,15 @@ function validateRpcUrl(rpcUrl: string): void {
 
 let requestIdCounter = 0;
 
+function jsonIntegerToBigInt(value: number, label: string): bigint {
+  if (!Number.isSafeInteger(value)) {
+    throw new Error(
+      `${label} must be a safe integer before BigInt conversion; received ${String(value)}`,
+    );
+  }
+  return BigInt(value);
+}
+
 /**
  * Create an injectable `AccountFetcher` backed by a JSON-RPC `getAccountInfo`
  * call to `rpcUrl`.
@@ -314,7 +323,7 @@ export function makeRpcSimulator(
           const owner = info.owner;
           const amount = info.tokenAmount?.amount;
           return {
-            lamports: BigInt(acc.lamports),
+            lamports: jsonIntegerToBigInt(acc.lamports, "account lamports"),
             data: Buffer.alloc(0),
             owner: acc.owner,
             ...(mint !== undefined &&
@@ -325,15 +334,17 @@ export function makeRpcSimulator(
           };
         }
         return {
-          lamports: BigInt(acc.lamports),
+          lamports: jsonIntegerToBigInt(acc.lamports, "account lamports"),
           data: Buffer.from(acc.data[0], "base64"),
           owner: acc.owner,
         };
       }),
       innerInstructions: value.innerInstructions ?? [],
-      preBalances: (value.preBalances ?? []).map((balance) => BigInt(balance)),
+      preBalances: (value.preBalances ?? []).map((balance, index) =>
+        jsonIntegerToBigInt(balance, `preBalances[${index}]`),
+      ),
       postBalances: (value.postBalances ?? []).map((balance) =>
-        BigInt(balance),
+        jsonIntegerToBigInt(balance, "postBalances entry"),
       ),
       preTokenBalances: value.preTokenBalances ?? [],
       postTokenBalances: value.postTokenBalances ?? [],

@@ -20,6 +20,11 @@ export type Decision = "SIGN" | "HOLD" | "REJECT";
 /** Finding severity. INFO never escalates a verdict on its own. */
 export type Severity = "INFO" | "HOLD" | "REJECT";
 
+/** Injectable account-data transport shared by offline analysis hosts. */
+export type AccountFetcher = (
+  pubkey: string,
+) => Promise<{ data: Uint8Array } | null>;
+
 /** Closed taxonomy for machine-routing findings without parsing ids or prose. */
 export const FINDING_CATEGORIES = [
   "authority-change",
@@ -444,6 +449,7 @@ export interface VerdictContext {
     ok: boolean;
     err?: string;
     signerSolDelta: bigint;
+    signerSolDeltas?: { signer: string; delta: bigint }[];
     tokenDeltas: {
       account: string;
       mint?: string;

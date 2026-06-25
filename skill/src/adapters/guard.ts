@@ -12,7 +12,7 @@ export type TransactionToBase64<TTransaction> = (
 export type HoldHandler<TTransaction> = (
   verdict: Verdict,
   transaction: TTransaction,
-) => void | Promise<void>;
+) => boolean | void | Promise<boolean | void>;
 
 export type GuardedSignPolicyOptions<TTransaction> = {
   context?: VerdictContext;
@@ -93,8 +93,8 @@ async function enforceVerdict<TTransaction>(
   }
 
   if (verdict.decision === "HOLD") {
-    await options.onHold?.(verdict, transaction);
-    if (options.requireHumanReview === true) {
+    const approved = await options.onHold?.(verdict, transaction);
+    if (options.requireHumanReview === true || approved !== true) {
       throw new SignReviewRequiredError(verdict);
     }
   }

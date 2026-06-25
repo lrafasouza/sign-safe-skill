@@ -412,4 +412,30 @@ describe("v0.5 Part 1d: makeRpcSimulator basic request shape", () => {
       amount: 42n,
     });
   });
+
+  it("P1d.5 rejects unsafe JSON integer balances before BigInt conversion", async () => {
+    const response = {
+      jsonrpc: "2.0",
+      id: 1,
+      result: {
+        value: {
+          err: null,
+          logs: [],
+          accounts: [],
+          preBalances: [Number.MAX_SAFE_INTEGER + 1],
+          postBalances: [0],
+        },
+      },
+    };
+    const fakeFetch = vi.fn(
+      async () => new Response(JSON.stringify(response), { status: 200 }),
+    );
+    const simulator = makeRpcSimulator(
+      TEST_RPC_URL,
+      fakeFetch as unknown as typeof fetch,
+    );
+    await expect(simulator("AQAAABBB==", ["addr1"])).rejects.toThrow(
+      /safe integer/i,
+    );
+  });
 });

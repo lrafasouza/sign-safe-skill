@@ -79,6 +79,28 @@ describe("Native Stake program", () => {
     );
   });
 
+  it("AuthorizeCheckedWithSeed transferring Withdrawer authority is REJECT", () => {
+    const newAuthority = key(11);
+    const data = [
+      ...u32le(11),
+      ...u32le(1),
+      ...u64le(4n),
+      ...Buffer.from("seed"),
+      ...key(10),
+    ];
+    const verdict = reviewBase64(
+      stakeMessage(data, [2, 0, 3, 4], [20, 21, 11]),
+    );
+    const finding = verdict.findings.find((f) => f.id === "stake-authorize");
+    expect(verdict.decision).toBe("REJECT");
+    expect(finding).toBeTruthy();
+    expect(finding!.detail).toContain("AuthorizeCheckedWithSeed");
+    expect(finding!.detail).toContain("Withdrawer");
+    expect(finding!.detail).toContain(
+      base58Encode(Uint8Array.from(newAuthority)),
+    );
+  });
+
   it("Withdraw surfaces the SOL drain and respects default versus strict mode", () => {
     const amount = 2_000_000_000n;
     const b64 = stakeMessage(

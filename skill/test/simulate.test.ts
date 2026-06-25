@@ -25,7 +25,7 @@ import { reviewBase64 } from "../src/verdict.ts";
 import { DEFAULT_CONTEXT, type VerdictContext } from "../src/types.ts";
 import type { SimulateFn, SimulateResult } from "../src/simulate.ts";
 import type { AccountFetcher } from "../src/enrich.ts";
-import { base58DecodeFixed, decodeInput } from "../src/decode.ts";
+import { base58DecodeFixed, base58Encode, decodeInput } from "../src/decode.ts";
 import {
   encodeCompactU16,
   legacyBytes,
@@ -240,6 +240,32 @@ describe("S7b: simulateAssetDiff unit — SOL drain to non-signer", () => {
     expect(solOutflow).toBeDefined();
     expect(solOutflow!.amount).toBe(2_000_000_000n);
   });
+
+  it("S7b.2 tracks signer SOL deltas separately so gains cannot cancel another signer loss", async () => {
+    const b64 = toB64(legacyBytes([2, 0, 1], [0x01, 0x02, 0x00], []));
+    const signers = decodeInput(b64).message.staticAccountKeys.slice(0, 2);
+    const sim: SimulateFn = async () => ({
+      err: null,
+      logs: [],
+      accounts: [],
+      preBalances: [5_000_000_000n, 1_000_000_000n, 0n],
+      postBalances: [3_000_000_000n, 3_000_000_000n, 0n],
+    });
+    const result = await simulateAssetDiff(b64, signers, sim, NOOP_FETCHER);
+    expect(result.signerSolDelta).toBe(0n);
+    expect(result.signerSolDeltas).toEqual([
+      { signer: signers[0], delta: -2_000_000_000n },
+      { signer: signers[1], delta: 2_000_000_000n },
+    ]);
+    const verdict = reviewBase64(b64, {
+      ...DEFAULT_CONTEXT,
+      simulation: result,
+    });
+    expect(verdict.decision).toBe("HOLD");
+    expect(verdict.findings.some((f) => f.id === "simulation-outflow")).toBe(
+      true,
+    );
+  });
 });
 
 describe("S7c: frozen realistic swap simulation", () => {
@@ -338,6 +364,272 @@ describe("S7c: frozen realistic swap simulation", () => {
     expect(result.outflowsToNonSigner).toContainEqual({
       to: addresses[2],
       amount: 200n,
+      kind: "token",
+    });
+  });
+
+  it("S7c.4 legitimate pool output does not suppress a separate signer token drain", async () => {
+    const { b64, addresses } = buildSwapMsg();
+    const signer = addresses[0]!;
+    const poolOwner = addresses[3]!;
+    const attackerOwner = addresses[4]!;
+    const mintIn = "US517G5965aydkZ46HS38QLi7UQiSojurfbQfKCELFx";
+    const mintOut = "YMN9Qj5jPNp7j14VPcML1B6xGgcPWVZUGLFU3Mnyfaf";
+    const sim: SimulateFn = async () => ({
+      err: null,
+      logs: [],
+      accounts: [],
+      preBalances: [5_000_000_000n, 0n, 0n, 0n, 0n, 0n],
+      postBalances: [4_999_995_000n, 0n, 0n, 0n, 0n, 0n],
+      preTokenBalances: [
+        {
+          accountIndex: 1,
+          mint: mintIn,
+          owner: signer,
+          uiTokenAmount: { amount: "1000" },
+        },
+        {
+          accountIndex: 2,
+          mint: mintOut,
+          owner: signer,
+          uiTokenAmount: { amount: "0" },
+        },
+        {
+          accountIndex: 3,
+          mint: mintIn,
+          owner: poolOwner,
+          uiTokenAmount: { amount: "5000" },
+        },
+        {
+          accountIndex: 4,
+          mint: mintOut,
+          owner: poolOwner,
+          uiTokenAmount: { amount: "5000" },
+        },
+        {
+          accountIndex: 5,
+          mint: mintIn,
+          owner: attackerOwner,
+          uiTokenAmount: { amount: "0" },
+        },
+      ],
+      postTokenBalances: [
+        {
+          accountIndex: 1,
+          mint: mintIn,
+          owner: signer,
+          uiTokenAmount: { amount: "850" },
+        },
+        {
+          accountIndex: 2,
+          mint: mintOut,
+          owner: signer,
+          uiTokenAmount: { amount: "200" },
+        },
+        {
+          accountIndex: 3,
+          mint: mintIn,
+          owner: poolOwner,
+          uiTokenAmount: { amount: "5100" },
+        },
+        {
+          accountIndex: 4,
+          mint: mintOut,
+          owner: poolOwner,
+          uiTokenAmount: { amount: "4800" },
+        },
+        {
+          accountIndex: 5,
+          mint: mintIn,
+          owner: attackerOwner,
+          uiTokenAmount: { amount: "50" },
+        },
+      ],
+      innerInstructions: [
+        {
+          index: 0,
+          instructions: [
+            {
+              program: "spl-token",
+              parsed: {
+                type: "transfer",
+                info: {
+                  source: addresses[1],
+                  destination: addresses[3],
+                  amount: "100",
+                },
+              },
+            },
+            {
+              program: "spl-token",
+              parsed: {
+                type: "transfer",
+                info: {
+                  source: addresses[4],
+                  destination: addresses[2],
+                  amount: "200",
+                },
+              },
+            },
+            {
+              program: "spl-token",
+              parsed: {
+                type: "transfer",
+                info: {
+                  source: addresses[1],
+                  destination: addresses[5],
+                  amount: "50",
+                },
+              },
+            },
+          ],
+        },
+      ],
+    });
+    const result = await simulateAssetDiff(b64, [signer], sim, NOOP_FETCHER);
+    expect(result.outflowsToNonSigner).toContainEqual({
+      to: addresses[5],
+      amount: 50n,
+      kind: "token",
+    });
+  });
+
+  it("S7c.5 ambiguous signer token transfer ownership fails closed", async () => {
+    const { b64, addresses } = buildSwapMsg();
+    const signer = addresses[0]!;
+    const mint = "US517G5965aydkZ46HS38QLi7UQiSojurfbQfKCELFx";
+    const sim: SimulateFn = async () => ({
+      err: null,
+      logs: [],
+      accounts: [],
+      preTokenBalances: [
+        {
+          accountIndex: 1,
+          mint,
+          owner: signer,
+          uiTokenAmount: { amount: "100" },
+        },
+        { accountIndex: 5, mint, uiTokenAmount: { amount: "0" } },
+      ],
+      postTokenBalances: [
+        {
+          accountIndex: 1,
+          mint,
+          owner: signer,
+          uiTokenAmount: { amount: "50" },
+        },
+        { accountIndex: 5, mint, uiTokenAmount: { amount: "50" } },
+      ],
+      innerInstructions: [
+        {
+          index: 0,
+          instructions: [
+            {
+              program: "spl-token",
+              parsed: {
+                type: "transfer",
+                info: {
+                  source: addresses[1],
+                  destination: addresses[5],
+                  amount: "50",
+                },
+              },
+            },
+          ],
+        },
+      ],
+    });
+    const result = await simulateAssetDiff(b64, [signer], sim, NOOP_FETCHER);
+    expect(result.ok).toBe(false);
+    expect(result.err).toMatch(/ambiguous/i);
+  });
+});
+
+describe("S7d: resolved ALT account attribution", () => {
+  it("S7d.1 includes resolved writable ALT keys in simulation addresses and token outflows", async () => {
+    const raw = v0Bytes(
+      [1, 0, 1],
+      [0x01, 0x02],
+      [{ prog: 1, accts: [2, 3], data: [] }],
+      [{ table: 0x09, writable: [0, 1], readonly: [] }],
+    );
+    const b64 = toB64(raw);
+    const msg = decodeInput(b64).message;
+    const signer = msg.staticAccountKeys[0]!;
+    const source = base58Encode(Uint8Array.from(key(0x31)));
+    const destination = base58Encode(Uint8Array.from(key(0x32)));
+    const resolvedAltTables = new Map<string, readonly string[]>([
+      [msg.addressTableLookups[0]!.accountKey, [source, destination]],
+    ]);
+    let requestedAddresses: string[] = [];
+    const sim: SimulateFn = async (_input, addresses) => {
+      requestedAddresses = addresses;
+      return {
+        err: null,
+        logs: [],
+        accounts: [],
+        preTokenBalances: [
+          {
+            accountIndex: 2,
+            mint: "mint",
+            owner: signer,
+            uiTokenAmount: { amount: "100" },
+          },
+          {
+            accountIndex: 3,
+            mint: "mint",
+            owner: destination,
+            uiTokenAmount: { amount: "0" },
+          },
+        ],
+        postTokenBalances: [
+          {
+            accountIndex: 2,
+            mint: "mint",
+            owner: signer,
+            uiTokenAmount: { amount: "50" },
+          },
+          {
+            accountIndex: 3,
+            mint: "mint",
+            owner: destination,
+            uiTokenAmount: { amount: "50" },
+          },
+        ],
+        innerInstructions: [
+          {
+            index: 0,
+            instructions: [
+              {
+                program: "spl-token",
+                parsed: {
+                  type: "transfer",
+                  info: { source, destination, amount: "50" },
+                },
+              },
+            ],
+          },
+        ],
+      };
+    };
+    const result = await simulateAssetDiff(
+      b64,
+      [signer],
+      sim,
+      NOOP_FETCHER,
+      resolvedAltTables,
+    );
+    expect(requestedAddresses).toEqual([
+      ...msg.staticAccountKeys,
+      source,
+      destination,
+    ]);
+    expect(
+      result.tokenDeltas.some((delta) => delta.account === destination),
+    ).toBe(true);
+    expect(result.outflowsToNonSigner).toContainEqual({
+      to: destination,
+      amount: 50n,
       kind: "token",
     });
   });

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   SignBlockedError,
+  SignReviewRequiredError,
   guardedMwaTransact,
   guardedSignTransaction,
 } from "../src/adapters/index.ts";
@@ -35,7 +36,7 @@ describe("guarded signing adapters", () => {
     expect(signTransaction).toHaveBeenCalledWith(transaction);
   });
 
-  it("surfaces HOLD through onHold before signing", async () => {
+  it("blocks HOLD after onHold unless review explicitly approves signing", async () => {
     const transaction = readFixtureB64("05_approve_delegate_hold");
     const calls: string[] = [];
     const onHold = vi.fn(async (verdict) => {
@@ -51,9 +52,25 @@ describe("guarded signing adapters", () => {
         transactionToBase64: (input) => input,
         onHold,
       }),
+    ).rejects.toBeInstanceOf(SignReviewRequiredError);
+    expect(onHold).toHaveBeenCalledOnce();
+    expect(signTransaction).not.toHaveBeenCalled();
+    expect(calls).toEqual(["hold:HOLD"]);
+  });
+
+  it("signs a HOLD only when onHold returns affirmative approval", async () => {
+    const transaction = readFixtureB64("05_approve_delegate_hold");
+    const onHold = vi.fn(async () => true);
+    const signTransaction = vi.fn(async () => "signed");
+
+    await expect(
+      guardedSignTransaction(transaction, signTransaction, {
+        transactionToBase64: (input) => input,
+        onHold,
+      }),
     ).resolves.toBe("signed");
     expect(onHold).toHaveBeenCalledOnce();
-    expect(calls).toEqual(["hold:HOLD", "sign"]);
+    expect(signTransaction).toHaveBeenCalledOnce();
   });
 
   it("gates an MWA transact signTransactions flow before signing the batch", async () => {

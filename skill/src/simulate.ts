@@ -23,7 +23,7 @@
  * Fail-closed: any error → SimDiff { ok: false, err, signerSolDelta: 0n, ... }.
  */
 
-import type { AccountFetcher } from "./enrich.ts";
+import type { AccountFetcher } from "./types.ts";
 import { decodeInput } from "./decode.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -118,6 +118,8 @@ export interface SimDiff {
   err?: string;
   /** Net SOL lamport change for the signer (sum across all signer keys). Negative = loss. */
   signerSolDelta: bigint;
+  /** Per-signer SOL deltas; a gain by one signer never cancels another signer's loss. */
+  signerSolDeltas: { signer: string; delta: bigint }[];
   /** Per-token-account balance deltas observed in the simulation. */
   tokenDeltas: TokenDelta[];
   /**
@@ -142,6 +144,19 @@ export interface SimDiff {
  * We read only the first 72 bytes so this works for both program token accounts.
  */
 const TOKEN_ACCOUNT_MIN_LEN = 72;
+
+function exactBigInt(value: unknown, label: string): bigint | undefined {
+  if (typeof value === "string") return BigInt(value);
+  if (typeof value === "number") {
+    if (!Number.isSafeInteger(value)) {
+      throw new Error(
+        `${label} must be a safe integer before BigInt conversion; received ${String(value)}`,
+      );
+    }
+    return BigInt(value);
+  }
+  return undefined;
+}
 
 /** Read a u64 little-endian from a Buffer at the given offset. */
 function readU64LEBuf(buf: Buffer, offset: number): bigint {
@@ -222,11 +237,13 @@ export async function simulateAssetDiff(
   signerPubkeys: string[],
   simulateFn: SimulateFn,
   getAccounts: AccountFetcher,
+  resolvedAltTables?: ReadonlyMap<string, readonly string[]>,
 ): Promise<SimDiff> {
   const failClosed = (err: unknown): SimDiff => ({
     ok: false,
     err: err instanceof Error ? err.message : String(err),
     signerSolDelta: 0n,
+    signerSolDeltas: [],
     tokenDeltas: [],
     outflowsToNonSigner: [],
   });
@@ -236,20 +253,43 @@ export async function simulateAssetDiff(
       return {
         ok: true,
         signerSolDelta: 0n,
+        signerSolDeltas: [],
         tokenDeltas: [],
         outflowsToNonSigner: [],
       };
     }
 
     const signerSet = new Set(signerPubkeys);
-    const accountKeys = decodeInput(b64).message.staticAccountKeys;
-    const simResult = await simulateFn(b64, accountKeys);
+    const message = decodeInput(b64).message;
+    const accountKeys = [...message.staticAccountKeys];
+    let hasUnresolvedAltAccount = false;
+    for (const lookup of message.addressTableLookups) {
+      const resolved = resolvedAltTables?.get(lookup.accountKey);
+      for (const index of lookup.writableIndexes) {
+        const address = resolved?.[index];
+        if (address === undefined) hasUnresolvedAltAccount = true;
+        accountKeys.push(address ?? `account-index:${accountKeys.length}`);
+      }
+    }
+    for (const lookup of message.addressTableLookups) {
+      const resolved = resolvedAltTables?.get(lookup.accountKey);
+      for (const index of lookup.readonlyIndexes) {
+        const address = resolved?.[index];
+        if (address === undefined) hasUnresolvedAltAccount = true;
+        accountKeys.push(address ?? `account-index:${accountKeys.length}`);
+      }
+    }
+    const simResult = await simulateFn(
+      b64,
+      accountKeys.filter((address) => !address.startsWith("account-index:")),
+    );
 
     if (simResult.err !== null) {
       return {
         ok: false,
         err: `simulateTransaction failed: ${simResult.err}`,
         signerSolDelta: 0n,
+        signerSolDeltas: [],
         tokenDeltas: [],
         outflowsToNonSigner: [],
       };
@@ -267,20 +307,24 @@ export async function simulateAssetDiff(
         ok: false,
         err: "simulateTransaction returned no balance, account, or inner-instruction evidence",
         signerSolDelta: 0n,
+        signerSolDeltas: [],
         tokenDeltas: [],
         outflowsToNonSigner: [],
       };
     }
 
     let signerSolDelta = 0n;
+    const signerSolDeltas: { signer: string; delta: bigint }[] = [];
     if (
       simResult.preBalances !== undefined &&
       simResult.postBalances !== undefined
     ) {
       for (let i = 0; i < accountKeys.length; i++) {
         if (!signerSet.has(accountKeys[i]!)) continue;
-        signerSolDelta +=
+        const delta =
           (simResult.postBalances[i] ?? 0n) - (simResult.preBalances[i] ?? 0n);
+        signerSolDelta += delta;
+        signerSolDeltas.push({ signer: accountKeys[i]!, delta });
       }
     }
 
@@ -322,6 +366,11 @@ export async function simulateAssetDiff(
     }
 
     if (tokenIndexes.size === 0 && simResult.accounts.length > 0) {
+      if (hasUnresolvedAltAccount) {
+        throw new Error(
+          "ambiguous simulation account fallback with unresolved ALT addresses",
+        );
+      }
       for (
         let accountIndex = 0;
         accountIndex < accountKeys.length;
@@ -390,25 +439,40 @@ export async function simulateAssetDiff(
       }
     }
 
-    const hasPoolTokenOutput = (simResult.innerInstructions ?? []).some(
-      (group) =>
-        group.instructions.some((instruction) => {
-          const info = instruction.parsed?.info;
-          if (
-            info === undefined ||
-            (instruction.program !== "spl-token" &&
-              instruction.program !== "spl-token-2022")
-          )
-            return false;
-          const source =
-            typeof info["source"] === "string" ? info["source"] : undefined;
-          const sourceOwner =
-            source === undefined
-              ? undefined
-              : tokenByAddress.get(source)?.owner;
-          return sourceOwner !== undefined && !signerSet.has(sourceOwner);
-        }),
-    );
+    const swapOutputOwners = new Set<string>();
+    for (const group of simResult.innerInstructions ?? []) {
+      for (const instruction of group.instructions) {
+        const parsed = instruction.parsed;
+        if (
+          parsed === undefined ||
+          (instruction.program !== "spl-token" &&
+            instruction.program !== "spl-token-2022") ||
+          (parsed.type !== "transfer" && parsed.type !== "transferChecked")
+        )
+          continue;
+        const info = parsed.info;
+        const source =
+          typeof info["source"] === "string" ? info["source"] : undefined;
+        const destination =
+          typeof info["destination"] === "string"
+            ? info["destination"]
+            : undefined;
+        if (source === undefined || destination === undefined) continue;
+        const sourceOwner = tokenByAddress.get(source)?.owner;
+        const destinationOwner = tokenByAddress.get(destination)?.owner;
+        const destinationDelta =
+          tokenDeltaByAddress.get(destination)?.delta ?? 0n;
+        if (
+          sourceOwner !== undefined &&
+          destinationOwner !== undefined &&
+          !signerSet.has(sourceOwner) &&
+          signerSet.has(destinationOwner) &&
+          destinationDelta > 0n
+        ) {
+          swapOutputOwners.add(sourceOwner);
+        }
+      }
+    }
 
     for (const group of simResult.innerInstructions ?? []) {
       for (const instruction of group.instructions) {
@@ -424,10 +488,8 @@ export async function simulateAssetDiff(
               ? info["destination"]
               : undefined;
           const lamports =
-            typeof info["lamports"] === "number" ||
-            typeof info["lamports"] === "string"
-              ? BigInt(info["lamports"])
-              : 0n;
+            exactBigInt(info["lamports"], "parsed system transfer lamports") ??
+            0n;
           if (
             source !== undefined &&
             destination !== undefined &&
@@ -471,15 +533,25 @@ export async function simulateAssetDiff(
               : undefined;
           const amountValue = info["amount"] ?? tokenAmount;
           const amount =
-            typeof amountValue === "number" || typeof amountValue === "string"
-              ? BigInt(amountValue)
-              : destinationDelta;
+            exactBigInt(amountValue, "parsed token transfer amount") ??
+            destinationDelta;
+          if (
+            sourceOwner !== undefined &&
+            signerSet.has(sourceOwner) &&
+            destinationOwner === undefined &&
+            destinationDelta > 0n &&
+            amount > 0n
+          ) {
+            throw new Error(
+              `ambiguous signer token transfer to ${destination}: destination owner unavailable`,
+            );
+          }
           if (
             sourceOwner !== undefined &&
             destinationOwner !== undefined &&
             signerSet.has(sourceOwner) &&
             !signerSet.has(destinationOwner) &&
-            !hasPoolTokenOutput &&
+            !swapOutputOwners.has(destinationOwner) &&
             destinationDelta > 0n &&
             amount > 0n
           ) {
@@ -518,6 +590,7 @@ export async function simulateAssetDiff(
     return {
       ok: true,
       signerSolDelta,
+      signerSolDeltas,
       tokenDeltas,
       outflowsToNonSigner,
     };

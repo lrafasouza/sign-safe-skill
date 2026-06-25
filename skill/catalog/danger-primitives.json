@@ -144,7 +144,7 @@
       "programId": "Stake11111111111111111111111111111111111111",
       "detection": {
         "instructionType": "Authorize",
-        "discriminator": [1, 8, 10]
+        "discriminator": [1, 8, 10, 11]
       },
       "severity": "REJECT",
       "mapsToLoss": "Transfers staker or withdrawer authority over a stake account; withdrawer authority controls withdrawal of the account's SOL."

@@ -40,6 +40,7 @@ const ORCA_WHIRLPOOLS = "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc";
 const RAYDIUM_AMM_V4 = "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8";
 const LIGHTHOUSE = "L2TExMFKdjpN9kozasaurPirfHy9P8sbXoAN1qA3S95";
 const MARGINFI_V2 = "MFv2hWf31Z9kbCa1snEPYctwafyhdvnV7FZnsebVacA";
+const SQUADS_V4 = "SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf";
 const SPL_TOKEN = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 
 // ---- Discriminator constants (all verified against canonical sources) ----
@@ -211,8 +212,21 @@ describe("registry catalog validation", () => {
   });
 
   it("recognizes the canonical Squads v4 program id", () => {
+    expect(isRegisteredProgram(SQUADS_V4)).toBe(true);
+  });
+});
+
+describe("Squads v4 recognized program", () => {
+  it("unknown Squads discriminator is HOLD with a finding, never SIGN", () => {
+    const v = verdictMsg(
+      SQUADS_V4,
+      [0xde, 0xad, 0xbe, 0xef, 0x11, 0x22, 0x33, 0x44],
+      1,
+    );
+    expect(v.decision).toBe("HOLD");
+    expect(v.findings.length).toBeGreaterThan(0);
     expect(
-      isRegisteredProgram("SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf"),
+      v.findings.some((f) => f.id === "registry-squads-v4-unknown-instruction"),
     ).toBe(true);
   });
 });

@@ -10,11 +10,7 @@ import { VersionedMessage } from "@solana/web3.js";
 import * as kit from "@solana/kit";
 import { reviewBase64, verdictToJson } from "../src/verdict.ts";
 import { decodeBase64Message, decodeMessageBytes } from "../src/decode.ts";
-import {
-  listFixtures,
-  readFixtureB64,
-  readFixtureGolden,
-} from "./helpers.ts";
+import { listFixtures, readFixtureB64, readFixtureGolden } from "./helpers.ts";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -26,7 +22,9 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 describe("T11.2 golden verdicts (our core vs committed verdict.json)", () => {
   for (const name of names) {
     it(`${name}`, () => {
-      const actual = JSON.parse(verdictToJson(reviewBase64(readFixtureB64(name))));
+      const actual = JSON.parse(
+        verdictToJson(reviewBase64(readFixtureB64(name))),
+      );
       expect(actual).toEqual(readFixtureGolden(name));
     });
   }
@@ -42,17 +40,23 @@ describe("T1.1 differential vs @solana/web3.js (every fixture)", () => {
       const w3Keys = w3.staticAccountKeys.map((k) => k.toBase58());
       expect(mine.staticAccountKeys).toEqual(w3Keys);
 
-      const w3Progs = w3.compiledInstructions.map((ci) => w3Keys[ci.programIdIndex]);
+      const w3Progs = w3.compiledInstructions.map(
+        (ci) => w3Keys[ci.programIdIndex],
+      );
       expect(mine.instructions.map((i) => i.programId)).toEqual(w3Progs);
 
       const w3Version = w3.version === "legacy" ? "legacy" : w3.version;
       expect(mine.version).toBe(w3Version);
-      expect(mine.addressTableLookups.length).toBe(w3.addressTableLookups.length);
+      expect(mine.addressTableLookups.length).toBe(
+        w3.addressTableLookups.length,
+      );
       expect(mine.recentBlockhash).toBe(w3.recentBlockhash);
 
       // per-instruction account indexes + data
       w3.compiledInstructions.forEach((ci, i) => {
-        expect(mine.instructions[i]!.accountIndexes).toEqual(Array.from(ci.accountKeyIndexes));
+        expect(mine.instructions[i]!.accountIndexes).toEqual(
+          Array.from(ci.accountKeyIndexes),
+        );
         expect(Buffer.from(mine.instructions[i]!.data).toString("hex")).toBe(
           Buffer.from(ci.data).toString("hex"),
         );
@@ -79,7 +83,9 @@ describe("T1.2 differential vs @solana/kit (second independent reference)", () =
         km.instructions.map((i) => kitKeys[i.programAddressIndex]),
       );
       expect(mine.version).toBe(km.version);
-      expect(mine.addressTableLookups.length).toBe(km.addressTableLookups?.length ?? 0);
+      expect(mine.addressTableLookups.length).toBe(
+        km.addressTableLookups?.length ?? 0,
+      );
     });
   }
 });
@@ -155,7 +161,9 @@ describe("T11.1 determinism (decode-twice deep-equal)", () => {
   for (const name of names) {
     it(`${name}`, () => {
       const b64 = readFixtureB64(name);
-      expect(verdictToJson(reviewBase64(b64))).toBe(verdictToJson(reviewBase64(b64)));
+      expect(verdictToJson(reviewBase64(b64))).toBe(
+        verdictToJson(reviewBase64(b64)),
+      );
     });
   }
 });
@@ -177,6 +185,7 @@ describe("T11.3 no-network assertion (core modules are offline)", () => {
       "registry.ts",
       "reputation.ts",
       "alt.ts",
+      "simulate.ts",
     ];
     const forbidden = [
       /from\s+["']node:(http|https|net|tls|dgram|dns)["']/,
@@ -184,6 +193,7 @@ describe("T11.3 no-network assertion (core modules are offline)", () => {
       /\brequire\(\s*["']node:(http|https|net)["']\s*\)/,
       /\bfetch\s*\(/,
       /\bXMLHttpRequest\b/,
+      /from\s+["'].*enrich(\.ts)?["']/,
     ];
     for (const f of coreFiles) {
       const src = readFileSync(join(HERE, "..", "src", f), "utf8");

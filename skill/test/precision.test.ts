@@ -81,8 +81,9 @@ function loadBenignFixtures(): BenignFixture[] {
   } catch {
     return [];
   }
-  return files.map((f) =>
-    JSON.parse(readFileSync(join(BENIGN_DIR, f), "utf8")) as BenignFixture
+  return files.map(
+    (f) =>
+      JSON.parse(readFileSync(join(BENIGN_DIR, f), "utf8")) as BenignFixture,
   );
 }
 
@@ -120,7 +121,9 @@ function isCatalogFalseReject(verdict: Verdict): boolean {
   // decodeFailed REJECT is expected
   if (verdict.flags.decodeFailed) return false;
   // Findings with severity REJECT from the catalog
-  const rejectFindings = verdict.findings.filter((f) => f.severity === "REJECT");
+  const rejectFindings = verdict.findings.filter(
+    (f) => f.severity === "REJECT",
+  );
   // Drift composite REJECT from genuine danger (authority change + durable nonce): expected.
   const reason = verdict.reason.toLowerCase();
   if (reason.includes("drift") || reason.includes("durable-nonce carrier")) {
@@ -138,9 +141,14 @@ function isCatalogFalseReject(verdict: Verdict): boolean {
 const benignFixtures = loadBenignFixtures();
 
 // We compute benign results once (all tests use the same data)
-let _benignResultsCache: Array<{ fixture: BenignFixture; verdict: Verdict }> | null = null;
+let _benignResultsCache: Array<{
+  fixture: BenignFixture;
+  verdict: Verdict;
+}> | null = null;
 
-async function getBenignResults(): Promise<Array<{ fixture: BenignFixture; verdict: Verdict }>> {
+async function getBenignResults(): Promise<
+  Array<{ fixture: BenignFixture; verdict: Verdict }>
+> {
   if (_benignResultsCache) return _benignResultsCache;
   const results: Array<{ fixture: BenignFixture; verdict: Verdict }> = [];
   for (const fixture of benignFixtures) {
@@ -177,16 +185,21 @@ describe("P0: corpus is non-empty", () => {
 describe("P1: benign catalog false-REJECT == 0", () => {
   it("no benign tx triggers a catalog danger finding that leads to REJECT", async () => {
     const results = await getBenignResults();
-    const catalogFalseRejects = results.filter(({ verdict }) => isCatalogFalseReject(verdict));
+    const catalogFalseRejects = results.filter(({ verdict }) =>
+      isCatalogFalseReject(verdict),
+    );
 
     if (catalogFalseRejects.length > 0) {
-      const detail = catalogFalseRejects.map(({ fixture, verdict }) =>
-        `${fixture.slot}-${fixture.index}: programs=[${fixture.programIds.join(",")}] ` +
-        `findings=[${verdict.findings.map((f) => f.id).join(",")}]`
-      ).join("\n  ");
+      const detail = catalogFalseRejects
+        .map(
+          ({ fixture, verdict }) =>
+            `${fixture.slot}-${fixture.index}: programs=[${fixture.programIds.join(",")}] ` +
+            `findings=[${verdict.findings.map((f) => f.id).join(",")}]`,
+        )
+        .join("\n  ");
       throw new Error(
         `${catalogFalseRejects.length} catalog false-REJECT(s) detected:\n  ${detail}\n` +
-        `These are REAL false positives in the danger catalog that need investigation.`
+          `These are REAL false positives in the danger catalog that need investigation.`,
       );
     }
 
@@ -199,8 +212,12 @@ describe("P1: benign catalog false-REJECT == 0", () => {
     // Only genuine danger (authority change, catalog REJECT finding) → REJECT.
     // So benign txns should produce 0 hard-REJECTs in DEFAULT mode.
     const results = await getBenignResults();
-    const rejects = results.filter(({ verdict }) => verdict.decision === "REJECT");
-    const catalogFalse = rejects.filter(({ verdict }) => isCatalogFalseReject(verdict));
+    const rejects = results.filter(
+      ({ verdict }) => verdict.decision === "REJECT",
+    );
+    const catalogFalse = rejects.filter(({ verdict }) =>
+      isCatalogFalseReject(verdict),
+    );
 
     // No catalog false-REJECTs
     expect(catalogFalse.length).toBe(0);
@@ -208,10 +225,15 @@ describe("P1: benign catalog false-REJECT == 0", () => {
     // Under DEFAULT mode, benign hard-REJECT count should be 0.
     // (Previously 63/100; after two-tier, unknown-program → HOLD and nonce+HOLD → HOLD.)
     if (rejects.length > 0) {
-      const detail = rejects.map(({ fixture, verdict }) =>
-        `${fixture.slot}-${fixture.index}: reason=${verdict.reason.slice(0, 80)}`
-      ).join("\n  ");
-      console.log(`P1 benign REJECTs in DEFAULT mode (${rejects.length}):\n  ${detail}`);
+      const detail = rejects
+        .map(
+          ({ fixture, verdict }) =>
+            `${fixture.slot}-${fixture.index}: reason=${verdict.reason.slice(0, 80)}`,
+        )
+        .join("\n  ");
+      console.log(
+        `P1 benign REJECTs in DEFAULT mode (${rejects.length}):\n  ${detail}`,
+      );
     }
     expect(rejects.length).toBe(0);
   });
@@ -220,10 +242,13 @@ describe("P1: benign catalog false-REJECT == 0", () => {
     // This proves the strict flag works: running the same corpus with strict=true
     // should produce more REJECTs than default mode (which has 0 benign REJECTs).
     const results = await getBenignResults();
-    const defaultRejectCount = results.filter(({ verdict }) => verdict.decision === "REJECT").length;
+    const defaultRejectCount = results.filter(
+      ({ verdict }) => verdict.decision === "REJECT",
+    ).length;
 
     // Run same corpus with strict=true
-    const strictResults: Array<{ fixture: BenignFixture; verdict: Verdict }> = [];
+    const strictResults: Array<{ fixture: BenignFixture; verdict: Verdict }> =
+      [];
     for (const { fixture } of results) {
       const fetcher = makeFrozenFetcher(fixture.accounts);
       const verdict = await reviewWithEnrichment(
@@ -233,9 +258,13 @@ describe("P1: benign catalog false-REJECT == 0", () => {
       );
       strictResults.push({ fixture, verdict });
     }
-    const strictRejectCount = strictResults.filter(({ verdict }) => verdict.decision === "REJECT").length;
+    const strictRejectCount = strictResults.filter(
+      ({ verdict }) => verdict.decision === "REJECT",
+    ).length;
 
-    console.log(`P1 strict-vs-default: default REJECTs=${defaultRejectCount}, strict REJECTs=${strictRejectCount}`);
+    console.log(
+      `P1 strict-vs-default: default REJECTs=${defaultRejectCount}, strict REJECTs=${strictRejectCount}`,
+    );
 
     // strict must produce at least as many REJECTs as default (monotone escalation)
     expect(strictRejectCount).toBeGreaterThanOrEqual(defaultRejectCount);
@@ -249,7 +278,11 @@ describe("P1: benign catalog false-REJECT == 0", () => {
 // ---------------------------------------------------------------------------
 
 describe("P2: malicious AAT family recall == 100%", () => {
-  const aatFamilies = ["SetAuthority-AccountOwner", "System-Assign", "SPL-Approve"];
+  const aatFamilies = [
+    "SetAuthority-AccountOwner",
+    "System-Assign",
+    "SPL-Approve",
+  ];
 
   for (const family of aatFamilies) {
     const fixtures = MALICIOUS_CORPUS.filter((f) => f.family === family);
@@ -263,7 +296,11 @@ describe("P2: malicious AAT family recall == 100%", () => {
         let verdict: Verdict;
         if (fixture.vaultTxBytes) {
           const vaultBytes = new Uint8Array(fixture.vaultTxBytes);
-          verdict = reviewBase64(fixture.txB64, { lamportThreshold: 1_000_000_000 }, vaultBytes);
+          verdict = reviewBase64(
+            fixture.txB64,
+            { lamportThreshold: 1_000_000_000 },
+            vaultBytes,
+          );
         } else {
           verdict = await reviewWithEnrichment(
             fixture.txB64,
@@ -272,20 +309,39 @@ describe("P2: malicious AAT family recall == 100%", () => {
           );
         }
 
-        const caught = verdict.decision === "HOLD" || verdict.decision === "REJECT";
+        const caught =
+          verdict.decision === "HOLD" || verdict.decision === "REJECT";
         if (!caught) {
-          missed.push(`${fixture.note}: got ${verdict.decision}, expected ${fixture.expectedDecision}`);
+          missed.push(
+            `${fixture.note}: got ${verdict.decision}, expected ${fixture.expectedDecision}`,
+          );
         }
       }
 
       if (missed.length > 0) {
         throw new Error(
-          `${family} missed ${missed.length}/${fixtures.length}:\n  ${missed.join("\n  ")}`
+          `${family} missed ${missed.length}/${fixtures.length}:\n  ${missed.join("\n  ")}`,
         );
       }
       expect(missed.length).toBe(0);
     });
   }
+
+  it("System AssignWithSeed corpus case uses canonical tag 10 and REJECTs", () => {
+    const fixture = MALICIOUS_CORPUS.find(
+      (entry) =>
+        entry.note ===
+        "System AssignWithSeed changes program owner with seed derivation",
+    );
+    expect(fixture).toBeTruthy();
+    const verdict = reviewBase64(fixture!.txB64);
+    expect(verdict.decision).toBe("REJECT");
+    expect(
+      verdict.findings.some(
+        (finding) => finding.id === "system-assign-with-seed",
+      ),
+    ).toBe(true);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -296,15 +352,17 @@ describe("P3: ALT sub-test proves A2 enrichment win", () => {
   it("at least 1 benign v0+ALT fixture is HOLD-without-resolution but less-severe-with-resolution", async () => {
     const { decodeInput: di } = await import("../src/decode.ts");
 
-    const v0AltCandidates = benignFixtures.filter((f) => {
-      if (f.version !== 0) return false;
-      try {
-        const { message } = di(f.txB64);
-        return message.addressTableLookups.length > 0;
-      } catch {
-        return false;
-      }
-    }).slice(0, 5);
+    const v0AltCandidates = benignFixtures
+      .filter((f) => {
+        if (f.version !== 0) return false;
+        try {
+          const { message } = di(f.txB64);
+          return message.addressTableLookups.length > 0;
+        } catch {
+          return false;
+        }
+      })
+      .slice(0, 5);
 
     // Skip this test if we couldn't find any v0+ALT fixtures
     if (v0AltCandidates.length === 0) {
@@ -313,15 +371,27 @@ describe("P3: ALT sub-test proves A2 enrichment win", () => {
     }
 
     let foundImprovement = false;
-    const results: Array<{ filename: string; withResolution: Decision; withoutResolution: Decision }> = [];
+    const results: Array<{
+      filename: string;
+      withResolution: Decision;
+      withoutResolution: Decision;
+    }> = [];
 
     for (const fixture of v0AltCandidates) {
       const frozenFetcher = makeFrozenFetcher(fixture.accounts);
       const emptyFetcher = makeEmptyFetcher();
 
       const [withRes, withoutRes] = await Promise.all([
-        reviewWithEnrichment(fixture.txB64, { lamportThreshold: 1_000_000_000 }, frozenFetcher),
-        reviewWithEnrichment(fixture.txB64, { lamportThreshold: 1_000_000_000 }, emptyFetcher),
+        reviewWithEnrichment(
+          fixture.txB64,
+          { lamportThreshold: 1_000_000_000 },
+          frozenFetcher,
+        ),
+        reviewWithEnrichment(
+          fixture.txB64,
+          { lamportThreshold: 1_000_000_000 },
+          emptyFetcher,
+        ),
       ]);
 
       const filename = `${fixture.slot}-${fixture.index}.json`;
@@ -332,14 +402,18 @@ describe("P3: ALT sub-test proves A2 enrichment win", () => {
       });
 
       // Improvement: without-resolution is more conservative (higher order) than with-resolution
-      if (severityOrder(withoutRes.decision) > severityOrder(withRes.decision)) {
+      if (
+        severityOrder(withoutRes.decision) > severityOrder(withRes.decision)
+      ) {
         foundImprovement = true;
       }
     }
 
     // Log results for debugging regardless
     for (const r of results) {
-      console.log(`P3 ALT: ${r.filename}: without=${r.withoutResolution}, with=${r.withResolution}`);
+      console.log(
+        `P3 ALT: ${r.filename}: without=${r.withoutResolution}, with=${r.withResolution}`,
+      );
     }
 
     // The sub-test validates the A2 win: at least one benign v0+ALT fixture must
@@ -355,12 +429,15 @@ describe("P3: ALT sub-test proves A2 enrichment win", () => {
     // being robust if the fixture corpus grows.
     if (!foundImprovement) {
       const detail = results
-        .map((r) => `${r.filename}: without=${r.withoutResolution}, with=${r.withResolution}`)
+        .map(
+          (r) =>
+            `${r.filename}: without=${r.withoutResolution}, with=${r.withResolution}`,
+        )
         .join("\n  ");
       throw new Error(
         `P3: Expected at least 1 benign v0+ALT fixture to improve from HOLD (without resolution) ` +
-        `to SIGN/less-severe (with resolution), but none found in sampled fixtures:\n  ${detail}\n` +
-        `This means either the corpus lacks v0+ALT HOLD fixtures, or ALT enrichment is broken.`
+          `to SIGN/less-severe (with resolution), but none found in sampled fixtures:\n  ${detail}\n` +
+          `This means either the corpus lacks v0+ALT HOLD fixtures, or ALT enrichment is broken.`,
       );
     }
     expect(foundImprovement).toBe(true);
@@ -383,7 +460,11 @@ describe("P4: overall malicious recall >= 90%", () => {
       let verdict: Verdict;
       if (fixture.vaultTxBytes) {
         const vaultBytes = new Uint8Array(fixture.vaultTxBytes);
-        verdict = reviewBase64(fixture.txB64, { lamportThreshold: 1_000_000_000 }, vaultBytes);
+        verdict = reviewBase64(
+          fixture.txB64,
+          { lamportThreshold: 1_000_000_000 },
+          vaultBytes,
+        );
       } else {
         verdict = await reviewWithEnrichment(
           fixture.txB64,
@@ -395,14 +476,18 @@ describe("P4: overall malicious recall >= 90%", () => {
       if (verdict.decision === "HOLD" || verdict.decision === "REJECT") {
         caught++;
       } else {
-        missed.push(`${fixture.family}: ${fixture.note} (got ${verdict.decision})`);
+        missed.push(
+          `${fixture.family}: ${fixture.note} (got ${verdict.decision})`,
+        );
       }
     }
 
     const recallPct = caught / MALICIOUS_CORPUS.length;
 
     if (missed.length > 0) {
-      console.log(`P4 missed fixtures (${missed.length}):\n  ${missed.join("\n  ")}`);
+      console.log(
+        `P4 missed fixtures (${missed.length}):\n  ${missed.join("\n  ")}`,
+      );
     }
 
     expect(recallPct).toBeGreaterThanOrEqual(0.9);

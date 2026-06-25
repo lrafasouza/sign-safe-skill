@@ -812,7 +812,13 @@
       "programId": "SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf",
       "discriminatorScheme": "anchor-8",
       "description": "Squads v4 multisig program. Recognize-only here; VaultTransaction execution is clear-signed by the dedicated Squads decoder.",
-      "safeInstructions": [],
+      "safeInstructions": [
+        {
+          "discHex": "c208a15799a419ab",
+          "ixName": "vault_transaction_execute",
+          "label": "Squads v4: vaultTransactionExecute (inner proposal decoded separately)"
+        }
+      ],
       "dangerousInstructions": []
     }
   ]

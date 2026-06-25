@@ -1,6 +1,6 @@
 # Sign-Safe Precision Report
 
-Generated: 2026-06-25T03:27:57.222Z
+Generated: 2026-06-25T13:49:34.220Z
 Pinned slots: 428290000, 428289500
 
 ## 1. Signing Precision and Review Rate
@@ -125,7 +125,7 @@ All curated malicious fixtures were caught (HOLD or REJECT). No fixture in this 
 | SetAuthority-AccountOwner | REJECT | REJECT | YES | Token-2022 SetAuthority(AccountOwner) — same disc, different program |
 | SetAuthority-AccountOwner | REJECT | REJECT | YES | Token-2022 SetAuthority(AccountOwner) second variant |
 | System-Assign | REJECT | REJECT | YES | System Assign changes program owner of an account |
-| System-Assign | REJECT | HOLD | YES | System AssignWithSeed changes program owner with seed derivation |
+| System-Assign | REJECT | REJECT | YES | System AssignWithSeed changes program owner with seed derivation |
 | System-Assign | REJECT | REJECT | YES | System Assign to BPFLoader-like owner |
 | System-Assign | REJECT | REJECT | YES | ComputeBudget + System Assign — compute prefix doesn't launder danger |
 | System-Assign | REJECT | REJECT | YES | System Assign on a non-signer account (still dangerous) |
