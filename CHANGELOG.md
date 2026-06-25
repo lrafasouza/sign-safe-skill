@@ -3,6 +3,51 @@
 All notable changes to sign-safe are documented here.
 Format: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-06-25
+
+Coverage, integration, and honesty pass. The deterministic core stays pure/offline and
+fail-closed (escalate-only); all new analysis only adds or raises severity.
+
+### Added
+
+- **Real transaction simulation** (`--simulate`, escalate-only): `simulateTransaction` is
+  parsed via `innerInstructions` + `pre/postBalances` + `pre/postTokenBalances` (with a
+  raw-account post-state fallback) to surface real signer outflow and detect swap-output
+  drains (proceeds routed to a non-signer ATA). Advisory only (TOCTOU); never downgrades a
+  static REJECT.
+- **Native Stake program** (`Stake111…`): Authorize / AuthorizeChecked / AuthorizeWithSeed
+  decode the StakeAuthorize role + new authority → REJECT; Withdraw → HOLD (REJECT in
+  `--strict`). Tags verified against `solana-program/stake`.
+- **Programmatic API**: `index.ts` barrel (`reviewBase64`, `reviewWithEnrichment`,
+  `decodeInput`, verdict types) + `./adapters` (web3.js / @solana/kit → base64). `package.json`
+  `exports`/`bin`/`types`; web3.js + @solana/kit are optional peers; the core stays zero-dep.
+- **Signing gate wrapper**: `guardedSignTransaction` / `guardedMwaTransact` throw on REJECT
+  *before* the underlying signer is called (the key is never touched); HOLD surfaces via
+  `onHold` / `requireHumanReview`.
+- **MCP server** (`sign-safe-mcp`, stdio): a hand-rolled, zero-dependency `review_transaction`
+  tool for agent-native gating.
+- **Verdict schema**: `requiresHumanReview: boolean` and a closed `Finding.category`
+  taxonomy, for machine consumers.
+- **Durable-nonce fee-payer asymmetry**: a dedicated finding when ix0 is `AdvanceNonceAccount`
+  and a required signer is not the fee-payer (the Drift-council construction).
+- **Lighthouse guard** recognized as an INFO-only positive signal (never downgrades).
+- **Registry**: Marginfi v2 (authority transfer → REJECT, withdraw → HOLD; discriminators
+  verified against the canonical IDL) and Squads v4 recognition; `--rpc` provenance/trust note.
+
+### Changed
+
+- Precision report reframed to lead with benign SIGN precision + HOLD rate, with the recall
+  number explicitly scoped to a curated, mostly synthetic illustrative set.
+
+### Fixed
+
+- Adversarial threat sweep closed five fail-closed escapes: max-u64 token transfer →
+  SIGN, ALT-resolved Token-2022 mint bypassing extension screening, evidence-less
+  simulation → SIGN, a benign simulation overwriting a prior simulation HOLD (downgrade),
+  and large unattributed simulated SOL loss → SIGN.
+
+704 tests across 35 files; `tsc` clean; `npm run build` produces `dist/`.
+
 ## [0.4.0] - 2026-06-23
 
 End-to-end gate: real on-chain enrichment, data-driven precision calibration, and an

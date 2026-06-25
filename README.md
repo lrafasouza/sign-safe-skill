@@ -11,6 +11,26 @@ REJECT** verdict plus a machine-readable `verdict.json` for autonomous-agent gat
 > -- core Solana development (programs, frontend, testing, security). sign-safe
 > layers a signing-time gate on top; it does not duplicate the core skill.
 
+## What's new in v0.5
+
+- **Transaction simulation** (`--simulate`, escalate-only): parses `simulateTransaction`
+  `innerInstructions` + pre/post balances to surface real signer outflow and catch
+  swap-output drains (proceeds routed to a non-signer). Advisory only — never downgrades
+  a static REJECT.
+- **Native Stake program**: Authorize / AuthorizeChecked / AuthorizeWithSeed → REJECT
+  (authority transfer); Withdraw → HOLD (REJECT under `--strict`).
+- **Programmatic API + adapters**: import `reviewBase64` / `reviewWithEnrichment` directly,
+  or pass a web3.js / `@solana/kit` transaction via `sign-safe-skill/adapters`. Zero-dependency
+  core; web3.js + kit are optional peers.
+- **Signing gate + MCP**: `guardedSignTransaction` / MWA wrapper throws on REJECT *before*
+  the key is touched; a zero-dep `sign-safe-mcp` stdio server exposes `review_transaction` to agents.
+- **Verdict schema**: a `requiresHumanReview` boolean + a closed `Finding.category` taxonomy
+  for machine consumers.
+- **More coverage**: durable-nonce fee-payer asymmetry (the Drift council shape), the
+  Lighthouse guard as an INFO-only positive signal, and Marginfi v2 in the registry.
+- **704 tests across 35 files** (up from 607/29 in v0.4), including a 13-case adversarial
+  threat sweep; the precision report now leads with benign SIGN precision + HOLD rate.
+
 ## What's new in v0.4
 
 - **Online enrichment** (`--rpc <url>`): resolves Address Lookup Tables, auto-fetches
@@ -166,7 +186,7 @@ git clone https://github.com/lrafasouza/sign-safe-skill sign-safe
 cd sign-safe
 npm install
 npm run gen-fixtures   # (re)generate the 10 synthetic .b64 fixtures from @solana/web3.js
-npm test               # 607 tests across 29 files
+npm test               # 704 tests across 35 files
 ```
 
 ### Offline (no RPC required)
@@ -526,7 +546,7 @@ a blob *is*; you still confirm it is what you *meant*.
 
 Most skills are prose. This one ships a small, **pure-function** TypeScript core
 with a deterministic, fully **offline** test suite (`vitest` + `fast-check`),
-**607 tests across 29 files** (`npm test`):
+**704 tests across 35 files** (`npm test`):
 
 - **10 synthetic golden fixtures** -- serialized messages built with
   `@solana/web3.js`, decoded by *our own* parser, verdicts deep-equal-checked
@@ -626,7 +646,7 @@ $ npm test            # vitest run -- the full suite (exits nonzero on any fail)
  ... (additional files)
 
  Test Files  29 passed (29)
-      Tests  607 passed (607)
+      Tests  704 passed (704)
 ```
 
 There are two entry points: `npm test` (vitest, the full suite) and
@@ -665,14 +685,14 @@ commands and no network access at test time:
 ```bash
 npm install            # deps for generation + cross-validation only (no postinstall, no curl)
 npm run gen-fixtures   # rebuild the 10 synthetic .b64 from @solana/web3.js (deterministic, byte-identical)
-npm test               # 607 checks, 29 files, fully offline; exits nonzero on any failure
+npm test               # 704 checks, 35 files, fully offline; exits nonzero on any failure
 ```
 
-Expected: `Tests  607 passed (607)`, and `git status` clean afterward (the
+Expected: `Tests  704 passed (704)`, and `git status` clean afterward (the
 deterministic generator reproduces the committed `.b64` byte-for-byte). To also
 confirm the type contract: `npx tsc --noEmit` (exit 0).
 
-What those 607 checks actually validate:
+What those 704 checks actually validate:
 
 | Coverage area | Where | What it proves |
 |---|---|---|
