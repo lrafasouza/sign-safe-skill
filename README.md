@@ -24,13 +24,20 @@ REJECT** verdict plus a machine-readable `verdict.json` for autonomous-agent gat
   core; web3.js + kit are optional peers.
 - **Signing gate + MCP**: `guardedSignTransaction` / MWA wrapper throws on REJECT *before*
   the key is touched; a zero-dep `sign-safe-mcp` stdio server exposes `review_transaction` to agents.
-- **Verdict schema**: a `requiresHumanReview` boolean + a closed `Finding.category` taxonomy
-  for machine consumers.
+- **Verdict schema**: a `requiresHumanReview` boolean + documented current
+  `Finding.category` values for machine consumers, backed by
+  `skill/schema/verdict.schema.json` and exposed as the MCP `outputSchema`.
+- **Bounded auxiliary-program recognition**: Associated Token Account
+  Create/CreateIdempotent are INFO only when the same verified signer funds and owns it;
+  valid UTF-8 Memo is INFO instead of unknown-program HOLD; external/unverified
+  ATA creation, ATA RecoverNested, unknown ATA tags, and invalid Memo payloads still HOLD.
 - **More coverage**: durable-nonce fee-payer asymmetry (the Drift council shape), the
   Lighthouse guard as an INFO-only positive signal, and Marginfi v2 + Squads v4 in
   the registry.
-- **728 tests across 35 files** (up from 607/29 in v0.4), including a 13-case adversarial
-  threat sweep; the precision report now leads with benign SIGN precision + HOLD rate.
+- **755 tests across 38 files** (up from 607/29 in v0.4), including a 13-case adversarial
+  threat sweep and a 37-fixture attack replay pack; the precision report now leads with
+  benign SIGN precision + HOLD rate (`36% SIGN / 64% HOLD / 0% false-REJECT` on the
+  frozen benign corpus).
 
 ## What's new in v0.4
 
@@ -48,7 +55,7 @@ REJECT** verdict plus a machine-readable `verdict.json` for autonomous-agent gat
   Programs may have safe and dangerous instruction tiers or recognize-only coverage;
   unlisted instructions remain HOLD.
 - **Precision study** (`docs/precision-report.md`): 100 real frozen mainnet benign
-  transactions + 37 synthetic malicious patterns. Default: 33% SIGN / 67% HOLD /
+  transactions + 37 synthetic malicious patterns. At v0.4: 33% SIGN / 67% HOLD /
   0% false-REJECT. Malicious recall: 100%.
 - **607 tests across 29 files** (up from 292/16 in v0.3).
 - **`--vault-pda <pubkey>`** overrides the auto-extracted Squads PDA address.
@@ -129,11 +136,12 @@ Given a base64 message (legacy or v0), the deterministic core:
    modes; Address-Lookup-Table accounts keep their real writable/readonly role
    but are marked `addressVerified: false` (their concrete address is unknown
    offline),
-3. **classifies** each instruction against a 35-entry danger catalog covering
+3. **classifies** each instruction against a 37-entry danger catalog covering
    **both SPL Token and Token-2022** (authority/ownership handoffs, program
    upgrade/close, durable nonces incl. nonce withdrawals, delegate/approve
    grants, account closes & freezes, mint/supply changes, token burns, large
-   transfers) plus a pure Token-2022 TLV extension walker, **and** against a
+   transfers, Native Stake authority/withdrawal flows) plus bounded ATA/Memo
+   auxiliary-program recognition and a pure Token-2022 TLV extension walker, **and** against a
    **14-program DeFi/NFT registry** (Metaplex Token Metadata, Bubblegum cNFT,
    Jupiter v6, Orca Whirlpools, Raydium AMM v4, Pump.fun, Pump AMM/PumpSwap,
    Raydium CLMM, Raydium CPMM, Drift, Kamino klend, Meteora DLMM, Marginfi v2,
@@ -188,7 +196,9 @@ git clone https://github.com/lrafasouza/sign-safe-skill sign-safe
 cd sign-safe
 npm install
 npm run gen-fixtures   # (re)generate the 10 synthetic .b64 fixtures from @solana/web3.js
-npm test               # 728 tests across 35 files
+npm test               # 755 tests across 38 files
+npm run verify:all     # build + tests + fixtures + attack replay + pack + production audit
+npm run demo:attack-pack
 ```
 
 ### Offline (no RPC required)
@@ -412,7 +422,7 @@ Each fixture has a committed `*.verdict.json` golden. Regenerate all goldens wit
 `npm run gen-goldens` (review each decision before committing — the goldens are a
 security contract).
 
-## The danger catalog (35 primitives)
+## The danger catalog (37 primitives)
 
 | id | program | detection | severity | maps to loss |
 |----|---------|-----------|----------|--------------|
@@ -428,6 +438,8 @@ security contract).
 | `system-transfer-with-seed` | System | TransferWithSeed (11) | HOLD | SOL outflow from a seed-derived account |
 | `durable-nonce-advance` | System | AdvanceNonceAccount (4) **at ix0 only** | HOLD | replay/hold vector (Drift 2026); + authority change ⇒ REJECT |
 | `durable-nonce-initialize` | System | Initialize/Authorize Nonce (6/7) | HOLD | sets/redirects nonce authority |
+| `stake-authorize` | Native Stake | Authorize/AuthorizeChecked/WithSeed | REJECT | stake or withdraw authority handoff |
+| `stake-withdraw` | Native Stake | Withdraw (4) | HOLD | SOL outflow from a stake account; REJECT under `--strict` |
 | `spl-approve-delegate` | SPL Token | Approve/ApproveChecked (4/13) | HOLD | delegate spend -> silent drain |
 | `spl-close-account` | SPL Token | CloseAccount (9) | HOLD | sweeps lamports to a destination |
 | `token2022-approve-delegate` | Token-2022 | Approve/ApproveChecked (4/13) | HOLD | delegate spend -> silent drain |
@@ -464,9 +476,10 @@ for the machine-readable source.
   dependency-free wire parser.
 - Deriving signer / writable / readonly roles and flagging every
   Address-Lookup-Table reference as `unverified` (resolved with `--rpc`).
-- Classifying instructions against a 35-entry danger-primitive catalog
+- Classifying instructions against a 37-entry danger-primitive catalog
   (authority handoffs, program upgrades, durable nonces, delegate grants,
-  account closes, large transfers) plus a pure Token-2022 TLV extension walker.
+  account closes, Native Stake authority/withdrawal flows, large transfers) plus
+  bounded ATA/Memo recognition and a pure Token-2022 TLV extension walker.
 - **DeFi/NFT program registry** (14 programs, `catalog/program-registry.json`):
   Metaplex Token Metadata, Metaplex Bubblegum (cNFT), Jupiter Aggregator v6,
   Orca Whirlpools, Raydium AMM v4, Pump.fun, Pump AMM/PumpSwap, Raydium CLMM,
@@ -548,7 +561,7 @@ a blob *is*; you still confirm it is what you *meant*.
 
 Most skills are prose. This one ships a small, **pure-function** TypeScript core
 with a deterministic, fully **offline** test suite (`vitest` + `fast-check`),
-**728 tests across 35 files** (`npm test`):
+**755 tests across 38 files** (`npm test`):
 
 - **10 synthetic golden fixtures** -- serialized messages built with
   `@solana/web3.js`, decoded by *our own* parser, verdicts deep-equal-checked
@@ -627,28 +640,31 @@ $ npm test            # vitest run -- the full suite (exits nonzero on any fail)
  ✓ skill/test/roles.test.ts                      (13 tests)   is_writable_index + demotion goldens, multi-lookup, reserved
  ✓ skill/test/classify.test.ts                   (21 tests)   Transfer/TransferChecked, SetAuthority, TLV, loader, routing
  ✓ skill/test/catalog-coverage.test.ts           (29 tests)   dangerous shapes never SIGN (SPL+T22 + confidential + permissioned)
- ✓ skill/test/verdict.test.ts                    (12 tests)   durable nonce ix0 gate, Drift composite, prompt-injection, V2
+ ✓ skill/test/verdict.test.ts                    (24 tests)   durable nonce ix0 gate, Drift composite, prompt-injection, V2
  ✓ skill/test/squads.test.ts                     (28 tests)   VaultTransaction borsh decode, discriminator math, ALT-unresolved fail-closed
- ✓ skill/test/squad-verdict.test.ts              (13 tests)   Squads execute verdict integration, nonce+unverified execute HOLD by default, strict/decoded-inner REJECT
+ ✓ skill/test/squad-verdict.test.ts              (18 tests)   Squads execute verdict integration, nonce+unverified execute HOLD by default, strict/decoded-inner REJECT
  ✓ skill/test/digest.test.ts                     (14 tests)   SHA-256 digest, short-code format, determinism, out-of-band byte identity
  ✓ skill/test/pbt.test.ts                        ( 7 tests)   round-trip, fail-closed, no-trailing, compact-u16 (fast-check)
  ✓ skill/test/fixtures.test.ts                   (52 tests)   golden + web3.js + kit differential + disagreement + no-network
  ✓ skill/test/real-fixtures.test.ts              (14 tests)   REAL mainnet txs decoded offline + cross-validated
  ✓ skill/test/fulltx.test.ts                     ( 9 tests)   full signed-tx input stripped + fail-closed (W011 §7)
- ✓ skill/test/program-registry.test.ts           (56 tests)   DeFi/NFT registry: 14 programs; dangerous instructions named; unrecognized HOLD
+ ✓ skill/test/program-registry.test.ts           (57 tests)   DeFi/NFT registry: 14 programs; dangerous instructions named; unrecognized HOLD
  ✓ skill/test/recipient.test.ts                  ( 8 tests)   System + SPL Transfer recipient surfacing; outboundToNonSigner; ALT-unresolved marker
  ✓ skill/test/reputation.test.ts                 (16 tests)   blocklist REJECT; holdOutboundTransfers HOLD; screenAddresses unit; reconRecipients stub
  ✓ skill/test/legacy-runner.test.ts              ( 1 test )   runs the standalone node smoke runner
  ✓ skill/test/alt.test.ts                        (...)        ALT bincode decoder, resolvedAltTables channel, fail-closed on bad layout
- ✓ skill/test/rpc.test.ts                        ( 7 tests)   RPC fetcher; injectable stub; offline-identical without --rpc
- ✓ skill/test/cli-args.test.ts                   (13 tests)   CLI flag parsing: --rpc, --vault-pda, --strict, --threshold, --json, --digest
- ✓ skill/test/registry-discriminators.test.ts    (127 tests)  self-verifying: sha256("global:"+ixName)[..8] matches every registry entry
- ✓ skill/test/precision.test.ts                  (10 tests)   offline precision harness: 100 benign + 37 malicious, confusion matrix
+ ✓ skill/test/rpc.test.ts                        (29 tests)   RPC fetcher; injectable stub; offline-identical without --rpc
+ ✓ skill/test/cli-args.test.ts                   (17 tests)   CLI flag parsing: --rpc, --vault-pda, --strict, --threshold, --json, --digest
+ ✓ skill/test/registry-discriminators.test.ts    (133 tests)  self-verifying: sha256("global:"+ixName)[..8] matches every registry entry
+ ✓ skill/test/precision.test.ts                  (11 tests)   offline precision harness: 100 benign + 37 malicious, confusion matrix
+ ✓ skill/test/schema.test.ts                     (14 tests)   verdict JSON Schema + MCP outputSchema contract
+ ✓ skill/test/auxiliary-programs.test.ts         ( 7 tests)   ATA/Memo bounded recognition; external ATA/RecoverNested/invalid memo still HOLD
+ ✓ skill/test/submission-assets.test.ts          ( 6 tests)   SECURITY/SUBMISSION/RUBRIC docs + attack replay script proof
  ✓ skill/test/extract-vault-address.test.ts      ( 4 tests)   auto-extract Squads vault PDA from account index 2
  ... (additional files)
 
- Test Files  35 passed (35)
-      Tests  728 passed (728)
+ Test Files  38 passed (38)
+      Tests  755 passed (755)
 ```
 
 There are two entry points: `npm test` (vitest, the full suite) and
@@ -681,20 +697,22 @@ The banned-reassurance-phrase contract is **executable**, not just prose:
 
 ## Validation
 
-A reviewer can reproduce the entire result from a clean clone with three
+A reviewer can reproduce the entire result from a clean clone with the following
 commands and no network access at test time:
 
 ```bash
 npm install            # deps for generation + cross-validation only (no postinstall, no curl)
 npm run gen-fixtures   # rebuild the 10 synthetic .b64 from @solana/web3.js (deterministic, byte-identical)
-npm test               # 728 checks, 35 files, fully offline; exits nonzero on any failure
+npm test               # 755 checks, 38 files, fully offline; exits nonzero on any failure
+npm run demo:attack-pack # replay 37 curated malicious fixtures; fails on any SIGN
+npm run verify:all     # build + tests + fixtures + attack replay + pack dry-run + production audit
 ```
 
-Expected: `Tests  728 passed (728)`, and `git status` clean afterward (the
+Expected: `Tests  755 passed (755)`, and `git status` clean afterward (the
 deterministic generator reproduces the committed `.b64` byte-for-byte). To also
 confirm the type contract: `npx tsc --noEmit` (exit 0).
 
-What those 728 checks actually validate:
+What those 755 checks actually validate:
 
 | Coverage area | Where | What it proves |
 |---|---|---|
@@ -710,8 +728,11 @@ What those 728 checks actually validate:
 | **Transaction digest** | `digest.test.ts` | SHA-256 correctness, short-code format and determinism, out-of-band identity confirmation, no-network purity. |
 | **Fail-closed / adversarial** | `decode.test.ts`, `verdict.test.ts` | Truncation, trailing garbage, out-of-range index, unsupported version `0x81`, empty/single-byte → REJECT; unresolved ALT never SIGN; prompt-injection (V8); banned reassurance phrases fail loud. |
 | **DeFi/NFT program registry** | `program-registry.test.ts` | 14 programs with verified per-instruction discriminators; safe instructions SIGN; dangerous instructions labeled; unrecognized-instruction HOLD (fail-closed); truly-unknown-program REJECT unchanged (strict) / HOLD (default). |
-| **Self-verifying discriminators** | `registry-discriminators.test.ts` | 127 checks: `sha256("global:"+ixName)[..8]` recomputed live and compared against every entry in `program-registry.json`. |
+| **Self-verifying discriminators** | `registry-discriminators.test.ts` | 133 checks: `sha256("global:"+ixName)[..8]` recomputed live and compared against every entry in `program-registry.json`. |
 | **Recipient surfacing** | `recipient.test.ts` | System Transfer surfaces recipient base58 address, `outboundToNonSigner` true when non-signer, SIGN reason names destination; SPL Transfer, TransferChecked, ALT-sourced recipient marked unresolved. |
+| **Auxiliary native programs** | `auxiliary-programs.test.ts` | ATA Create/CreateIdempotent is INFO only when the same verified signer funds and owns it; valid UTF-8 Memo is INFO; ATA creation for distinct-signers/non-signer/unresolved wallets, RecoverNested, unknown ATA tags, and invalid Memo payloads remain HOLD. |
+| **Verdict schema + MCP contract** | `schema.test.ts`, `mcp.test.ts` | Every fixture verdict validates against `skill/schema/verdict.schema.json`; the MCP `review_transaction` tool advertises that schema as `outputSchema`. |
+| **Submission proof assets** | `submission-assets.test.ts` | `SECURITY.md`, `SUBMISSION.md`, `RUBRIC_CHECKLIST.md`, `verify:all`, and `demo:attack-pack` stay present and consistent with current evidence. |
 | **Blocklist + policy** | `reputation.test.ts` | Blocklist REJECT on SOL transfer to known-bad address; SPL Approve delegate blocklist; `holdOutboundTransfers` escalation; `reconRecipients` injectable. |
 | **ALT decoding + resolution** | `alt.test.ts` | Bincode layout decoder, `resolvedAltTables` channel pass-through, fail-closed on malformed account bytes, partial-table index out-of-range. |
 | **RPC fetcher** | `rpc.test.ts` | JSON-RPC `getAccountInfo` injector; frozen stub; offline-identical behavior when no `--rpc`. |
@@ -752,9 +773,11 @@ sign-safe-skill/
     │   ├── danger-catalog.md          # rationale for each catalog entry
     │   └── decode-notes.md            # message parse details, ALT conservatism
     ├── catalog/
-    │   ├── danger-primitives.json     # 35-entry native-program danger catalog
+    │   ├── danger-primitives.json     # 37-entry native-program danger catalog
     │   ├── anchor-danger.json         # 11-entry Anchor authority-mutation registry
     │   └── program-registry.json      # 14-program DeFi/NFT registry
+    ├── schema/
+    │   └── verdict.schema.json        # JSON Schema for sign-safe/verdict@1
     ├── src/
     │   ├── types.ts        # the shared contract (two-layer role model + RecipientRef)
     │   ├── decode.ts       # PURE base64 -> DecodedMessage (legacy + v0) + re-encoder
@@ -800,8 +823,10 @@ sign-safe-skill/
         ├── alt.test.ts              # ALT bincode decoder + resolvedAltTables channel
         ├── rpc.test.ts              # RPC fetcher + injectable stub + offline-identical
         ├── cli-args.test.ts         # CLI flag parsing correctness
-        ├── registry-discriminators.test.ts  # self-verifying discriminators (127 checks)
+        ├── registry-discriminators.test.ts  # self-verifying discriminators (133 checks)
         ├── precision.test.ts        # offline precision harness (100 benign + 37 malicious)
+        ├── schema.test.ts           # verdict JSON Schema + MCP outputSchema contract
+        ├── auxiliary-programs.test.ts # ATA/Memo bounded recognition
         ├── extract-vault-address.test.ts    # Squads PDA auto-extraction
         ├── fulltx.test.ts           # full signed-tx input stripped + fail-closed (W011)
         └── run.ts                   # standalone node smoke runner (npm run test:fixtures)

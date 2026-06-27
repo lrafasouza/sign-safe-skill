@@ -310,7 +310,10 @@ export function decodeVaultTransaction(
 
   for (let i = 0; i < nInstructions; i++) {
     const programIdIndex = r.readU8(`instructions[${i}].program_id_index`);
-    const accountIndexes = r.readVecU8(`instructions[${i}].account_indexes`, 256);
+    const accountIndexes = r.readVecU8(
+      `instructions[${i}].account_indexes`,
+      256,
+    );
     const data = new Uint8Array(r.readVecU8(`instructions[${i}].data`, 65536));
 
     let programId: string | null;
@@ -390,7 +393,9 @@ export function decodeVaultTransaction(
  * PURE and offline: no network, no RPC. Used by review-online.ts (host layer)
  * to know which PDA to fetch; the fetch itself lives in the host layer only.
  */
-export function extractVaultTransactionAddress(msg: DecodedMessage): string | null {
+export function extractVaultTransactionAddress(
+  msg: DecodedMessage,
+): string | null {
   for (const ix of msg.instructions) {
     if (!isSquadsVaultExecute(ix.programId, ix.data)) continue;
     // Found a vaultTransactionExecute instruction.

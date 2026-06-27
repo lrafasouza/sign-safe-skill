@@ -48,17 +48,27 @@ const BUFFER_ACCOUNT = seededKeypair(10);
 const SPILL = seededKeypair(11);
 
 // A fixed, valid-length blockhash (32 bytes -> base58). Deterministic.
-const BLOCKHASH = new PublicKey(Uint8Array.from(new Array(32).fill(9))).toBase58();
+const BLOCKHASH = new PublicKey(
+  Uint8Array.from(new Array(32).fill(9)),
+).toBase58();
 
 // ---- canonical program ids -------------------------------------------------
 
 const SPL_TOKEN = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
 const TOKEN_2022 = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
-const BPF_UPGRADEABLE = new PublicKey("BPFLoaderUpgradeab1e11111111111111111111111");
+const BPF_UPGRADEABLE = new PublicKey(
+  "BPFLoaderUpgradeab1e11111111111111111111111",
+);
 const SYSTEM = new PublicKey("11111111111111111111111111111111");
-const COMPUTE_BUDGET = new PublicKey("ComputeBudget111111111111111111111111111111");
-const SYSVAR_RENT = new PublicKey("SysvarRent111111111111111111111111111111111");
-const SYSVAR_CLOCK = new PublicKey("SysvarC1ock11111111111111111111111111111111");
+const COMPUTE_BUDGET = new PublicKey(
+  "ComputeBudget111111111111111111111111111111",
+);
+const SYSVAR_RENT = new PublicKey(
+  "SysvarRent111111111111111111111111111111111",
+);
+const SYSVAR_CLOCK = new PublicKey(
+  "SysvarC1ock11111111111111111111111111111111",
+);
 // A deterministic, structurally-valid pubkey that is NOT in the catalog.
 const RANDOM_PROGRAM = seededKeypair(99).publicKey;
 
@@ -87,10 +97,7 @@ function splSetAuthority(): TransactionInstruction {
       { pubkey: SIGNER.publicKey, isSigner: true, isWritable: false },
     ],
     // [u8 6][u8 authorityType=0 (MintTokens)][u8 option=1][32 newAuthority]
-    data: concat(
-      Uint8Array.from([6, 0, 1]),
-      NEW_AUTHORITY.publicKey.toBytes(),
-    ),
+    data: concat(Uint8Array.from([6, 0, 1]), NEW_AUTHORITY.publicKey.toBytes()),
   });
 }
 

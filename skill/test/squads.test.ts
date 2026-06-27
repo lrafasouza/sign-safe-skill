@@ -54,12 +54,16 @@ function buildMinimalVaultTx(overrides: {
   instrAccountIndexes?: number[];
   instrData?: number[];
 }): Uint8Array {
-  const disc = overrides.disc ?? [0xa8, 0xfa, 0xa2, 0x64, 0x51, 0x0e, 0xa2, 0xcf];
+  const disc = overrides.disc ?? [
+    0xa8, 0xfa, 0xa2, 0x64, 0x51, 0x0e, 0xa2, 0xcf,
+  ];
   const numKeys = overrides.numKeys ?? 3;
   const numInstructions = overrides.numInstructions ?? 1;
   const instrProgramIdIndex = overrides.instrProgramIdIndex ?? 0; // resolves to accountKeys[0]
   const instrAccountIndexes = overrides.instrAccountIndexes ?? [1, 2];
-  const instrData = overrides.instrData ?? [0xa1, 0xb0, 0x28, 0xd5, 0x3c, 0xb8, 0xb3, 0xe4];
+  const instrData = overrides.instrData ?? [
+    0xa1, 0xb0, 0x28, 0xd5, 0x3c, 0xb8, 0xb3, 0xe4,
+  ];
 
   const bytes: number[] = [];
 
@@ -131,7 +135,9 @@ describe("A: discriminator validation", () => {
   });
 
   it("A2 throws SquadsDecodeError on wrong discriminator", () => {
-    const bytes = buildMinimalVaultTx({ disc: [0xde, 0xad, 0xbe, 0xef, 0x00, 0x00, 0x00, 0x00] });
+    const bytes = buildMinimalVaultTx({
+      disc: [0xde, 0xad, 0xbe, 0xef, 0x00, 0x00, 0x00, 0x00],
+    });
     expect(() => decodeVaultTransaction(bytes)).toThrowError(SquadsDecodeError);
   });
 });
@@ -152,22 +158,37 @@ describe("B: frozen real fixture borsh decode", () => {
 
   it("B2 multisig matches meta.json", () => {
     const meta = JSON.parse(
-      readFileSync(join(ACCOUNTS_DIR, "squads_vault_transaction.meta.json"), "utf8"),
+      readFileSync(
+        join(ACCOUNTS_DIR, "squads_vault_transaction.meta.json"),
+        "utf8",
+      ),
     );
-    if (!decoded) decoded = decodeVaultTransaction(readAccountB64("squads_vault_transaction"));
+    if (!decoded)
+      decoded = decodeVaultTransaction(
+        readAccountB64("squads_vault_transaction"),
+      );
     expect(decoded.multisig).toBe(meta.vaultTransaction.multisig);
   });
 
   it("B3 index matches meta.json", () => {
     const meta = JSON.parse(
-      readFileSync(join(ACCOUNTS_DIR, "squads_vault_transaction.meta.json"), "utf8"),
+      readFileSync(
+        join(ACCOUNTS_DIR, "squads_vault_transaction.meta.json"),
+        "utf8",
+      ),
     );
-    if (!decoded) decoded = decodeVaultTransaction(readAccountB64("squads_vault_transaction"));
+    if (!decoded)
+      decoded = decodeVaultTransaction(
+        readAccountB64("squads_vault_transaction"),
+      );
     expect(decoded.index.toString()).toBe(String(meta.vaultTransaction.index));
   });
 
   it("B4 accountKeys count and format (5 keys, each 43-44 chars base58)", () => {
-    if (!decoded) decoded = decodeVaultTransaction(readAccountB64("squads_vault_transaction"));
+    if (!decoded)
+      decoded = decodeVaultTransaction(
+        readAccountB64("squads_vault_transaction"),
+      );
     expect(decoded.accountKeys.length).toBe(5);
     for (const k of decoded.accountKeys) {
       expect(k.length).toBeGreaterThanOrEqual(32);
@@ -178,26 +199,45 @@ describe("B: frozen real fixture borsh decode", () => {
 
   it("B5 accountKeys match meta.json", () => {
     const meta = JSON.parse(
-      readFileSync(join(ACCOUNTS_DIR, "squads_vault_transaction.meta.json"), "utf8"),
+      readFileSync(
+        join(ACCOUNTS_DIR, "squads_vault_transaction.meta.json"),
+        "utf8",
+      ),
     );
-    if (!decoded) decoded = decodeVaultTransaction(readAccountB64("squads_vault_transaction"));
+    if (!decoded)
+      decoded = decodeVaultTransaction(
+        readAccountB64("squads_vault_transaction"),
+      );
     expect(decoded.accountKeys).toEqual(meta.message.accountKeys);
   });
 
   it("B6 instruction count is 2, matching meta.json", () => {
-    if (!decoded) decoded = decodeVaultTransaction(readAccountB64("squads_vault_transaction"));
+    if (!decoded)
+      decoded = decodeVaultTransaction(
+        readAccountB64("squads_vault_transaction"),
+      );
     expect(decoded.instructions.length).toBe(2);
   });
 
   it("B7 instruction programIdIndexes match meta.json (5 and 7, both >= nKeys=5)", () => {
     const meta = JSON.parse(
-      readFileSync(join(ACCOUNTS_DIR, "squads_vault_transaction.meta.json"), "utf8"),
+      readFileSync(
+        join(ACCOUNTS_DIR, "squads_vault_transaction.meta.json"),
+        "utf8",
+      ),
     );
-    if (!decoded) decoded = decodeVaultTransaction(readAccountB64("squads_vault_transaction"));
+    if (!decoded)
+      decoded = decodeVaultTransaction(
+        readAccountB64("squads_vault_transaction"),
+      );
     for (let i = 0; i < decoded.instructions.length; i++) {
       const instrMeta = meta.message.instructions[i];
-      expect(decoded.instructions[i]!.programIdIndex).toBe(instrMeta.programIdIndex);
-      expect(decoded.instructions[i]!.accountIndexes).toEqual(instrMeta.accountIndexes);
+      expect(decoded.instructions[i]!.programIdIndex).toBe(
+        instrMeta.programIdIndex,
+      );
+      expect(decoded.instructions[i]!.accountIndexes).toEqual(
+        instrMeta.accountIndexes,
+      );
     }
   });
 });
@@ -245,7 +285,9 @@ describe("D: inner instruction analysis and fail-closed", () => {
     expect(result.instructions[0]!.programId).not.toBeNull();
     expect(result.instructions[0]!.programId).toBe(result.accountKeys[2]);
     // Data starts with update_admin discriminator
-    expect(Array.from(result.instructions[0]!.data.slice(0, 8))).toEqual(UPDATE_ADMIN_DISC);
+    expect(Array.from(result.instructions[0]!.data.slice(0, 8))).toEqual(
+      UPDATE_ADMIN_DISC,
+    );
     expect(result.hasUnresolvedPrograms).toBe(false);
   });
 
@@ -286,7 +328,9 @@ describe("D: inner instruction analysis and fail-closed", () => {
 
 describe("E: structural fail-closed", () => {
   it("E1 bad discriminator -> SquadsDecodeError", () => {
-    const bytes = buildMinimalVaultTx({ disc: [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00] });
+    const bytes = buildMinimalVaultTx({
+      disc: [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
+    });
     expect(() => decodeVaultTransaction(bytes)).toThrowError(SquadsDecodeError);
   });
 
@@ -294,7 +338,9 @@ describe("E: structural fail-closed", () => {
     const accountBytes = readAccountB64("squads_vault_transaction");
     // Truncate to half length
     const truncated = accountBytes.slice(0, 100);
-    expect(() => decodeVaultTransaction(truncated)).toThrowError(SquadsDecodeError);
+    expect(() => decodeVaultTransaction(truncated)).toThrowError(
+      SquadsDecodeError,
+    );
   });
 
   it("E3 trailing bytes -> SquadsDecodeError (fail-closed on unexpected data)", () => {
@@ -304,7 +350,9 @@ describe("E: structural fail-closed", () => {
     withTrailing[good.length] = 0xde;
     withTrailing[good.length + 1] = 0xad;
     withTrailing[good.length + 2] = 0xbe;
-    expect(() => decodeVaultTransaction(withTrailing)).toThrowError(SquadsDecodeError);
+    expect(() => decodeVaultTransaction(withTrailing)).toThrowError(
+      SquadsDecodeError,
+    );
   });
 
   it("E4 over-long Vec guard (instructs length > 256) -> SquadsDecodeError", () => {
@@ -315,18 +363,26 @@ describe("E: structural fail-closed", () => {
       ...new Array(32).fill(0x01), // multisig
       ...new Array(32).fill(0x02), // creator
       ...[1, 0, 0, 0, 0, 0, 0, 0], // index
-      255, 0, 254, // bump, vault_index, vault_bump
+      255,
+      0,
+      254, // bump, vault_index, vault_bump
       ...[0, 0, 0, 0], // ephemeral_signer_bumps Vec (empty)
-      1, 1, 1, // num_signers etc.
+      1,
+      1,
+      1, // num_signers etc.
       ...[1, 0, 0, 0], // account_keys Vec<Pubkey> len=1
       ...new Array(32).fill(0x10), // one key
       ...[1, 1, 0, 0], // instructions Vec: len=257 (0x0101 little-endian)
     ];
-    expect(() => decodeVaultTransaction(new Uint8Array(bytes))).toThrowError(SquadsDecodeError);
+    expect(() => decodeVaultTransaction(new Uint8Array(bytes))).toThrowError(
+      SquadsDecodeError,
+    );
   });
 
   it("E5 input shorter than discriminator -> SquadsDecodeError", () => {
-    expect(() => decodeVaultTransaction(new Uint8Array([0xa8, 0xfa]))).toThrowError(SquadsDecodeError);
+    expect(() =>
+      decodeVaultTransaction(new Uint8Array([0xa8, 0xfa])),
+    ).toThrowError(SquadsDecodeError);
   });
 });
 
@@ -377,7 +433,9 @@ describe("F: determinism and purity", () => {
 
 describe("G: isSquadsVaultExecute detector", () => {
   // sha256("global:vault_transaction_execute")[0..8] = c208a15799a419ab
-  const EXECUTE_DISC = new Uint8Array([0xc2, 0x08, 0xa1, 0x57, 0x99, 0xa4, 0x19, 0xab]);
+  const EXECUTE_DISC = new Uint8Array([
+    0xc2, 0x08, 0xa1, 0x57, 0x99, 0xa4, 0x19, 0xab,
+  ]);
 
   it("G1 correct program id + discriminator -> true", () => {
     const data = new Uint8Array([...EXECUTE_DISC, 0x00, 0x00]);
@@ -386,11 +444,15 @@ describe("G: isSquadsVaultExecute detector", () => {
 
   it("G2 wrong program id -> false", () => {
     const data = new Uint8Array([...EXECUTE_DISC, 0x00]);
-    expect(isSquadsVaultExecute("11111111111111111111111111111111", data)).toBe(false);
+    expect(isSquadsVaultExecute("11111111111111111111111111111111", data)).toBe(
+      false,
+    );
   });
 
   it("G3 correct program id but wrong discriminator -> false", () => {
-    const data = new Uint8Array([0xde, 0xad, 0xbe, 0xef, 0x00, 0x00, 0x00, 0x00]);
+    const data = new Uint8Array([
+      0xde, 0xad, 0xbe, 0xef, 0x00, 0x00, 0x00, 0x00,
+    ]);
     expect(isSquadsVaultExecute(SQUADS_V4_PROGRAM_ID, data)).toBe(false);
   });
 
@@ -400,6 +462,8 @@ describe("G: isSquadsVaultExecute detector", () => {
   });
 
   it("G5 empty data -> false", () => {
-    expect(isSquadsVaultExecute(SQUADS_V4_PROGRAM_ID, new Uint8Array())).toBe(false);
+    expect(isSquadsVaultExecute(SQUADS_V4_PROGRAM_ID, new Uint8Array())).toBe(
+      false,
+    );
   });
 });

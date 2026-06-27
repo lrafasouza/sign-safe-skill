@@ -19,5 +19,9 @@
     "declaration": true,
     "sourceMap": true
   },
-  "include": ["skill/src/**/*.ts", "skill/test/**/*.ts", "skill/fixtures/**/*.ts"]
+  "include": [
+    "skill/src/**/*.ts",
+    "skill/test/**/*.ts",
+    "skill/fixtures/**/*.ts"
+  ]
 }

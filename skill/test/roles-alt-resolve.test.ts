@@ -12,7 +12,11 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { deriveRoles, hasUnverifiedRoles, RESERVED_ACCOUNT_KEYS } from "../src/roles.ts";
+import {
+  deriveRoles,
+  hasUnverifiedRoles,
+  RESERVED_ACCOUNT_KEYS,
+} from "../src/roles.ts";
 import { decodeMessageBytes } from "../src/decode.ts";
 import { reviewBase64 } from "../src/verdict.ts";
 import { base58Encode } from "../src/decode.ts";
@@ -66,7 +70,9 @@ describe("T_A2.1 no resolvedAltTables -> ALT roles are addressVerified=false", (
   });
 
   it("without resolvedAltTables, ALT roles are unverified", () => {
-    const roles = deriveRoles(msg, { reservedAccountKeys: RESERVED_ACCOUNT_KEYS });
+    const roles = deriveRoles(msg, {
+      reservedAccountKeys: RESERVED_ACCOUNT_KEYS,
+    });
     const altRoles = roles.filter((r) => !r.addressVerified);
     expect(altRoles.length).toBe(2);
     // Addresses are synthetic
@@ -75,7 +81,9 @@ describe("T_A2.1 no resolvedAltTables -> ALT roles are addressVerified=false", (
   });
 
   it("hasUnverifiedRoles is true without resolution", () => {
-    const roles = deriveRoles(msg, { reservedAccountKeys: RESERVED_ACCOUNT_KEYS });
+    const roles = deriveRoles(msg, {
+      reservedAccountKeys: RESERVED_ACCOUNT_KEYS,
+    });
     expect(hasUnverifiedRoles(roles)).toBe(true);
   });
 });
@@ -261,9 +269,9 @@ describe("T_A2.6 multi-table ALT: two distinct tables, partial resolution stays 
 
   function buildV0TwoTables(): Uint8Array {
     return v0Bytes(
-      [1, 0, 0],       // 1 signer, 0 readonly signers, 0 readonly unsigned
-      [1],             // single static key: fee payer
-      [],              // no instructions
+      [1, 0, 0], // 1 signer, 0 readonly signers, 0 readonly unsigned
+      [1], // single static key: fee payer
+      [], // no instructions
       [
         { table: TABLE_A_BYTE, writable: [0], readonly: [] }, // ALT A: slot 0 writable
         { table: TABLE_B_BYTE, writable: [0], readonly: [] }, // ALT B: slot 0 writable
@@ -308,7 +316,9 @@ describe("T_A2.6 multi-table ALT: two distinct tables, partial resolution stays 
     expect(tableARole).toBeDefined();
     expect(tableARole!.addressVerified).toBe(true);
     // Table B role should remain unverified
-    const tableBRole = roles.find((r) => r.address.startsWith("alt:") && r.address.includes(TABLE_B_B58));
+    const tableBRole = roles.find(
+      (r) => r.address.startsWith("alt:") && r.address.includes(TABLE_B_B58),
+    );
     expect(tableBRole).toBeDefined();
     expect(tableBRole!.addressVerified).toBe(false);
     // Overall: still has unverified roles → HOLD
@@ -321,7 +331,10 @@ describe("T_A2.6 multi-table ALT: two distinct tables, partial resolution stays 
       [TABLE_A_B58, [RESOLVED_A0_B58]],
       [TABLE_B_B58, [RESOLVED_B0_B58]],
     ]);
-    const v = reviewBase64(b64, { lamportThreshold: 1_000_000_000, resolvedAltTables });
+    const v = reviewBase64(b64, {
+      lamportThreshold: 1_000_000_000,
+      resolvedAltTables,
+    });
     expect(v.flags.rolesUnverified).toBe(false);
     expect(v.decision).toBe("SIGN");
   });
@@ -331,7 +344,10 @@ describe("T_A2.6 multi-table ALT: two distinct tables, partial resolution stays 
     const resolvedAltTables = new Map<string, readonly string[]>([
       [TABLE_A_B58, [RESOLVED_A0_B58]],
     ]);
-    const v = reviewBase64(b64, { lamportThreshold: 1_000_000_000, resolvedAltTables });
+    const v = reviewBase64(b64, {
+      lamportThreshold: 1_000_000_000,
+      resolvedAltTables,
+    });
     expect(v.flags.rolesUnverified).toBe(true);
     expect(v.decision).toBe("HOLD");
   });

@@ -5,6 +5,7 @@ import { pathToFileURL } from "node:url";
 import { reviewBase64, verdictToJson } from "./verdict.ts";
 import { DEFAULT_CONTEXT } from "./types.ts";
 import packageJson from "../../package.json" with { type: "json" };
+import verdictOutputSchema from "../schema/verdict.schema.json" with { type: "json" };
 
 export interface McpRequest {
   jsonrpc: "2.0";
@@ -34,6 +35,7 @@ export const MCP_SERVER_VERSION = packageJson.version;
 export const MAX_MCP_LINE_LENGTH = 1_000_000;
 export const MAX_MCP_TRANSACTION_BASE64_LENGTH = 100_000;
 export const MAX_MCP_PENDING_REQUESTS = 32;
+export const REVIEW_TRANSACTION_OUTPUT_SCHEMA = verdictOutputSchema;
 const REVIEW_TRANSACTION_TOOL = {
   name: "review_transaction",
   title: "Review Solana Transaction",
@@ -54,6 +56,7 @@ const REVIEW_TRANSACTION_TOOL = {
     required: ["transaction"],
     additionalProperties: false,
   },
+  outputSchema: REVIEW_TRANSACTION_OUTPUT_SCHEMA,
   annotations: {
     readOnlyHint: true,
   },

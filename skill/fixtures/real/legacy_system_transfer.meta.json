@@ -7,8 +7,6 @@
   "version": "legacy",
   "altCount": 0,
   "numStaticKeys": 10,
-  "programIds": [
-    "11111111111111111111111111111111"
-  ],
+  "programIds": ["11111111111111111111111111111111"],
   "note": "Frozen offline. b64 is the SIGNED MESSAGE bytes (msg.serialize())."
 }

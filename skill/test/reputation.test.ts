@@ -29,9 +29,9 @@ const SPL_TOKEN = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 // ─────────────────────────────────────────────────────────────────────────────
 // Test account fill bytes (deterministic, human-readable)
 // ─────────────────────────────────────────────────────────────────────────────
-const SIGNER_FILL = 0x01;    // The signer account (index 0)
-const ATTACKER_FILL = 0xEE;  // The attacker / drainer address
-const LEGIT_FILL = 0x42;     // A legitimate non-attacker external address
+const SIGNER_FILL = 0x01; // The signer account (index 0)
+const ATTACKER_FILL = 0xee; // The attacker / drainer address
+const LEGIT_FILL = 0x42; // A legitimate non-attacker external address
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -143,7 +143,7 @@ describe("Blocklist: SOL transfer to blocklisted recipient → REJECT", () => {
     const bytes = legacyBytes(
       [1, 0, 1],
       [SIGNER_FILL, 0x00, ATTACKER_FILL], // idx0=signer, idx1=System, idx2=attacker
-      [{ prog: 1, accts: [0, 2], data }],  // Transfer from idx0 to idx2
+      [{ prog: 1, accts: [0, 2], data }], // Transfer from idx0 to idx2
     );
     const b64 = toB64(bytes);
 
@@ -180,7 +180,9 @@ describe("Blocklist: SOL transfer to blocklisted recipient → REJECT", () => {
       recipientBlocklist: blocklist,
     });
     expect(verdict.decision).toBe("SIGN");
-    expect(verdict.findings.find((f) => f.id === "blocklisted-recipient")).toBeUndefined();
+    expect(
+      verdict.findings.find((f) => f.id === "blocklisted-recipient"),
+    ).toBeUndefined();
   });
 });
 
@@ -240,8 +242,12 @@ describe("Blocklist: no blocklist provided → unchanged behavior", () => {
     // Both should be SIGN; behavior is identical whether ctx is default or explicit
     expect(v1.decision).toBe("SIGN");
     expect(v2.decision).toBe("SIGN");
-    expect(v1.findings.find((f) => f.id === "blocklisted-recipient")).toBeUndefined();
-    expect(v2.findings.find((f) => f.id === "blocklisted-recipient")).toBeUndefined();
+    expect(
+      v1.findings.find((f) => f.id === "blocklisted-recipient"),
+    ).toBeUndefined();
+    expect(
+      v2.findings.find((f) => f.id === "blocklisted-recipient"),
+    ).toBeUndefined();
   });
 });
 
@@ -269,7 +275,9 @@ describe("Policy: holdOutboundTransfers=true → outbound transfer escalates to 
       holdOutboundTransfers: true,
     });
     expect(verdictOn.decision).toBe("HOLD");
-    const policyFinding = verdictOn.findings.find((f) => f.id === "policy-outbound-transfer");
+    const policyFinding = verdictOn.findings.find(
+      (f) => f.id === "policy-outbound-transfer",
+    );
     expect(policyFinding).toBeDefined();
     expect(policyFinding!.severity).toBe("HOLD");
   });
@@ -295,7 +303,9 @@ describe("Policy: holdOutboundTransfers=true + self-transfer → SIGN (no escala
     });
     expect(verdict.decision).toBe("SIGN");
     expect(verdict.outflow.outboundToNonSigner).toBe(false);
-    expect(verdict.findings.find((f) => f.id === "policy-outbound-transfer")).toBeUndefined();
+    expect(
+      verdict.findings.find((f) => f.id === "policy-outbound-transfer"),
+    ).toBeUndefined();
   });
 });
 
@@ -319,7 +329,9 @@ describe("Blocklist: blocklist provided but no address matches → unchanged", (
       recipientBlocklist: blocklist,
     });
     expect(verdict.decision).toBe("SIGN");
-    expect(verdict.findings.find((f) => f.id === "blocklisted-recipient")).toBeUndefined();
+    expect(
+      verdict.findings.find((f) => f.id === "blocklisted-recipient"),
+    ).toBeUndefined();
   });
 
   it("accepts array form of blocklist (not only Set)", () => {
@@ -337,7 +349,9 @@ describe("Blocklist: blocklist provided but no address matches → unchanged", (
       recipientBlocklist: [ATTACKER_ADDR],
     });
     expect(verdict.decision).toBe("REJECT");
-    expect(verdict.findings.find((f) => f.id === "blocklisted-recipient")).toBeDefined();
+    expect(
+      verdict.findings.find((f) => f.id === "blocklisted-recipient"),
+    ).toBeDefined();
   });
 });
 
@@ -376,7 +390,11 @@ describe("screenAddresses() unit test (pure)", () => {
       [
         { address: ATTACKER_ADDR, category: "recipient", instructionIndex: 0 },
         { address: LEGIT_ADDR, category: "delegate", instructionIndex: 1 },
-        { address: ATTACKER_ADDR, category: "new-authority", instructionIndex: 2 },
+        {
+          address: ATTACKER_ADDR,
+          category: "new-authority",
+          instructionIndex: 2,
+        },
       ],
       new Set([ATTACKER_ADDR]),
     );
@@ -392,29 +410,44 @@ describe("screenAddresses() unit test (pure)", () => {
 describe("reconRecipients() — injectable fetcher (enrich.ts, non-core)", () => {
   it("returns a Set from a frozen stub response", async () => {
     const frozenAddresses = [ATTACKER_ADDR, LEGIT_ADDR];
-    const stubFetcher = async (_url: string) => ({ addresses: frozenAddresses });
+    const stubFetcher = async (_url: string) => ({
+      addresses: frozenAddresses,
+    });
 
-    const result = await reconRecipients("https://example.com/blocklist", stubFetcher);
+    const result = await reconRecipients(
+      "https://example.com/blocklist",
+      stubFetcher,
+    );
     expect(result.size).toBe(2);
     expect(result.has(ATTACKER_ADDR)).toBe(true);
     expect(result.has(LEGIT_ADDR)).toBe(true);
   });
 
   it("returns empty set when fetcher throws (fail-open for blocklist fetch)", async () => {
-    const failingFetcher = async (_url: string): Promise<{ addresses: string[] }> => {
+    const failingFetcher = async (
+      _url: string,
+    ): Promise<{ addresses: string[] }> => {
       throw new Error("Network unavailable");
     };
 
-    const result = await reconRecipients("https://example.com/blocklist", failingFetcher);
+    const result = await reconRecipients(
+      "https://example.com/blocklist",
+      failingFetcher,
+    );
     expect(result.size).toBe(0);
   });
 
   it("can be used to inject blocklist into reviewBase64", async () => {
     const frozenAddresses = [ATTACKER_ADDR];
-    const stubFetcher = async (_url: string) => ({ addresses: frozenAddresses });
+    const stubFetcher = async (_url: string) => ({
+      addresses: frozenAddresses,
+    });
 
     // Fetch blocklist via injectable reconRecipients
-    const blocklist = await reconRecipients("https://example.com/blocklist", stubFetcher);
+    const blocklist = await reconRecipients(
+      "https://example.com/blocklist",
+      stubFetcher,
+    );
 
     // Build a transfer to the attacker
     const data = [...u32le(2), ...u64le(500_000_000n)];
@@ -431,7 +464,9 @@ describe("reconRecipients() — injectable fetcher (enrich.ts, non-core)", () =>
       recipientBlocklist: blocklist,
     });
     expect(verdict.decision).toBe("REJECT");
-    expect(verdict.findings.find((f) => f.id === "blocklisted-recipient")).toBeDefined();
+    expect(
+      verdict.findings.find((f) => f.id === "blocklisted-recipient"),
+    ).toBeDefined();
   });
 });
 

@@ -30,9 +30,7 @@
     "slot": 428290000,
     "index": 2,
     "version": "legacy",
-    "programIds": [
-      "T1pyyaTNZsKv2WcRAB8oVnk93mLJw2XzjtVYqCsaHqt"
-    ]
+    "programIds": ["T1pyyaTNZsKv2WcRAB8oVnk93mLJw2XzjtVYqCsaHqt"]
   },
   {
     "filename": "428290000-3.json",
@@ -123,9 +121,7 @@
     "slot": 428290000,
     "index": 10,
     "version": "legacy",
-    "programIds": [
-      "11111111111111111111111111111111"
-    ]
+    "programIds": ["11111111111111111111111111111111"]
   },
   {
     "filename": "428290000-11.json",
@@ -213,9 +209,7 @@
     "slot": 428290000,
     "index": 18,
     "version": "legacy",
-    "programIds": [
-      "11111111111111111111111111111111"
-    ]
+    "programIds": ["11111111111111111111111111111111"]
   },
   {
     "filename": "428290000-19.json",
@@ -381,9 +375,7 @@
     "slot": 428290000,
     "index": 33,
     "version": "legacy",
-    "programIds": [
-      "sa12qbQyuQqEaDcEqEPKmZEGTdzSMaqj87nKRYbE3QE"
-    ]
+    "programIds": ["sa12qbQyuQqEaDcEqEPKmZEGTdzSMaqj87nKRYbE3QE"]
   },
   {
     "filename": "428290000-34.json",
@@ -463,9 +455,7 @@
     "slot": 428290000,
     "index": 40,
     "version": "legacy",
-    "programIds": [
-      "11111111111111111111111111111111"
-    ]
+    "programIds": ["11111111111111111111111111111111"]
   },
   {
     "filename": "428290000-41.json",
@@ -545,9 +535,7 @@
     "slot": 428290000,
     "index": 47,
     "version": "legacy",
-    "programIds": [
-      "DLv3NggMiSaef97YCkew5xKUHDh13tVGZ7tydt3ZeAru"
-    ]
+    "programIds": ["DLv3NggMiSaef97YCkew5xKUHDh13tVGZ7tydt3ZeAru"]
   },
   {
     "filename": "428290000-48.json",
@@ -580,9 +568,7 @@
     "slot": 428289500,
     "index": 0,
     "version": "legacy",
-    "programIds": [
-      "T1pyyaTNZsKv2WcRAB8oVnk93mLJw2XzjtVYqCsaHqt"
-    ]
+    "programIds": ["T1pyyaTNZsKv2WcRAB8oVnk93mLJw2XzjtVYqCsaHqt"]
   },
   {
     "filename": "428289500-1.json",
@@ -672,9 +658,7 @@
     "slot": 428289500,
     "index": 8,
     "version": "legacy",
-    "programIds": [
-      "11111111111111111111111111111111"
-    ]
+    "programIds": ["11111111111111111111111111111111"]
   },
   {
     "filename": "428289500-9.json",
@@ -764,9 +748,7 @@
     "slot": 428289500,
     "index": 16,
     "version": "legacy",
-    "programIds": [
-      "11111111111111111111111111111111"
-    ]
+    "programIds": ["11111111111111111111111111111111"]
   },
   {
     "filename": "428289500-17.json",
@@ -856,9 +838,7 @@
     "slot": 428289500,
     "index": 24,
     "version": "legacy",
-    "programIds": [
-      "11111111111111111111111111111111"
-    ]
+    "programIds": ["11111111111111111111111111111111"]
   },
   {
     "filename": "428289500-25.json",
@@ -949,9 +929,7 @@
     "slot": 428289500,
     "index": 32,
     "version": "legacy",
-    "programIds": [
-      "11111111111111111111111111111111"
-    ]
+    "programIds": ["11111111111111111111111111111111"]
   },
   {
     "filename": "428289500-33.json",
@@ -1018,9 +996,7 @@
     "slot": 428289500,
     "index": 38,
     "version": "legacy",
-    "programIds": [
-      "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
-    ]
+    "programIds": ["TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"]
   },
   {
     "filename": "428289500-39.json",
@@ -1040,9 +1016,7 @@
     "slot": 428289500,
     "index": 40,
     "version": "legacy",
-    "programIds": [
-      "11111111111111111111111111111111"
-    ]
+    "programIds": ["11111111111111111111111111111111"]
   },
   {
     "filename": "428289500-41.json",
@@ -1133,9 +1107,7 @@
     "slot": 428289500,
     "index": 48,
     "version": "legacy",
-    "programIds": [
-      "11111111111111111111111111111111"
-    ]
+    "programIds": ["11111111111111111111111111111111"]
   },
   {
     "filename": "428289500-49.json",

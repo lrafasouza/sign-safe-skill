@@ -58,9 +58,9 @@ describe("A3: extractVaultTransactionAddress", () => {
     const out: number[] = [];
     out.push(1, 0, 1); // header: 1 required signer, 0 readonly signed, 1 readonly unsigned
     out.push(4); // 4 keys (compact-u16 = single byte for < 128)
-    out.push(...new Array(32).fill(0x01));  // [0] fee payer (signer-writable)
-    out.push(...squadsBytes);               // [1] SQUADS_V4 (readonly-unsigned = program)
-    out.push(...pdaKey);                    // [2] vault tx PDA (writable)
+    out.push(...new Array(32).fill(0x01)); // [0] fee payer (signer-writable)
+    out.push(...squadsBytes); // [1] SQUADS_V4 (readonly-unsigned = program)
+    out.push(...pdaKey); // [2] vault tx PDA (writable)
     out.push(...new Array(32).fill(0x03)); // [3] extra account (writable)
     out.push(...new Array(32).fill(0xfa)); // blockhash
     out.push(1); // 1 instruction
@@ -91,7 +91,7 @@ describe("A3: extractVaultTransactionAddress", () => {
     out.push(1, 0, 1); // header
     out.push(2); // 2 static keys
     out.push(...new Array(32).fill(0x01)); // [0] feepayer
-    out.push(...squadsBytes);              // [1] squadsV4
+    out.push(...squadsBytes); // [1] squadsV4
     out.push(...new Array(32).fill(0xfa)); // blockhash
     out.push(1); // 1 instruction
     out.push(1); // prog=1 (squadsV4 at static[1])
@@ -102,7 +102,7 @@ describe("A3: extractVaultTransactionAddress", () => {
     out.push(1); // compact-u16(1) num lookups
     out.push(...new Array(32).fill(0x05)); // table key
     out.push(1, 10); // 1 writable index: [10]
-    out.push(0);     // 0 readonly indexes
+    out.push(0); // 0 readonly indexes
     const raw = Uint8Array.from(out);
     const { message } = decodeInput(toB64(raw));
     // staticAccountKeys.length = 2, so accountIndexes[2] = 2 >= 2 -> ALT-sourced -> null

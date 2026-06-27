@@ -97,7 +97,9 @@ describe("C: output format", () => {
   it("C2 shortCode is XXXX-XXXX-XXXX-XXXX-XXXX (5 groups of 4 lowercase hex)", () => {
     const b64 = readFixture("01_safe_sol_transfer.b64");
     const d = transactionDigest(b64);
-    expect(d.shortCode).toMatch(/^[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}$/);
+    expect(d.shortCode).toMatch(
+      /^[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}$/,
+    );
   });
 
   it("C3 shortCode consists of the first 20 hex chars of sha256 (no hyphens)", () => {
@@ -136,14 +138,16 @@ describe("F: fail-closed on malformed input", () => {
   });
 
   it("F2 obviously invalid base64 throws TransactionDigestError", () => {
-    expect(() => transactionDigest("not-valid-base64!!")).toThrowError(TransactionDigestError);
+    expect(() => transactionDigest("not-valid-base64!!")).toThrowError(
+      TransactionDigestError,
+    );
   });
 
   it("F3 valid base64 but truncated/garbage message bytes throws TransactionDigestError", () => {
     // base64 of a single byte [0xff] - not a valid message
-    expect(() => transactionDigest(Buffer.from([0xff]).toString("base64"))).toThrowError(
-      TransactionDigestError,
-    );
+    expect(() =>
+      transactionDigest(Buffer.from([0xff]).toString("base64")),
+    ).toThrowError(TransactionDigestError);
   });
 });
 

@@ -76,7 +76,10 @@ export function findBannedPhrase(text: string): string | null {
         (before === "-" && isWordChar(idx > 1 ? hay[idx - 2] : undefined));
       const afterGlued =
         isWordChar(after) ||
-        (after === "-" && isWordChar(afterIdx + 1 < hay.length ? hay[afterIdx + 1] : undefined));
+        (after === "-" &&
+          isWordChar(
+            afterIdx + 1 < hay.length ? hay[afterIdx + 1] : undefined,
+          ));
 
       if (!beforeGlued && !afterGlued) {
         return phrase;

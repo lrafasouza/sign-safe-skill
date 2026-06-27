@@ -26,8 +26,11 @@ fail-closed (escalate-only); all new analysis only adds or raises severity.
   `onHold` / `requireHumanReview`.
 - **MCP server** (`sign-safe-mcp`, stdio): a hand-rolled, zero-dependency `review_transaction`
   tool for agent-native gating.
-- **Verdict schema**: `requiresHumanReview: boolean` and a closed `Finding.category`
-  taxonomy, for machine consumers.
+- **Verdict schema**: `requiresHumanReview: boolean` and documented current
+  `Finding.category` values, for machine consumers.
+- **Evaluator proof packet**: `SECURITY.md`, `SUBMISSION.md`, `RUBRIC_CHECKLIST.md`,
+  `npm run demo:attack-pack`, and `npm run verify:all` keep the public submission
+  aligned with the current evidence.
 - **Durable-nonce fee-payer asymmetry**: a dedicated finding when ix0 is `AdvanceNonceAccount`
   and a required signer is not the fee-payer (the Drift-council construction).
 - **Lighthouse guard** recognized as an INFO-only positive signal (never downgrades).
@@ -46,7 +49,7 @@ fail-closed (escalate-only); all new analysis only adds or raises severity.
   simulation → SIGN, a benign simulation overwriting a prior simulation HOLD (downgrade),
   and large unattributed simulated SOL loss → SIGN.
 
-728 tests across 35 files; `tsc` clean; `npm run build` produces `dist/`.
+755 tests across 38 files; `tsc` clean; `npm run build` produces `dist/`.
 
 ## [0.4.0] - 2026-06-23
 

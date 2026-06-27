@@ -24,10 +24,10 @@ import { toB64, v0Bytes, legacyBytes, key, u32le } from "./helpers.ts";
 // Constants
 // ---------------------------------------------------------------------------
 
-const SQUADS_V4  = "SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf";
-const SPL_TOKEN  = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+const SQUADS_V4 = "SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf";
+const SPL_TOKEN = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 const TOKEN_2022 = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
-const SYSTEM     = "11111111111111111111111111111111";
+const SYSTEM = "11111111111111111111111111111111";
 
 /** sha256("global:vault_transaction_execute")[0..8] */
 const VAULT_TX_EXECUTE_DISC = [0xc2, 0x08, 0xa1, 0x57, 0x99, 0xa4, 0x19, 0xab];
@@ -121,18 +121,18 @@ function buildVaultTxBytes(opts: {
   bytes.push(...VAULT_TX_ACCOUNT_DISC);
   bytes.push(...new Array(32).fill(0x01)); // multisig
   bytes.push(...new Array(32).fill(0x02)); // creator
-  bytes.push(1, 0, 0, 0, 0, 0, 0, 0);    // index u64-LE
-  bytes.push(255, 0, 254);                 // bump, vault_index, vault_bump
-  bytes.push(0, 0, 0, 0);                 // ephemeral_signer_bumps Vec<u8> len=0
-  bytes.push(1, 1, 1);                     // num_signers, num_writable_signers, num_writable_non_signers
+  bytes.push(1, 0, 0, 0, 0, 0, 0, 0); // index u64-LE
+  bytes.push(255, 0, 254); // bump, vault_index, vault_bump
+  bytes.push(0, 0, 0, 0); // ephemeral_signer_bumps Vec<u8> len=0
+  bytes.push(1, 1, 1); // num_signers, num_writable_signers, num_writable_non_signers
   bytes.push(...u32le(numKeys));
   for (let i = 0; i < numKeys; i++) bytes.push(...new Array(32).fill(0x10 + i));
-  bytes.push(...u32le(1));                 // 1 instruction
+  bytes.push(...u32le(1)); // 1 instruction
   bytes.push(opts.instrProgramIdIndex);
-  bytes.push(...u32le(0));                 // accountIndexes: empty
+  bytes.push(...u32le(0)); // accountIndexes: empty
   bytes.push(...u32le(opts.instrData.length));
   bytes.push(...opts.instrData);
-  bytes.push(...u32le(0));                 // address_table_lookups: empty
+  bytes.push(...u32le(0)); // address_table_lookups: empty
   return new Uint8Array(bytes);
 }
 
@@ -198,7 +198,7 @@ describe("O1: v0 tx with ALT, valid ALT fetched → resolves all → SIGN", () =
     // Transfer ix data: tag=2 (u32-LE), lamports=0 (u64-LE)
     const systemTransferData = [2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
     const raw = v0Bytes(
-      [1, 0, 1],    // 1 required signer, 0 readonly signed, 1 readonly unsigned
+      [1, 0, 1], // 1 required signer, 0 readonly signed, 1 readonly unsigned
       [0x01, 0x00], // static keys: [signer(0x01), SystemProgram(all zeros)]
       [{ prog: 1, accts: [0, 2], data: systemTransferData }], // ix: SystemTransfer from [0] to [2] (ALT slot)
       [{ table: 0xbb, writable: [5], readonly: [] }], // ALT: table at 0xBB, slot index 5
@@ -275,7 +275,7 @@ describe("O3: Squads enrichment via frozen fetcher", () => {
     out.push(1, 0, 1); // header
     out.push(3); // 3 static keys
     out.push(...new Array(32).fill(0x01)); // [0] feepayer
-    out.push(...squadsBytes);               // [1] squadsV4
+    out.push(...squadsBytes); // [1] squadsV4
     out.push(...new Array(32).fill(0xaa)); // [2] vaultTxPDA
     out.push(...new Array(32).fill(0xfa)); // blockhash
     out.push(1); // 1 instruction
@@ -307,7 +307,9 @@ describe("O3: Squads enrichment via frozen fetcher", () => {
     // Must not be SIGN — the inner instruction is an authority change
     expect(verdict.decision).not.toBe("SIGN");
     // Should have an inner finding for the authority change
-    const innerFinding = verdict.findings.find((f) => f.id === "anchor-inner-update_admin");
+    const innerFinding = verdict.findings.find(
+      (f) => f.id === "anchor-inner-update_admin",
+    );
     expect(innerFinding).toBeTruthy();
   });
 
@@ -331,7 +333,9 @@ describe("O3: Squads enrichment via frozen fetcher", () => {
     const verdict = await reviewWithEnrichment(toB64(raw), ctx, nullFetcher);
 
     expect(verdict.decision).toBe("HOLD");
-    expect(verdict.findings.some((f) => f.id === "squads-execute-unverified")).toBe(true);
+    expect(
+      verdict.findings.some((f) => f.id === "squads-execute-unverified"),
+    ).toBe(true);
   });
 });
 
@@ -352,7 +356,7 @@ describe("O4: Token-2022 mint with permanent delegate via frozen fetcher", () =>
     out.push(5); // 5 static keys
     out.push(...new Array(32).fill(0x01)); // [0] signer
     out.push(...new Array(32).fill(0xdd)); // [1] mint address (fill 0xDD)
-    out.push(...token2022Bytes);            // [2] TOKEN_2022 program
+    out.push(...token2022Bytes); // [2] TOKEN_2022 program
     out.push(...new Array(32).fill(0x04)); // [3] source token account
     out.push(...new Array(32).fill(0x05)); // [4] dest token account
     out.push(...new Array(32).fill(0xfa)); // blockhash
@@ -381,7 +385,9 @@ describe("O4: Token-2022 mint with permanent delegate via frozen fetcher", () =>
     const verdict = await reviewWithEnrichment(toB64(raw), ctx, frozenFetcher);
 
     expect(verdict.decision).toBe("HOLD");
-    const mintFinding = verdict.findings.find((f) => f.id === "token2022-permanent-delegate");
+    const mintFinding = verdict.findings.find(
+      (f) => f.id === "token2022-permanent-delegate",
+    );
     expect(mintFinding).toBeTruthy();
     expect(mintFinding!.severity).toBe("HOLD");
   });
@@ -410,7 +416,9 @@ describe("O4: Token-2022 mint with permanent delegate via frozen fetcher", () =>
     const verdict = await reviewWithEnrichment(toB64(raw), ctx, nullFetcher);
 
     // No mint finding added (fetcher returned null = skip, fail-closed)
-    expect(verdict.findings.some((f) => f.id === "token2022-permanent-delegate")).toBe(false);
+    expect(
+      verdict.findings.some((f) => f.id === "token2022-permanent-delegate"),
+    ).toBe(false);
     // The decision should not be worse than the offline verdict would be
     // (no downgrade: if offline was SIGN, it stays SIGN; if HOLD, stays HOLD)
   });
@@ -423,7 +431,11 @@ describe("O4: Token-2022 mint with permanent delegate via frozen fetcher", () =>
 describe("O5: decode failure falls back to offline reviewBase64", () => {
   it("O5.1 garbled base64 → REJECT (offline fail-closed path)", async () => {
     const fakeFetcher = async (_pubkey: string) => null;
-    const verdict = await reviewWithEnrichment("THIS_IS_NOT_BASE64!!!", DEFAULT_CONTEXT, fakeFetcher);
+    const verdict = await reviewWithEnrichment(
+      "THIS_IS_NOT_BASE64!!!",
+      DEFAULT_CONTEXT,
+      fakeFetcher,
+    );
     expect(verdict.decision).toBe("REJECT");
     expect(verdict.flags.decodeFailed).toBe(true);
   });
@@ -441,9 +453,14 @@ describe("v0.5 O6: reviewWithEnrichment enrichment provenance", () => {
     const b64 = toB64(raw);
     void key;
 
-    const verdict = await reviewWithEnrichment(b64, DEFAULT_CONTEXT, fakeFetcher, {
-      rpcUrl: "https://test-rpc.example.com",
-    });
+    const verdict = await reviewWithEnrichment(
+      b64,
+      DEFAULT_CONTEXT,
+      fakeFetcher,
+      {
+        rpcUrl: "https://test-rpc.example.com",
+      },
+    );
     expect(verdict.enrichment).toBeDefined();
     expect(verdict.enrichment!.rpcUrl).toBe("https://test-rpc.example.com");
     expect(verdict.enrichment!.simulated).toBe(false);
@@ -456,9 +473,14 @@ describe("v0.5 O6: reviewWithEnrichment enrichment provenance", () => {
     const raw = legacyBytes([1, 0, 1], [0x01, 0x00], []);
     const b64 = toB64(raw);
 
-    const verdict = await reviewWithEnrichment(b64, DEFAULT_CONTEXT, fakeFetcher, {
-      rpcUrl: "https://api.mainnet-beta.solana.com",
-    });
+    const verdict = await reviewWithEnrichment(
+      b64,
+      DEFAULT_CONTEXT,
+      fakeFetcher,
+      {
+        rpcUrl: "https://api.mainnet-beta.solana.com",
+      },
+    );
     expect(verdict.enrichment!.trustNote).toContain("compromised RPC");
     expect(verdict.enrichment!.trustNote).toContain("enrichment");
   });
@@ -484,9 +506,14 @@ describe("v0.5 O7: reviewWithEnrichment resolvedAltTables/mintsScreened in enric
     const raw = legacyBytes([1, 0, 1], [0x01, 0x00], []);
     const b64 = toB64(raw);
     const fakeFetcher = async (_pubkey: string) => null;
-    const verdict = await reviewWithEnrichment(b64, DEFAULT_CONTEXT, fakeFetcher, {
-      rpcUrl: "https://api.mainnet-beta.solana.com",
-    });
+    const verdict = await reviewWithEnrichment(
+      b64,
+      DEFAULT_CONTEXT,
+      fakeFetcher,
+      {
+        rpcUrl: "https://api.mainnet-beta.solana.com",
+      },
+    );
     expect(verdict.enrichment!.resolvedAltTables).toBe(0);
   });
 });

@@ -38,7 +38,12 @@ interface ValidParams {
   roSigned: number; // < numReqSig
   roUnsigned: number;
   reqSig: number;
-  instructions: Array<{ prog: number; accts: number[]; dataLen: number; dataSeed: number }>;
+  instructions: Array<{
+    prog: number;
+    accts: number[];
+    dataLen: number;
+    dataSeed: number;
+  }>;
   luts: Array<{ writable: number[]; readonly: number[] }>;
 }
 
@@ -97,7 +102,10 @@ function buildValidBytes(p: ValidParams): Uint8Array {
     out.push(ix.prog);
     out.push(...encodeCompactU16(ix.accts.length));
     out.push(...ix.accts);
-    const data = Array.from({ length: ix.dataLen }, (_v, j) => (ix.dataSeed + j) & 0xff);
+    const data = Array.from(
+      { length: ix.dataLen },
+      (_v, j) => (ix.dataSeed + j) & 0xff,
+    );
     out.push(...encodeCompactU16(data.length));
     out.push(...data);
   }
@@ -161,7 +169,9 @@ describe("T2.1 round-trip identity: encode(decode(b)) === b", () => {
         expect(msg.staticAccountKeys).toEqual(w3Keys);
         const w3Version = w3.version === "legacy" ? "legacy" : w3.version;
         expect(msg.version).toBe(w3Version);
-        expect(msg.addressTableLookups.length).toBe(w3.addressTableLookups.length);
+        expect(msg.addressTableLookups.length).toBe(
+          w3.addressTableLookups.length,
+        );
       }),
     );
   });
@@ -234,7 +244,9 @@ describe("T2.5 compact-u16 invariants (D6-D8)", () => {
     // Exhaustive at the transitions plus a sampled range (kept small so the
     // data payload stays cheap), proving the decoder's compactU16 consumes the
     // right bytes and yields the right value.
-    const values = [0, 1, 126, 127, 128, 129, 255, 256, 1000, 16383, 16384, 16385, 2000];
+    const values = [
+      0, 1, 126, 127, 128, 129, 255, 256, 1000, 16383, 16384, 16385, 2000,
+    ];
     for (const value of values) {
       const enc = encodeCompactU16(value);
       const probe = buildProbeWithDataLen(enc, value);

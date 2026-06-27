@@ -1,0 +1,223 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sign-safe.dev/schema/sign-safe/verdict-1.json",
+  "title": "sign-safe/verdict@1",
+  "type": "object",
+  "required": [
+    "schema",
+    "decision",
+    "requiresHumanReview",
+    "reason",
+    "messageVersion",
+    "worstSeverity",
+    "findings",
+    "outflow",
+    "flags",
+    "unknownPrograms"
+  ],
+  "properties": {
+    "schema": {
+      "const": "sign-safe/verdict@1"
+    },
+    "decision": {
+      "enum": ["SIGN", "HOLD", "REJECT"]
+    },
+    "requiresHumanReview": {
+      "type": "boolean"
+    },
+    "reason": {
+      "type": "string"
+    },
+    "messageVersion": {
+      "enum": ["legacy", 0]
+    },
+    "worstSeverity": {
+      "$ref": "#/$defs/severity"
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/finding"
+      }
+    },
+    "outflow": {
+      "$ref": "#/$defs/outflow"
+    },
+    "flags": {
+      "$ref": "#/$defs/flags"
+    },
+    "unknownPrograms": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/base58String"
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "decision": {
+            "const": "SIGN"
+          }
+        },
+        "required": ["decision"]
+      },
+      "then": {
+        "properties": {
+          "requiresHumanReview": {
+            "const": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "decision": {
+            "enum": ["HOLD", "REJECT"]
+          }
+        },
+        "required": ["decision"]
+      },
+      "then": {
+        "properties": {
+          "requiresHumanReview": {
+            "const": true
+          }
+        }
+      }
+    }
+  ],
+  "additionalProperties": true,
+  "$defs": {
+    "base58String": {
+      "type": "string",
+      "pattern": "^[1-9A-HJ-NP-Za-km-z]+$"
+    },
+    "findingProgramId": {
+      "description": "Program id associated with the finding. Most findings use a base58 program id; transaction-level/contextual findings use an empty string, and unresolved Squads inner programs use the synthetic sentinel squads-inner:unresolved.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/base58String"
+        },
+        {
+          "const": ""
+        },
+        {
+          "const": "squads-inner:unresolved"
+        }
+      ]
+    },
+    "severity": {
+      "enum": ["INFO", "HOLD", "REJECT"]
+    },
+    "finding": {
+      "type": "object",
+      "required": [
+        "id",
+        "label",
+        "severity",
+        "category",
+        "instructionIndex",
+        "programId",
+        "detail",
+        "mapsToLoss"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "severity": {
+          "$ref": "#/$defs/severity"
+        },
+        "category": {
+          "description": "Current machine-routing category. Consumers should treat it as forward-compatible string data and route unknown future categories conservatively.",
+          "type": "string"
+        },
+        "instructionIndex": {
+          "description": "Top-level instruction index, Squads inner-instruction index, or -1 for transaction-level/contextual findings.",
+          "type": "integer",
+          "minimum": -1
+        },
+        "programId": {
+          "$ref": "#/$defs/findingProgramId"
+        },
+        "detail": {
+          "type": "string"
+        },
+        "mapsToLoss": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "outflow": {
+      "type": "object",
+      "required": ["lamports", "splTransfers", "exceedsLamportThreshold"],
+      "properties": {
+        "lamports": {
+          "$ref": "#/$defs/decimalString"
+        },
+        "splTransfers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/splTransfer"
+          }
+        },
+        "exceedsLamportThreshold": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": true
+    },
+    "splTransfer": {
+      "type": "object",
+      "required": ["instructionIndex", "programId", "amount"],
+      "properties": {
+        "instructionIndex": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "programId": {
+          "$ref": "#/$defs/base58String"
+        },
+        "amount": {
+          "$ref": "#/$defs/decimalString"
+        }
+      },
+      "additionalProperties": true
+    },
+    "decimalString": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)$"
+    },
+    "flags": {
+      "type": "object",
+      "required": [
+        "unknownProgramPresent",
+        "altLookupsPresent",
+        "rolesUnverified",
+        "decodeFailed"
+      ],
+      "properties": {
+        "unknownProgramPresent": {
+          "type": "boolean"
+        },
+        "altLookupsPresent": {
+          "type": "boolean"
+        },
+        "rolesUnverified": {
+          "type": "boolean"
+        },
+        "decodeFailed": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}

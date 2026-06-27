@@ -22,10 +22,10 @@
  */
 
 export type ScreenHitCategory =
-  | "recipient"    // SPL or SOL transfer destination
-  | "delegate"     // SPL Approve / ApproveChecked delegate
+  | "recipient" // SPL or SOL transfer destination
+  | "delegate" // SPL Approve / ApproveChecked delegate
   | "new-authority" // SetAuthority new_authority value
-  | "new-owner";   // System Assign / Assign-with-seed new owner
+  | "new-owner"; // System Assign / Assign-with-seed new owner
 
 export interface ScreenHit {
   /** Base58 address that matched the blocklist. */

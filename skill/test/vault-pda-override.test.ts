@@ -91,18 +91,18 @@ function buildVaultTxBytes(opts: {
   bytes.push(...VAULT_TX_ACCOUNT_DISC);
   bytes.push(...new Array(32).fill(0x01)); // multisig
   bytes.push(...new Array(32).fill(0x02)); // creator
-  bytes.push(1, 0, 0, 0, 0, 0, 0, 0);    // index u64-LE
-  bytes.push(255, 0, 254);               // bump, vault_index, vault_bump
-  bytes.push(0, 0, 0, 0);               // ephemeral_signer_bumps Vec<u8> len=0
-  bytes.push(1, 1, 1);                   // num_signers, num_writable_signers, num_writable_non_signers
+  bytes.push(1, 0, 0, 0, 0, 0, 0, 0); // index u64-LE
+  bytes.push(255, 0, 254); // bump, vault_index, vault_bump
+  bytes.push(0, 0, 0, 0); // ephemeral_signer_bumps Vec<u8> len=0
+  bytes.push(1, 1, 1); // num_signers, num_writable_signers, num_writable_non_signers
   bytes.push(...u32le(numKeys));
   for (let i = 0; i < numKeys; i++) bytes.push(...new Array(32).fill(0x10 + i));
-  bytes.push(...u32le(1));               // 1 instruction
+  bytes.push(...u32le(1)); // 1 instruction
   bytes.push(opts.instrProgramIdIndex);
-  bytes.push(...u32le(0));               // accountIndexes: empty
+  bytes.push(...u32le(0)); // accountIndexes: empty
   bytes.push(...u32le(opts.instrData.length));
   bytes.push(...opts.instrData);
-  bytes.push(...u32le(0));               // address_table_lookups: empty
+  bytes.push(...u32le(0)); // address_table_lookups: empty
   return new Uint8Array(bytes);
 }
 
@@ -119,7 +119,7 @@ function buildSquadsMessage(): { rawBytes: Uint8Array; pdaAddr: string } {
   out.push(1, 0, 1); // header: 1 signer, 0 ro-signed, 1 ro-unsigned
   out.push(3); // 3 static keys
   out.push(...new Array(32).fill(0x01)); // [0] feePayer
-  out.push(...squadsKeyBytes);            // [1] SquadsV4
+  out.push(...squadsKeyBytes); // [1] SquadsV4
   out.push(...new Array(32).fill(0xaa)); // [2] VaultTxPDA
   out.push(...new Array(32).fill(0xfa)); // blockhash
   out.push(1); // 1 instruction
@@ -301,7 +301,11 @@ describe("VP4: end-to-end --vault-pda override with inner authority change", () 
     //    vaultPdaAccount = pre-fetched bytes from operator-supplied address
     const overrideAccount = { data: vaultTxBytes };
     const baseFetcher: AccountFetcher = async () => null;
-    const wrappedFetcher = buildVaultPdaFetcher(PDA_ADDR, overrideAccount, baseFetcher);
+    const wrappedFetcher = buildVaultPdaFetcher(
+      PDA_ADDR,
+      overrideAccount,
+      baseFetcher,
+    );
 
     // 4. Run reviewWithEnrichment with the wrapped fetcher.
     const ctx: VerdictContext = { lamportThreshold: 1_000_000_000 };
@@ -310,7 +314,9 @@ describe("VP4: end-to-end --vault-pda override with inner authority change", () 
     // Must not be SIGN — inner authority change is dangerous.
     expect(verdict.decision).not.toBe("SIGN");
     // Should find the inner update_admin finding.
-    const innerFinding = verdict.findings.find((f) => f.id === "anchor-inner-update_admin");
+    const innerFinding = verdict.findings.find(
+      (f) => f.id === "anchor-inner-update_admin",
+    );
     expect(innerFinding).toBeDefined();
   });
 
@@ -335,7 +341,9 @@ describe("VP4: end-to-end --vault-pda override with inner authority change", () 
     const verdict = await reviewWithEnrichment(b64, ctx, nullFetcher);
 
     expect(verdict.decision).toBe("HOLD");
-    expect(verdict.findings.some((f) => f.id === "squads-execute-unverified")).toBe(true);
+    expect(
+      verdict.findings.some((f) => f.id === "squads-execute-unverified"),
+    ).toBe(true);
   });
 });
 
@@ -366,7 +374,7 @@ describe("VP5: vault-pda override is a no-op when there is no Squads ix", () => 
     const overrideAccount = { data: overrideData };
     const nullFetcher: AccountFetcher = async () => null;
     const wrappedFetcher = buildVaultPdaFetcher(
-      null,         // vtAddr = null → no-op
+      null, // vtAddr = null → no-op
       overrideAccount,
       nullFetcher,
     );
@@ -375,8 +383,12 @@ describe("VP5: vault-pda override is a no-op when there is no Squads ix", () => 
     const verdict = await reviewWithEnrichment(b64, ctx, wrappedFetcher);
 
     // No Squads findings — it's a plain transfer
-    expect(verdict.findings.some((f) => f.id === "squads-execute-unverified")).toBe(false);
-    expect(verdict.findings.some((f) => f.id === "anchor-inner-update_admin")).toBe(false);
+    expect(
+      verdict.findings.some((f) => f.id === "squads-execute-unverified"),
+    ).toBe(false);
+    expect(
+      verdict.findings.some((f) => f.id === "anchor-inner-update_admin"),
+    ).toBe(false);
     // Should be SIGN (benign transfer below threshold)
     expect(verdict.decision).toBe("SIGN");
   });

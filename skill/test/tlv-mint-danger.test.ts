@@ -100,9 +100,7 @@ describe("T_A4.2 decodeMintDangerExtensions: TransferHook (type 14)", () => {
     ...Array.from(HOOK_PROGRAM_BYTES),
   ]);
 
-  const mint = buildMintWithExtensions([
-    { type: 14, value: hookValue },
-  ]);
+  const mint = buildMintWithExtensions([{ type: 14, value: hookValue }]);
 
   const result = decodeMintDangerExtensions(mint);
 
@@ -121,9 +119,7 @@ describe("T_A4.2 decodeMintDangerExtensions: TransferHook (type 14)", () => {
 
 describe("T_A4.3 decodeMintDangerExtensions: NonTransferable (type 9)", () => {
   // NonTransferable has zero-length value (it's a marker extension)
-  const mint = buildMintWithExtensions([
-    { type: 9, value: new Uint8Array(0) },
-  ]);
+  const mint = buildMintWithExtensions([{ type: 9, value: new Uint8Array(0) }]);
 
   const result = decodeMintDangerExtensions(mint);
 
@@ -236,22 +232,25 @@ describe("T_A4.6 reviewBase64: mintExtensions permanentDelegate -> HOLD finding"
     //   idx2 writable non-signer, idx3 readonly, idx4 readonly
     out.push(1, 0, 2);
     out.push(5); // 5 static keys
-    out.push(...Array.from(testKey32(1)));              // idx0: feePayer (signer-writable)
-    out.push(...Array.from(testKey32(2)));              // idx1: sourceATA (writable)
-    out.push(...Array.from(testKey32(3)));              // idx2: destATA (writable)
-    out.push(...Array.from(MINT_BYTES));                // idx3: mint (readonly)
-    out.push(...Array.from(token2022Bytes));            // idx4: TOKEN_2022 program (readonly)
-    out.push(...Array.from(testKey32(250)));            // blockhash
+    out.push(...Array.from(testKey32(1))); // idx0: feePayer (signer-writable)
+    out.push(...Array.from(testKey32(2))); // idx1: sourceATA (writable)
+    out.push(...Array.from(testKey32(3))); // idx2: destATA (writable)
+    out.push(...Array.from(MINT_BYTES)); // idx3: mint (readonly)
+    out.push(...Array.from(token2022Bytes)); // idx4: TOKEN_2022 program (readonly)
+    out.push(...Array.from(testKey32(250))); // blockhash
     out.push(1); // 1 instruction
     // TransferChecked: prog=idx4(TOKEN_2022), accounts=[source=1, mint=3, dest=2, auth=0]
-    out.push(4);  // programIdIndex = 4
-    out.push(4);  // 4 account indexes
+    out.push(4); // programIdIndex = 4
+    out.push(4); // 4 account indexes
     out.push(1, 3, 2, 0); // [source, mint, dest, authority]
     // data: [disc=12][amount u64 LE = 1000][decimals=6]  = 10 bytes
     const amount = 1000n;
     const amountBytes: number[] = [];
     let v = amount;
-    for (let i = 0; i < 8; i++) { amountBytes.push(Number(v & 0xffn)); v >>= 8n; }
+    for (let i = 0; i < 8; i++) {
+      amountBytes.push(Number(v & 0xffn));
+      v >>= 8n;
+    }
     out.push(10); // data length
     out.push(12, ...amountBytes, 6);
 
@@ -263,7 +262,9 @@ describe("T_A4.6 reviewBase64: mintExtensions permanentDelegate -> HOLD finding"
   it("without mintExtensions, no extra HOLD finding (base behavior)", () => {
     const v = reviewBase64(b64);
     const hasToken2022Finding = v.findings.some(
-      (f) => f.id === "token2022-permanent-delegate" || f.id === "token2022-transfer-hook",
+      (f) =>
+        f.id === "token2022-permanent-delegate" ||
+        f.id === "token2022-transfer-hook",
     );
     expect(hasToken2022Finding).toBe(false);
   });
@@ -322,18 +323,14 @@ describe("T_A4.7 decodeMintDangerExtensions: OptionalNonZeroPubkey None handling
   it("PermanentDelegate with all-zero delegate -> permanentDelegate is undefined (None)", () => {
     // An all-zero 32-byte pubkey means None for OptionalNonZeroPubkey.
     // A mint with this extension set but delegate == None must NOT set permanentDelegate.
-    const mint = buildMintWithExtensions([
-      { type: 12, value: ZERO_32 },
-    ]);
+    const mint = buildMintWithExtensions([{ type: 12, value: ZERO_32 }]);
     const result = decodeMintDangerExtensions(mint);
     expect(result.permanentDelegate).toBeUndefined();
   });
 
   it("PermanentDelegate with non-zero delegate -> permanentDelegate is still set (regression)", () => {
     // Sanity check: a real delegate must still surface.
-    const mint = buildMintWithExtensions([
-      { type: 12, value: DELEGATE_BYTES },
-    ]);
+    const mint = buildMintWithExtensions([{ type: 12, value: DELEGATE_BYTES }]);
     const result = decodeMintDangerExtensions(mint);
     expect(result.permanentDelegate).toBe(DELEGATE_B58);
   });
@@ -342,11 +339,9 @@ describe("T_A4.7 decodeMintDangerExtensions: OptionalNonZeroPubkey None handling
     // authority(32) non-zero, programId(32) all-zero => hook not active.
     const hookValue = Uint8Array.from([
       ...Array.from(HOOK_AUTHORITY_BYTES), // authority = non-zero (irrelevant)
-      ...Array.from(ZERO_32),              // programId = all-zero => None
+      ...Array.from(ZERO_32), // programId = all-zero => None
     ]);
-    const mint = buildMintWithExtensions([
-      { type: 14, value: hookValue },
-    ]);
+    const mint = buildMintWithExtensions([{ type: 14, value: hookValue }]);
     const result = decodeMintDangerExtensions(mint);
     expect(result.transferHook).toBeUndefined();
   });
@@ -357,9 +352,7 @@ describe("T_A4.7 decodeMintDangerExtensions: OptionalNonZeroPubkey None handling
       ...Array.from(HOOK_AUTHORITY_BYTES),
       ...Array.from(HOOK_PROGRAM_BYTES),
     ]);
-    const mint = buildMintWithExtensions([
-      { type: 14, value: hookValue },
-    ]);
+    const mint = buildMintWithExtensions([{ type: 14, value: hookValue }]);
     const result = decodeMintDangerExtensions(mint);
     expect(result.transferHook).toBe(HOOK_PROGRAM_B58);
   });

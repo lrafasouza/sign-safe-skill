@@ -52,7 +52,12 @@ describe("T5.1 test_is_writable_index golden (R3/R4/R8)", () => {
       numLoadedWritable: 1,
     };
     expect([0, 1, 2, 3, 4, 5].map((i) => isWritableIndex(i, args))).toEqual([
-      true, false, true, false, true, false,
+      true,
+      false,
+      true,
+      false,
+      true,
+      false,
     ]);
   });
 });
@@ -88,7 +93,9 @@ describe("T5.2 test_is_maybe_writable demotion golden (R5/R6/R9)", () => {
 
   it("index 3 (reserved key): writable with None, readonly after demotion", () => {
     const none = deriveRoles(msg); // is_maybe_writable(i, None)
-    const some = deriveRoles(msg, { reservedAccountKeys: RESERVED_ACCOUNT_KEYS });
+    const some = deriveRoles(msg, {
+      reservedAccountKeys: RESERVED_ACCOUNT_KEYS,
+    });
     expect(msg.staticAccountKeys[3]).toBe(SYSTEM);
     expect(none[3]!.writablePartition).toBe(true);
     expect(none[3]!.writableRuntime).toBe(true); // None mode: no demotion
@@ -105,7 +112,9 @@ describe("T5.2 test_is_maybe_writable demotion golden (R5/R6/R9)", () => {
   });
 
   it("demoted (Some): is_maybe_writable matches the SDK assertions exactly", () => {
-    const some = deriveRoles(msg, { reservedAccountKeys: RESERVED_ACCOUNT_KEYS });
+    const some = deriveRoles(msg, {
+      reservedAccountKeys: RESERVED_ACCOUNT_KEYS,
+    });
     const w = some.map((r) => r.writableRuntime);
     // 0 W; 1,2 RO; 3 RO(reserved); 4 W; 5 RO(reserved); 6 RO(partition).
     expect(w).toEqual([true, false, false, false, true, false, false]);
@@ -145,7 +154,9 @@ describe("T5.3 program-id demotion flip (R5 branch b)", () => {
 
   it("program in writable partition demotes to readonly when loader absent", () => {
     const msg = decodeMessageBytes(build(false));
-    const roles = deriveRoles(msg, { reservedAccountKeys: RESERVED_ACCOUNT_KEYS });
+    const roles = deriveRoles(msg, {
+      reservedAccountKeys: RESERVED_ACCOUNT_KEYS,
+    });
     expect(roles[1]!.writablePartition).toBe(true);
     expect(roles[1]!.writableRuntime).toBe(false);
     expect(roles[1]!.demotedToReadonly).toBe(true);
@@ -154,7 +165,9 @@ describe("T5.3 program-id demotion flip (R5 branch b)", () => {
   it("same program flips back to writable when the upgradeable loader is present", () => {
     const msg = decodeMessageBytes(build(true));
     expect(msg.staticAccountKeys.includes(BPF_LOADER_UPGRADEABLE)).toBe(true);
-    const roles = deriveRoles(msg, { reservedAccountKeys: RESERVED_ACCOUNT_KEYS });
+    const roles = deriveRoles(msg, {
+      reservedAccountKeys: RESERVED_ACCOUNT_KEYS,
+    });
     expect(roles[1]!.writablePartition).toBe(true);
     expect(roles[1]!.writableRuntime).toBe(true);
     expect(roles[1]!.demotedToReadonly).toBe(false);
@@ -175,10 +188,14 @@ describe("T5.4 / T5.7 multi-lookup ordering + loaded positional writability (R1/
       ],
     ),
   );
-  const roles = deriveRoles(msg, { reservedAccountKeys: RESERVED_ACCOUNT_KEYS });
+  const roles = deriveRoles(msg, {
+    reservedAccountKeys: RESERVED_ACCOUNT_KEYS,
+  });
 
   it("flattens all writable across tables, then all readonly", () => {
-    const altAddrs = roles.filter((r) => !r.addressVerified).map((r) => r.address);
+    const altAddrs = roles
+      .filter((r) => !r.addressVerified)
+      .map((r) => r.address);
     expect(altAddrs).toEqual([
       `alt:${base58Encode(Uint8Array.from(key(60)))}#w11`,
       `alt:${base58Encode(Uint8Array.from(key(60)))}#w12`,
@@ -218,7 +235,8 @@ describe("T5.5 reserved-key vs Incinerator (R7)", () => {
     out.push(1, 0, 1); // S=1, Rs=0, Ru=1 => idx1 writable non-signer, idx2 readonly
     out.push(3);
     out.push(...key(1)); // fee payer
-    if (idx1Byte === "system") out.push(...new Array(32).fill(0)); // System
+    if (idx1Byte === "system")
+      out.push(...new Array(32).fill(0)); // System
     else out.push(...incineratorBytes());
     out.push(...key(3)); // idx2 readonly
     out.push(...key(250));
@@ -229,7 +247,9 @@ describe("T5.5 reserved-key vs Incinerator (R7)", () => {
   it("System Program in writable partition is demoted to readonly", () => {
     const msg = decodeMessageBytes(build("system"));
     expect(msg.staticAccountKeys[1]).toBe(SYSTEM);
-    const roles = deriveRoles(msg, { reservedAccountKeys: RESERVED_ACCOUNT_KEYS });
+    const roles = deriveRoles(msg, {
+      reservedAccountKeys: RESERVED_ACCOUNT_KEYS,
+    });
     expect(roles[1]!.writablePartition).toBe(true);
     expect(roles[1]!.writableRuntime).toBe(false);
   });
@@ -238,7 +258,9 @@ describe("T5.5 reserved-key vs Incinerator (R7)", () => {
     const msg = decodeMessageBytes(build("incinerator"));
     expect(msg.staticAccountKeys[1]).toBe(INCINERATOR);
     expect(RESERVED_ACCOUNT_KEYS.has(INCINERATOR)).toBe(false);
-    const roles = deriveRoles(msg, { reservedAccountKeys: RESERVED_ACCOUNT_KEYS });
+    const roles = deriveRoles(msg, {
+      reservedAccountKeys: RESERVED_ACCOUNT_KEYS,
+    });
     expect(roles[1]!.writablePartition).toBe(true);
     expect(roles[1]!.writableRuntime).toBe(true);
     expect(roles[1]!.demotedToReadonly).toBe(false);
@@ -281,7 +303,9 @@ function incineratorBytes(): Uint8Array {
   return padTo32(decodeBase58ToBytes(INCINERATOR));
 }
 function sysvarRentBytes(): Uint8Array {
-  return padTo32(decodeBase58ToBytes("SysvarRent111111111111111111111111111111111"));
+  return padTo32(
+    decodeBase58ToBytes("SysvarRent111111111111111111111111111111111"),
+  );
 }
 function padTo32(b: Uint8Array): Uint8Array {
   if (b.length === 32) return b;

@@ -39,7 +39,10 @@ async function rpcPost(method: string, params: unknown[]): Promise<unknown> {
     body,
   });
   if (!res.ok) throw new Error(`HTTP ${res.status} for ${method}`);
-  const json = (await res.json()) as { result?: unknown; error?: { message: string } };
+  const json = (await res.json()) as {
+    result?: unknown;
+    error?: { message: string };
+  };
   if (json.error) throw new Error(`RPC error: ${json.error.message}`);
   return json.result;
 }
@@ -47,7 +50,10 @@ async function rpcPost(method: string, params: unknown[]): Promise<unknown> {
 async function getAccountInfoB64(pubkey: string): Promise<string | null> {
   await sleep(SLEEP_MS);
   try {
-    const result = await rpcPost("getAccountInfo", [pubkey, { encoding: "base64" }]);
+    const result = await rpcPost("getAccountInfo", [
+      pubkey,
+      { encoding: "base64" },
+    ]);
     const val = (result as { value: null | { data: [string, string] } }).value;
     if (!val) return null;
     return val.data[0] ?? null;
@@ -55,8 +61,12 @@ async function getAccountInfoB64(pubkey: string): Promise<string | null> {
     // Retry once
     await sleep(200);
     try {
-      const result = await rpcPost("getAccountInfo", [pubkey, { encoding: "base64" }]);
-      const val = (result as { value: null | { data: [string, string] } }).value;
+      const result = await rpcPost("getAccountInfo", [
+        pubkey,
+        { encoding: "base64" },
+      ]);
+      const val = (result as { value: null | { data: [string, string] } })
+        .value;
       if (!val) return null;
       return val.data[0] ?? null;
     } catch {
@@ -94,7 +104,10 @@ async function getBlock(slot: number): Promise<BlockResult | null> {
 }
 
 function isVoteOnly(programIds: string[]): boolean {
-  return programIds.every((p) => p === VOTE_PROGRAM || p === "ComputeBudget111111111111111111111111111111");
+  return programIds.every(
+    (p) =>
+      p === VOTE_PROGRAM || p === "ComputeBudget111111111111111111111111111111",
+  );
 }
 
 function getProgramIds(txB64: string): string[] {
@@ -169,7 +182,10 @@ async function captureSlot(slot: number): Promise<Fixture[]> {
   console.log(`  Eligible (non-vote, successful): ${eligible.length}`);
 
   // Stratified sampling: collect up to MAX_PER_SLOT txns with variety
-  const categoryBuckets = new Map<string, Array<{ txB64: string; origIndex: number }>>();
+  const categoryBuckets = new Map<
+    string,
+    Array<{ txB64: string; origIndex: number }>
+  >();
   for (const e of eligible) {
     const cat = categorize(e.txB64);
     if (!categoryBuckets.has(cat)) categoryBuckets.set(cat, []);
@@ -205,7 +221,9 @@ async function captureSlot(slot: number): Promise<Fixture[]> {
 
   for (let fi = 0; fi < selected.length; fi++) {
     const { txB64, origIndex } = selected[fi]!;
-    console.log(`  Processing tx ${fi + 1}/${selected.length} (origIndex=${origIndex})`);
+    console.log(
+      `  Processing tx ${fi + 1}/${selected.length} (origIndex=${origIndex})`,
+    );
 
     let decoded: ReturnType<typeof decodeInput>;
     try {
@@ -239,7 +257,9 @@ async function captureSlot(slot: number): Promise<Fixture[]> {
     const vtAddr = extractVaultTransactionAddress(message);
     const vtPubkeys: string[] = vtAddr ? [vtAddr] : [];
 
-    const allPubkeys = [...new Set([...altPubkeys, ...mintPubkeys, ...vtPubkeys])];
+    const allPubkeys = [
+      ...new Set([...altPubkeys, ...mintPubkeys, ...vtPubkeys]),
+    ];
 
     for (const pubkey of allPubkeys) {
       if (!accountCache.has(pubkey)) {
@@ -253,7 +273,9 @@ async function captureSlot(slot: number): Promise<Fixture[]> {
       }
     }
 
-    const programIds = [...new Set(message.instructions.map((ix) => ix.programId))];
+    const programIds = [
+      ...new Set(message.instructions.map((ix) => ix.programId)),
+    ];
 
     fixtures.push({
       slot,
@@ -286,7 +308,14 @@ async function main(): Promise<void> {
   }
 
   // Write manifest with sha256 of each file
-  const manifest: Array<{ filename: string; sha256: string; slot: number; index: number; version: string; programIds: string[] }> = [];
+  const manifest: Array<{
+    filename: string;
+    sha256: string;
+    slot: number;
+    index: number;
+    version: string;
+    programIds: string[];
+  }> = [];
   for (const fixture of allFixtures) {
     const filename = `${fixture.slot}-${fixture.index}.json`;
     const content = JSON.stringify(fixture, null, 2);

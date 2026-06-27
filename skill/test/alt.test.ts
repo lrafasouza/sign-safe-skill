@@ -218,7 +218,9 @@ describe("T_ALT.3 discriminator=0 (Uninitialized) throws AltDecodeError", () => 
 
 describe("T_ALT.4 buffer length < 56 -> throws AltDecodeError", () => {
   it("length=0 throws", () => {
-    expect(() => decodeAddressLookupTable(new Uint8Array(0))).toThrowError(AltDecodeError);
+    expect(() => decodeAddressLookupTable(new Uint8Array(0))).toThrowError(
+      AltDecodeError,
+    );
   });
 
   it("length=55 throws", () => {

@@ -28,7 +28,11 @@ const T22 = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
  * header [1,0,1] -> 1 writable signer (fee payer, index 0) + 1 readonly program
  * (index 1). Distinct static keys, canonical, decodes cleanly.
  */
-function msg(programB58: string, data: number[], accts: number[] = [0]): string {
+function msg(
+  programB58: string,
+  data: number[],
+  accts: number[] = [0],
+): string {
   const out: number[] = [];
   out.push(1, 0, 1); // numReqSig=1, numRoSigned=0, numRoUnsigned=1
   out.push(...encodeCompactU16(2)); // 2 static keys
@@ -63,37 +67,114 @@ const CREATE_ACCOUNT_WITH_SEED_B64 =
 describe("catalog coverage — dangerous shapes must never SIGN", () => {
   const cases: Array<[string, string, string?]> = [
     // [name, base64, expected catalog finding id (optional)]
-    ["Token-2022 Approve (delegate grant) [F1]", T22_APPROVE_B64, "token2022-approve-delegate"],
+    [
+      "Token-2022 Approve (delegate grant) [F1]",
+      T22_APPROVE_B64,
+      "token2022-approve-delegate",
+    ],
     ["Token-2022 CloseAccount [F1]", T22_CLOSE_B64, "token2022-close-account"],
-    ["System WithdrawNonceAccount (SOL drain) [F2]", msg(SYSTEM, [...u32le(5), ...u64le(7_000_000_000n)]), "system-withdraw-nonce"],
+    [
+      "System WithdrawNonceAccount (SOL drain) [F2]",
+      msg(SYSTEM, [...u32le(5), ...u64le(7_000_000_000n)]),
+      "system-withdraw-nonce",
+    ],
     ["SPL FreezeAccount [F3]", msg(SPL, [10]), "spl-freeze-account"],
-    ["Token-2022 FreezeAccount [F3]", msg(T22, [10]), "token2022-freeze-account"],
+    [
+      "Token-2022 FreezeAccount [F3]",
+      msg(T22, [10]),
+      "token2022-freeze-account",
+    ],
     ["SPL MintTo [F3]", msg(SPL, [7]), "spl-mint-to"],
     ["Token-2022 MintTo [F3]", msg(T22, [7]), "token2022-mint-to"],
     // CreateAccount funding 5 SOL -> over the 1 SOL threshold -> HOLD via outflow
-    ["large System CreateAccount funding [F3]", msg(SYSTEM, [...u32le(0), ...u64le(5_000_000_000n), ...u64le(0n), ...new Array(32).fill(0)]), undefined],
+    [
+      "large System CreateAccount funding [F3]",
+      msg(SYSTEM, [
+        ...u32le(0),
+        ...u64le(5_000_000_000n),
+        ...u64le(0n),
+        ...new Array(32).fill(0),
+      ]),
+      undefined,
+    ],
     // second-pass findings: Burn (value loss) + seed-funded drain (variable offset)
     ["SPL Burn [2nd-pass]", SPL_BURN_B64, "spl-burn"],
     ["Token-2022 Burn [2nd-pass]", T22_BURN_B64, "token2022-burn"],
     ["SPL BurnChecked [2nd-pass]", SPL_BURNCHECKED_B64, "spl-burn"],
-    ["large System CreateAccountWithSeed funding [2nd-pass]", CREATE_ACCOUNT_WITH_SEED_B64, undefined],
+    [
+      "large System CreateAccountWithSeed funding [2nd-pass]",
+      CREATE_ACCOUNT_WITH_SEED_B64,
+      undefined,
+    ],
     // 3rd-pass: Token-2022 + SPL lamport-sweep extension instructions and Batch
-    ["SPL WithdrawExcessLamports (38)", msg(SPL, [38]), "spl-withdraw-excess-lamports"],
-    ["Token-2022 WithdrawExcessLamports (38)", msg(T22, [38]), "token2022-withdraw-excess-lamports"],
+    [
+      "SPL WithdrawExcessLamports (38)",
+      msg(SPL, [38]),
+      "spl-withdraw-excess-lamports",
+    ],
+    [
+      "Token-2022 WithdrawExcessLamports (38)",
+      msg(T22, [38]),
+      "token2022-withdraw-excess-lamports",
+    ],
     ["SPL UnwrapLamports (45)", msg(SPL, [45]), "spl-unwrap-lamports"],
-    ["Token-2022 UnwrapLamports (45)", msg(T22, [45]), "token2022-unwrap-lamports"],
-    ["SPL Batch (255) — undecoded sub-instructions", msg(SPL, [255]), "spl-batch"],
-    ["Token-2022 Batch (255) — undecoded sub-instructions", msg(T22, [255]), "token2022-batch"],
+    [
+      "Token-2022 UnwrapLamports (45)",
+      msg(T22, [45]),
+      "token2022-unwrap-lamports",
+    ],
+    [
+      "SPL Batch (255) — undecoded sub-instructions",
+      msg(SPL, [255]),
+      "spl-batch",
+    ],
+    [
+      "Token-2022 Batch (255) — undecoded sub-instructions",
+      msg(T22, [255]),
+      "token2022-batch",
+    ],
     // 4th-pass: Token-2022 extension sub-instructions (outer tag + inner byte)
-    ["Token-2022 ConfidentialMintBurn::Mint (42,3)", msg(T22, [42, 3]), "token2022-confidential-mint"],
-    ["Token-2022 ConfidentialMintBurn::Burn (42,4)", msg(T22, [42, 4]), "token2022-confidential-burn"],
-    ["Token-2022 TransferFee::WithdrawWithheldFromMint (26,2)", msg(T22, [26, 2]), "token2022-withdraw-withheld-fees"],
-    ["Token-2022 TransferFee::WithdrawWithheldFromAccounts (26,3)", msg(T22, [26, 3]), "token2022-withdraw-withheld-fees"],
-    ["Token-2022 ConfidentialTransferFee::WithdrawWithheld (37,1)", msg(T22, [37, 1]), "token2022-confidential-withdraw-withheld-fees"],
+    [
+      "Token-2022 ConfidentialMintBurn::Mint (42,3)",
+      msg(T22, [42, 3]),
+      "token2022-confidential-mint",
+    ],
+    [
+      "Token-2022 ConfidentialMintBurn::Burn (42,4)",
+      msg(T22, [42, 4]),
+      "token2022-confidential-burn",
+    ],
+    [
+      "Token-2022 TransferFee::WithdrawWithheldFromMint (26,2)",
+      msg(T22, [26, 2]),
+      "token2022-withdraw-withheld-fees",
+    ],
+    [
+      "Token-2022 TransferFee::WithdrawWithheldFromAccounts (26,3)",
+      msg(T22, [26, 3]),
+      "token2022-withdraw-withheld-fees",
+    ],
+    [
+      "Token-2022 ConfidentialTransferFee::WithdrawWithheld (37,1)",
+      msg(T22, [37, 1]),
+      "token2022-confidential-withdraw-withheld-fees",
+    ],
     // 5th-pass: PermissionedBurn extension burn sub-instructions
-    ["Token-2022 PermissionedBurn::Burn (46,1)", msg(T22, [46, 1]), "token2022-permissioned-burn"],
-    ["Token-2022 PermissionedBurn::BurnChecked (46,2)", msg(T22, [46, 2]), "token2022-permissioned-burn"],
-    ["Token-2022 PermissionedBurn::ConfidentialBurn (46,3)", msg(T22, [46, 3]), "token2022-permissioned-burn"],
+    [
+      "Token-2022 PermissionedBurn::Burn (46,1)",
+      msg(T22, [46, 1]),
+      "token2022-permissioned-burn",
+    ],
+    [
+      "Token-2022 PermissionedBurn::BurnChecked (46,2)",
+      msg(T22, [46, 2]),
+      "token2022-permissioned-burn",
+    ],
+    [
+      "Token-2022 PermissionedBurn::ConfidentialBurn (46,3)",
+      msg(T22, [46, 3]),
+      "token2022-permissioned-burn",
+    ],
   ];
 
   for (const [name, b64, findingId] of cases) {
@@ -113,7 +194,14 @@ describe("catalog coverage — dangerous shapes must never SIGN", () => {
   });
 
   it("positive control: a small System CreateAccount (under threshold) still SIGNs", () => {
-    const v = reviewBase64(msg(SYSTEM, [...u32le(0), ...u64le(2_000_000n), ...u64le(0n), ...new Array(32).fill(0)]));
+    const v = reviewBase64(
+      msg(SYSTEM, [
+        ...u32le(0),
+        ...u64le(2_000_000n),
+        ...u64le(0n),
+        ...new Array(32).fill(0),
+      ]),
+    );
     expect(v.decision).toBe("SIGN");
   });
 

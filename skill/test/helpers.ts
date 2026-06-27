@@ -146,7 +146,9 @@ export function readFixtureB64(name: string): string {
 }
 
 export function readFixtureGolden(name: string): unknown {
-  return JSON.parse(readFileSync(join(FIXTURES, `${name}.verdict.json`), "utf8"));
+  return JSON.parse(
+    readFileSync(join(FIXTURES, `${name}.verdict.json`), "utf8"),
+  );
 }
 
 export function listRealFixtures(): string[] {

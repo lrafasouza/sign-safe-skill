@@ -4,7 +4,5 @@
   "version": "legacy",
   "txB64": "ASbrOKN/7JOHuen7ajF0dqa7FbDQX4+a+g5OJTF6vrS9FCXzvR+1HkZwPGquDUwbL8TrgKrLHBNojLOszhLYlAgBAAIFvMtN4qQhjrE49kn2DCTRzQCW5lZ1ffXSS+76OVI+UmFnKo2ip08lVxbYreia+F21l4IykY+uSm7yXUcINIxb0ZNhPcyrStv169n8LmbRrN+FlaF+RgWbLLK+FTKbkqGTBt324ddloZPZy+FGzut5rBy0he1fWzeROoz1hX7/AKmrAq7slVBDC+Dn8tw7ILmPUeEzxof5uHNXgf9vWi7pfx9bnPXlc2ippt76xLEPlplZvTE/B6Mbl9alhPcePLRVAQMEAQQCAAoMgGHKSQAAAAAG",
   "accounts": {},
-  "programIds": [
-    "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
-  ]
+  "programIds": ["TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"]
 }

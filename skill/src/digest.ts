@@ -64,7 +64,9 @@ export function transactionDigest(b64: string): TransactionDigest {
     version = message.version;
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
-    throw new TransactionDigestError(`digest: input could not be decoded: ${detail}`);
+    throw new TransactionDigestError(
+      `digest: input could not be decoded: ${detail}`,
+    );
   }
 
   const hashHex = createHash("sha256").update(messageBytes).digest("hex");

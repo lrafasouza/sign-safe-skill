@@ -54,6 +54,12 @@ const STAKE_PROGRAM = "Stake11111111111111111111111111111111111111";
 const COMPUTE_BUDGET = "ComputeBudget111111111111111111111111111111";
 const BPF_LOADER_UPGRADEABLE = "BPFLoaderUpgradeab1e11111111111111111111111";
 const LIGHTHOUSE_PROGRAM = "L2TExMFKdjpN9kozasaurPirfHy9P8sbXoAN1qA3S95";
+const ASSOCIATED_TOKEN_ACCOUNT =
+  "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL";
+const MEMO_PROGRAMS = new Set<string>([
+  "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr",
+  "Memo1UhkJRfHyvLMcVucJwxXeuD728EqVDDwQDxFMNo",
+]);
 
 const LIGHTHOUSE_ASSERT_INSTRUCTIONS: Readonly<
   Record<number, { name: string; targetCount: number }>
@@ -369,6 +375,170 @@ function buildDetail(
   return `Matched ${entry.detection.instructionType} on ${programLabel}.`;
 }
 
+function classifyAssociatedTokenAccountInstruction(
+  ix: DecodedMessage["instructions"][number],
+  roles: AccountRole[],
+  data: Uint8Array,
+  instructionIndex: number,
+): Finding {
+  const tag = data.length === 0 ? 0 : (data[0] as number);
+  if (data.length <= 1 && tag === 0) {
+    return classifyAssociatedTokenAccountCreate(
+      "ata-create",
+      "Associated Token Account: Create",
+      ix,
+      roles,
+      instructionIndex,
+    );
+  }
+  if (data.length === 1 && tag === 1) {
+    return classifyAssociatedTokenAccountCreate(
+      "ata-create-idempotent",
+      "Associated Token Account: CreateIdempotent",
+      ix,
+      roles,
+      instructionIndex,
+    );
+  }
+  if (data.length === 1 && tag === 2) {
+    return {
+      id: "ata-recover-nested",
+      label: "Associated Token Account: RecoverNested",
+      severity: "HOLD",
+      category: "value-outflow",
+      instructionIndex,
+      programId: ASSOCIATED_TOKEN_ACCOUNT,
+      detail:
+        "RecoverNested can transfer tokens from a nested associated token account and close that nested account. Review owner, mint, destination, and rent recipient before signing.",
+      mapsToLoss:
+        "Moves assets and rent from a nested token account; an unexpected owner/mint/destination can redirect value.",
+    };
+  }
+  return {
+    id: "ata-unknown-instruction",
+    label: "Associated Token Account: unrecognized instruction",
+    severity: "HOLD",
+    category: "unknown-program",
+    instructionIndex,
+    programId: ASSOCIATED_TOKEN_ACCOUNT,
+    detail:
+      data.length === 0
+        ? "Associated Token Account instruction had no discriminator but did not match the legacy Create shape."
+        : `Associated Token Account instruction tag ${tag} is not decoded by sign-safe.`,
+    mapsToLoss:
+      "Unrecognized associated-token-account instruction; account creation, recovery, or rent effects are not fully bounded.",
+  };
+}
+
+function isVerifiedSignerRole(role: AccountRole | undefined): boolean {
+  return (
+    role !== undefined &&
+    role.addressVerified &&
+    (role.role === "signer-writable" || role.role === "signer-readonly")
+  );
+}
+
+function roleSummary(index: number | undefined, role: AccountRole | undefined) {
+  if (index === undefined || role === undefined) return "missing";
+  const verified = role.addressVerified ? "verified" : "unverified";
+  return `index ${index} (${role.role}, ${verified})`;
+}
+
+function classifyAssociatedTokenAccountCreate(
+  id: "ata-create" | "ata-create-idempotent",
+  label: string,
+  ix: DecodedMessage["instructions"][number],
+  roles: AccountRole[],
+  instructionIndex: number,
+): Finding {
+  const fundingIndex = ix.accountIndexes[0];
+  const walletIndex = ix.accountIndexes[2];
+  const fundingRole =
+    fundingIndex === undefined
+      ? undefined
+      : roles.find((role) => role.index === fundingIndex);
+  const walletRole =
+    walletIndex === undefined
+      ? undefined
+      : roles.find((role) => role.index === walletIndex);
+  const sameVerifiedSigner =
+    fundingIndex !== undefined &&
+    fundingIndex === walletIndex &&
+    isVerifiedSignerRole(fundingRole);
+
+  if (!sameVerifiedSigner) {
+    return {
+      id: `${id}-external-wallet`,
+      label: `${label} for non-signer or unverified wallet`,
+      severity: "HOLD",
+      category: "value-outflow",
+      instructionIndex,
+      programId: ASSOCIATED_TOKEN_ACCOUNT,
+      detail:
+        `${label} is state-dependent and can debit rent from the funding account. ` +
+        `sign-safe only auto-classifies ATA creation when the same verified signer is both funding account and wallet owner. ` +
+        `Funding account is ${roleSummary(fundingIndex, fundingRole)}; wallet owner is ${roleSummary(walletIndex, walletRole)}.`,
+      mapsToLoss:
+        "Creating an associated token account for a different, non-signer, or unresolved wallet can spend signer SOL on an account controlled by another party.",
+    };
+  }
+
+  return {
+    id,
+    label,
+    severity: "INFO",
+    category: "program-interaction",
+    instructionIndex,
+    programId: ASSOCIATED_TOKEN_ACCOUNT,
+    detail:
+      `${label} uses the same verified signer as funding account and wallet owner. ` +
+      "The instruction creates or confirms the deterministic associated token account for that signer-owned wallet/mint pair; rent may be paid if the ATA does not exist.",
+    mapsToLoss: "",
+  };
+}
+
+function isUtf8(data: Uint8Array): boolean {
+  const decoder = new TextDecoder("utf-8", { fatal: true });
+  try {
+    decoder.decode(data);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function classifyMemoInstruction(
+  programId: string,
+  data: Uint8Array,
+  instructionIndex: number,
+): Finding {
+  if (isUtf8(data)) {
+    return {
+      id: "memo-utf8",
+      label: "Memo: UTF-8 payload",
+      severity: "INFO",
+      category: "program-interaction",
+      instructionIndex,
+      programId,
+      detail:
+        "Memo payload is valid UTF-8. The Memo program records text and verified signer addresses; it does not encode SOL or token movement.",
+      mapsToLoss: "",
+    };
+  }
+  return {
+    id: "memo-invalid-utf8",
+    label: "Memo: invalid UTF-8 payload",
+    severity: "HOLD",
+    category: "structural",
+    instructionIndex,
+    programId,
+    detail:
+      "Memo payload is not valid UTF-8, so sign-safe does not classify it as a bounded memo.",
+    mapsToLoss:
+      "Malformed memo bytes can cause transaction failure or hide operator context; review the whole transaction before signing.",
+  };
+}
+
 export interface ClassifyResult {
   findings: Finding[];
   /** Programs encountered that are not in the known-program set. */
@@ -427,6 +597,23 @@ export function classify(
 
     // ComputeBudget is always benign metadata; never a danger, never unknown.
     if (pid === COMPUTE_BUDGET) return;
+
+    if (pid === ASSOCIATED_TOKEN_ACCOUNT) {
+      findings.push(
+        classifyAssociatedTokenAccountInstruction(
+          ix,
+          roles,
+          ix.data,
+          instructionIndex,
+        ),
+      );
+      return;
+    }
+
+    if (MEMO_PROGRAMS.has(pid)) {
+      findings.push(classifyMemoInstruction(pid, ix.data, instructionIndex));
+      return;
+    }
 
     if (pid === LIGHTHOUSE_PROGRAM && ix.data.length > 0) {
       const assertion = LIGHTHOUSE_ASSERT_INSTRUCTIONS[ix.data[0] as number];

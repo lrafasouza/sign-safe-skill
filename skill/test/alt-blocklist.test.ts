@@ -241,7 +241,8 @@ function buildSplApproveWithAltDelegate(amount = 999_000n): Uint8Array {
   // 1 ALT
   out.push(1);
   for (let i = 0; i < 32; i++) out.push(TABLE_B);
-  out.push(1); out.push(0); // 1 writable index = [0]
+  out.push(1);
+  out.push(0); // 1 writable index = [0]
   out.push(0); // 0 readonly indexes
   return Uint8Array.from(out);
 }
@@ -274,7 +275,9 @@ describe("T_ALT_BLOCK.1 SOL transfer to ALT-resolved blocklisted recipient → R
       recipientBlocklist: [], // empty blocklist
     });
     // Should SIGN (resolved, no finding) or HOLD for other reasons, not blocklist-REJECT
-    expect(v.findings.filter((f) => f.id === "blocklisted-recipient")).toHaveLength(0);
+    expect(
+      v.findings.filter((f) => f.id === "blocklisted-recipient"),
+    ).toHaveLength(0);
     // With fully resolved ALT + no danger + below threshold → SIGN
     expect(v.decision).toBe("SIGN");
   });
@@ -285,7 +288,9 @@ describe("T_ALT_BLOCK.1 SOL transfer to ALT-resolved blocklisted recipient → R
       resolvedAltTables: RESOLVED_GOOD,
       recipientBlocklist: blocklist,
     });
-    expect(v.findings.filter((f) => f.id === "blocklisted-recipient")).toHaveLength(0);
+    expect(
+      v.findings.filter((f) => f.id === "blocklisted-recipient"),
+    ).toHaveLength(0);
     expect(v.decision).toBe("SIGN");
   });
 
@@ -298,7 +303,9 @@ describe("T_ALT_BLOCK.1 SOL transfer to ALT-resolved blocklisted recipient → R
     // Unresolved ALT → HOLD (rolesUnverified), not SIGN, no blocklist REJECT
     expect(v.decision).toBe("HOLD");
     expect(v.flags.rolesUnverified).toBe(true);
-    expect(v.findings.filter((f) => f.id === "blocklisted-recipient")).toHaveLength(0);
+    expect(
+      v.findings.filter((f) => f.id === "blocklisted-recipient"),
+    ).toHaveLength(0);
   });
 });
 
@@ -329,7 +336,9 @@ describe("T_ALT_BLOCK.2 SPL token transfer to ALT-resolved blocklisted destinati
       resolvedAltTables: RESOLVED_GOOD,
       recipientBlocklist: blocklist,
     });
-    expect(v.findings.filter((f) => f.id === "blocklisted-recipient")).toHaveLength(0);
+    expect(
+      v.findings.filter((f) => f.id === "blocklisted-recipient"),
+    ).toHaveLength(0);
     expect(v.decision).toBe("SIGN");
   });
 
@@ -341,7 +350,9 @@ describe("T_ALT_BLOCK.2 SPL token transfer to ALT-resolved blocklisted destinati
     });
     expect(v.decision).toBe("HOLD");
     expect(v.flags.rolesUnverified).toBe(true);
-    expect(v.findings.filter((f) => f.id === "blocklisted-recipient")).toHaveLength(0);
+    expect(
+      v.findings.filter((f) => f.id === "blocklisted-recipient"),
+    ).toHaveLength(0);
   });
 });
 
@@ -372,7 +383,9 @@ describe("T_ALT_BLOCK.3 SPL Approve delegate in ALT, resolved to blocklisted add
       resolvedAltTables: RESOLVED_GOOD,
       recipientBlocklist: blocklist,
     });
-    expect(v.findings.filter((f) => f.id === "blocklisted-recipient")).toHaveLength(0);
+    expect(
+      v.findings.filter((f) => f.id === "blocklisted-recipient"),
+    ).toHaveLength(0);
   });
 
   it("control: unresolved ALT → HOLD, no spurious blocklist REJECT", () => {
@@ -382,6 +395,8 @@ describe("T_ALT_BLOCK.3 SPL Approve delegate in ALT, resolved to blocklisted add
       recipientBlocklist: blocklist,
     });
     expect(v.decision).toBe("HOLD");
-    expect(v.findings.filter((f) => f.id === "blocklisted-recipient")).toHaveLength(0);
+    expect(
+      v.findings.filter((f) => f.id === "blocklisted-recipient"),
+    ).toHaveLength(0);
   });
 });

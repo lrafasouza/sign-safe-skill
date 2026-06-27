@@ -1,6 +1,6 @@
 ---
 name: sign-safe
-description: Signing-time safety gate for Solana transactions. Decodes an opaque base64 transaction/message (legacy + v0 with Address Lookup Tables), classifies its instructions against a danger-primitive catalog (37 native-program entries + 11-entry Anchor authority-mutation registry + 14-program DeFi/NFT clear-signing registry with verified per-instruction safe/dangerous discriminators), surfaces transfer recipients and screens them against an injectable drainer blocklist, computes the signer-perspective statically-declared outflow, and emits a SIGN / HOLD / REJECT verdict plus a machine-readable verdict.json for autonomous-agent gating. With an optional --rpc endpoint it resolves Address Lookup Tables, clear-signs Squads v4 VaultTransaction proposals (decodes the inner CPI instruction), and screens Token-2022 mint extensions (PermanentDelegate / TransferHook) -- all fail-closed, with the deterministic core staying fully offline. Two-tier by default (an unknown program writing a value account -> HOLD); --strict restores reject-on-unknown for institutional signing. Trigger phrases include "is this transaction safe to sign", "review this tx before I sign", "what does this base64 transaction do", "blind signing", "sign-review", "squads proposal review". Offline, deterministic, and tested (728 checks, 35 files), with a precision study on real mainnet traffic (0 false-REJECTs, 100% recall on authority-transfer drainers). Motivated by the April-2026 Drift blind-signing / durable-nonce incident.
+description: Signing-time safety gate for Solana transactions. Decodes an opaque base64 transaction/message (legacy + v0 with Address Lookup Tables), classifies its instructions against a danger-primitive catalog (37 native-program entries + bounded ATA/Memo recognition + 11-entry Anchor authority-mutation registry + 14-program DeFi/NFT clear-signing registry with verified per-instruction safe/dangerous discriminators), surfaces transfer recipients and screens them against an injectable drainer blocklist, computes the signer-perspective statically-declared outflow, and emits a SIGN / HOLD / REJECT verdict plus a machine-readable verdict.json for autonomous-agent gating. With an optional --rpc endpoint it resolves Address Lookup Tables, clear-signs Squads v4 VaultTransaction proposals (decodes the inner CPI instruction), and screens Token-2022 mint extensions (PermanentDelegate / TransferHook) -- all fail-closed, with the deterministic core staying fully offline. Two-tier by default (an unknown program writing a value account -> HOLD); --strict restores reject-on-unknown for institutional signing. Trigger phrases include "is this transaction safe to sign", "review this tx before I sign", "what does this base64 transaction do", "blind signing", "sign-review", "squads proposal review". Offline, deterministic, and tested (755 checks, 38 files), with a precision study on real mainnet traffic (36% SIGN / 64% HOLD / 0 false-REJECTs, 100% recall on authority-transfer drainers) plus a 37-fixture attack replay pack. Motivated by the April-2026 Drift blind-signing / durable-nonce incident.
 user-invocable: true
 ---
 
@@ -52,8 +52,13 @@ no RPC, no simulation. Same bytes in, same JSON out:
    their real writable/readonly role but are marked `addressVerified: false`
    (their concrete identity cannot be known without an on-chain lookup).
 3. **classify** (`src/classify.ts` + `src/registry.ts`) -- each instruction x the
-   danger catalog (`catalog/danger-primitives.json`, 35 entries) -> `Finding[]`,
-   matched by programId + discriminator. Plus a DeFi/NFT registry tier
+   danger catalog (`catalog/danger-primitives.json`, 37 entries) -> `Finding[]`,
+   matched by programId + discriminator. Plus bounded ATA/Memo auxiliary-program
+   recognition: ATA Create/CreateIdempotent are INFO only when the same verified
+   signer funds and owns the ATA; valid UTF-8 Memo is INFO; ATA creation for
+   distinct-signers/non-signer/unresolved wallets, ATA RecoverNested, unknown
+   ATA tags, and invalid Memo payloads remain HOLD.
+   Plus a DeFi/NFT registry tier
    (`catalog/program-registry.json`, **14 programs**: Metaplex Token Metadata,
    Metaplex Bubblegum, Jupiter v6, Orca Whirlpools, Raydium AMM v4, Pump.fun,
    Pump AMM/PumpSwap, Raydium CLMM, Raydium CPMM, Drift, Kamino klend, Meteora
@@ -115,8 +120,8 @@ zero inner instructions is treated as unverified (never SIGN an empty vault).
 
 ### Default (two-tier)
 
-In v0.4 the gate operates in a two-tier posture calibrated against the precision
-study (100 real benign mainnet transactions, 0 false-REJECTs):
+The gate operates in a two-tier posture calibrated against the precision study
+(100 real benign mainnet transactions, 0 false-REJECTs):
 
 - **Unknown program writing a value-bearing account → HOLD** (not REJECT). The
   program is flagged in `unknownPrograms` and the verdict is HOLD, not REJECT,

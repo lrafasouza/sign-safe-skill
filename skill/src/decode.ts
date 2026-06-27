@@ -73,7 +73,8 @@ export function base58Encode(bytes: Uint8Array): string {
 
 const BASE58_MAP: Record<string, number> = (() => {
   const m: Record<string, number> = {};
-  for (let i = 0; i < BASE58_ALPHABET.length; i++) m[BASE58_ALPHABET[i] as string] = i;
+  for (let i = 0; i < BASE58_ALPHABET.length; i++)
+    m[BASE58_ALPHABET[i] as string] = i;
   return m;
 })();
 
@@ -105,7 +106,8 @@ export function base58DecodeFixed(b58: string, size: number): Uint8Array {
   }
   const body = bytes.reverse();
   const total = body.length + leadingZeros;
-  if (total > size) throw new DecodeError(`base58 value larger than ${size} bytes`);
+  if (total > size)
+    throw new DecodeError(`base58 value larger than ${size} bytes`);
   const out = new Uint8Array(size);
   out.set(body, size - body.length);
   return out;
@@ -344,7 +346,11 @@ export function decodeMessageBytes(raw: Uint8Array): DecodedMessage {
       const nReadonly = reader.compactU16();
       const readonlyIndexes: number[] = [];
       for (let r = 0; r < nReadonly; r++) readonlyIndexes.push(reader.u8());
-      addressTableLookups.push({ accountKey, writableIndexes, readonlyIndexes });
+      addressTableLookups.push({
+        accountKey,
+        writableIndexes,
+        readonlyIndexes,
+      });
     }
   }
 
@@ -505,7 +511,12 @@ export function decodeInput(b64: string): {
   if (raw.length === 0) throw new DecodeError("empty input");
   try {
     const message = decodeMessageBytes(raw);
-    return { message, inputWasFullTransaction: false, signatureCount: 0, rawMessageBytes: raw };
+    return {
+      message,
+      inputWasFullTransaction: false,
+      signatureCount: 0,
+      rawMessageBytes: raw,
+    };
   } catch (messageErr) {
     const full = tryDecodeFullTransaction(raw);
     if (full !== null) {

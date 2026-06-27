@@ -1,7 +1,7 @@
 {
   "name": "sign-safe-skill",
   "version": "0.5.0",
-  "description": "v0.5 signing-time gate for Solana: decode any base64 tx offline, classify 37 danger primitives + Native Stake + a 14-program DeFi/NFT clear-signing registry, resolve ALTs and clear-sign Squads proposals with --rpc, optionally --simulate (innerInstructions + balance diff, escalate-only), and emit a SIGN/HOLD/REJECT verdict with requiresHumanReview + finding categories. Ships a programmatic API, a signTransaction/MWA gate, and an MCP server. Deterministic, fail-closed, zero-dependency core, 728 tests.",
+  "description": "v0.5 signing-time gate for Solana: decode any base64 tx offline, classify 37 danger primitives + Native Stake + bounded ATA/Memo recognition + a 14-program DeFi/NFT clear-signing registry, resolve ALTs and clear-sign Squads proposals with --rpc, optionally --simulate (innerInstructions + balance diff, escalate-only), and emit a SIGN/HOLD/REJECT verdict with requiresHumanReview + finding categories. Ships a programmatic API, a signTransaction/MWA gate, MCP outputSchema, JSON Schema, verify:all, and an attack replay pack. Deterministic, fail-closed, zero-dependency core, 755 tests.",
   "type": "module",
   "license": "MIT",
   "author": "Raffx <rafinha-lima1@live.com> (https://github.com/lrafasouza)",
@@ -51,11 +51,16 @@
   },
   "files": [
     "dist/",
+    "scripts/",
     "skill/SKILL.md",
     "skill/catalog/",
+    "skill/schema/",
     "skill/references/",
     "skill/rules/",
-    "commands/"
+    "commands/",
+    "SECURITY.md",
+    "SUBMISSION.md",
+    "RUBRIC_CHECKLIST.md"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
@@ -63,6 +68,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:fixtures": "node --import tsx skill/test/run.ts",
+    "demo:attack-pack": "npm run build && node scripts/demo-attack-pack.mjs",
+    "verify:all": "node scripts/verify-all.mjs",
     "gen-fixtures": "node --import tsx skill/fixtures/generate.ts",
     "gen-goldens": "node --import tsx skill/fixtures/gen-goldens.ts",
     "cli": "node --import tsx skill/src/cli.ts"

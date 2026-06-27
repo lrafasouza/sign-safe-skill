@@ -117,7 +117,11 @@ export function walkTlv(data: Uint8Array): TlvWalkResult {
   }
   if (data.length < TLV_START) {
     // Exactly at the account_type byte but no room for TLV entries.
-    return { accountType: readAccountType(data[ACCOUNT_TYPE_OFFSET]!), entries: [], dangerous: [] };
+    return {
+      accountType: readAccountType(data[ACCOUNT_TYPE_OFFSET]!),
+      entries: [],
+      dangerous: [],
+    };
   }
 
   const accountType = readAccountType(data[ACCOUNT_TYPE_OFFSET]!);

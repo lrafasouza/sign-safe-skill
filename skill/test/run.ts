@@ -23,7 +23,11 @@ import { deepStrictEqual } from "node:assert";
 import { VersionedMessage } from "@solana/web3.js";
 
 import { reviewBase64, verdictToJson } from "../src/verdict.ts";
-import { decodeBase64Message, decodeMessageBytes, base58Encode } from "../src/decode.ts";
+import {
+  decodeBase64Message,
+  decodeMessageBytes,
+  base58Encode,
+} from "../src/decode.ts";
 import { deriveRoles } from "../src/roles.ts";
 import { findBannedPhrase } from "../src/banned.ts";
 
@@ -52,7 +56,9 @@ function listFixtures(): string[] {
 // ---- 1. GOLDEN --------------------------------------------------------------
 
 function runGolden(names: string[]): void {
-  process.stdout.write("\n[1] Golden verdicts (our core vs committed verdict.json)\n");
+  process.stdout.write(
+    "\n[1] Golden verdicts (our core vs committed verdict.json)\n",
+  );
   for (const name of names) {
     const b64 = readFileSync(join(FIXTURES, `${name}.b64`), "utf8");
     const golden = JSON.parse(
@@ -71,7 +77,9 @@ function runGolden(names: string[]): void {
 // ---- 2. CROSS-CHECK against @solana/web3.js --------------------------------
 
 function runCrossCheck(names: string[]): void {
-  process.stdout.write("\n[2] Cross-validation (our parser vs @solana/web3.js)\n");
+  process.stdout.write(
+    "\n[2] Cross-validation (our parser vs @solana/web3.js)\n",
+  );
   // Cross-check EVERY fixture against the independent web3.js deserializer, not
   // a hand-picked subset. The parser and the fixture generator must agree with
   // a third implementation on every byte stream, so a regression in either one
@@ -88,7 +96,9 @@ function runCrossCheck(names: string[]): void {
     const mine = decodeBase64Message(b64);
 
     const w3Keys = w3.staticAccountKeys.map((k) => k.toBase58());
-    const w3Progs = w3.compiledInstructions.map((ci) => w3Keys[ci.programIdIndex]);
+    const w3Progs = w3.compiledInstructions.map(
+      (ci) => w3Keys[ci.programIdIndex],
+    );
     const myProgs = mine.instructions.map((i) => i.programId);
     const w3Version = w3.version === "legacy" ? "legacy" : w3.version;
 
@@ -100,9 +110,14 @@ function runCrossCheck(names: string[]): void {
         mine.addressTableLookups.length,
         w3.addressTableLookups.length,
       );
-      ok(`${name}: static keys + program ids + version + ALT count match web3.js`);
+      ok(
+        `${name}: static keys + program ids + version + ALT count match web3.js`,
+      );
     } catch (e) {
-      bad(`${name} cross-check`, (e as Error).message.split("\n").slice(0, 6).join(" "));
+      bad(
+        `${name} cross-check`,
+        (e as Error).message.split("\n").slice(0, 6).join(" "),
+      );
     }
   }
 }
@@ -122,12 +137,16 @@ function runCrossCheck(names: string[]): void {
  * flow stays green. kit IS a declared dependency, so CI exercises it.
  */
 async function runKitCrossCheck(names: string[]): Promise<void> {
-  process.stdout.write("\n[2b] Cross-validation (our parser vs @solana/kit, modern stack)\n");
+  process.stdout.write(
+    "\n[2b] Cross-validation (our parser vs @solana/kit, modern stack)\n",
+  );
   let kit: typeof import("@solana/kit");
   try {
     kit = await import("@solana/kit");
   } catch {
-    process.stdout.write("  SKIP  @solana/kit not installed (run `npm install` to enable)\n");
+    process.stdout.write(
+      "  SKIP  @solana/kit not installed (run `npm install` to enable)\n",
+    );
     return;
   }
   const decoder = kit.getCompiledTransactionMessageDecoder();
@@ -152,9 +171,14 @@ async function runKitCrossCheck(names: string[]): Promise<void> {
       deepStrictEqual(myProgs, kitProgs);
       deepStrictEqual(mine.version, km.version);
       deepStrictEqual(mine.addressTableLookups.length, kitAlts);
-      ok(`${name}: static keys + program ids + version + ALT count match @solana/kit`);
+      ok(
+        `${name}: static keys + program ids + version + ALT count match @solana/kit`,
+      );
     } catch (e) {
-      bad(`${name} kit cross-check`, (e as Error).message.split("\n").slice(0, 6).join(" "));
+      bad(
+        `${name} kit cross-check`,
+        (e as Error).message.split("\n").slice(0, 6).join(" "),
+      );
     }
   }
 }
@@ -162,7 +186,9 @@ async function runKitCrossCheck(names: string[]): Promise<void> {
 // ---- 3. DETERMINISM ---------------------------------------------------------
 
 function runDeterminism(names: string[]): void {
-  process.stdout.write("\n[3] Determinism (same bytes -> identical JSON, twice)\n");
+  process.stdout.write(
+    "\n[3] Determinism (same bytes -> identical JSON, twice)\n",
+  );
   for (const name of names) {
     const b64 = readFileSync(join(FIXTURES, `${name}.b64`), "utf8");
     const a = verdictToJson(reviewBase64(b64));
@@ -175,14 +201,25 @@ function runDeterminism(names: string[]): void {
 // ---- 4. FAIL-CLOSED ---------------------------------------------------------
 
 function runFailClosed(): void {
-  process.stdout.write("\n[4] Fail-closed (malformed input -> REJECT, never throws)\n");
+  process.stdout.write(
+    "\n[4] Fail-closed (malformed input -> REJECT, never throws)\n",
+  );
   const cases: Array<{ label: string; input: string }> = [
     { label: "empty string", input: "" },
     { label: "garbage non-base64", input: "!!!! not base64 @@@@" },
-    { label: "truncated legacy message", input: truncated("01_safe_sol_transfer") },
+    {
+      label: "truncated legacy message",
+      input: truncated("01_safe_sol_transfer"),
+    },
     { label: "truncated v0 message", input: truncated("09_v0_alt_unverified") },
-    { label: "random base64 bytes", input: Buffer.from([0xff, 0xfe, 0xfd, 0x10, 0x20]).toString("base64") },
-    { label: "trailing-byte tamper", input: tampered("02_setauthority_reject") },
+    {
+      label: "random base64 bytes",
+      input: Buffer.from([0xff, 0xfe, 0xfd, 0x10, 0x20]).toString("base64"),
+    },
+    {
+      label: "trailing-byte tamper",
+      input: tampered("02_setauthority_reject"),
+    },
   ];
   for (const c of cases) {
     let verdict;
@@ -204,14 +241,18 @@ function runFailClosed(): void {
 function truncated(name: string): string {
   const b64 = readFileSync(join(FIXTURES, `${name}.b64`), "utf8").trim();
   const raw = Buffer.from(b64, "base64");
-  return raw.subarray(0, Math.max(1, Math.floor(raw.length / 2))).toString("base64");
+  return raw
+    .subarray(0, Math.max(1, Math.floor(raw.length / 2)))
+    .toString("base64");
 }
 
 /** Append junk bytes so the parser sees trailing data and must reject. */
 function tampered(name: string): string {
   const b64 = readFileSync(join(FIXTURES, `${name}.b64`), "utf8").trim();
   const raw = Buffer.from(b64, "base64");
-  return Buffer.concat([raw, Buffer.from([0x00, 0x01, 0x02])]).toString("base64");
+  return Buffer.concat([raw, Buffer.from([0x00, 0x01, 0x02])]).toString(
+    "base64",
+  );
 }
 
 // ---- 5. BANNED PHRASES ------------------------------------------------------
@@ -223,7 +264,9 @@ function tampered(name: string): string {
  * "matches nothing".
  */
 function runBannedPhrases(names: string[]): void {
-  process.stdout.write("\n[5] Banned-phrase enforcement (no reassurance in any verdict)\n");
+  process.stdout.write(
+    "\n[5] Banned-phrase enforcement (no reassurance in any verdict)\n",
+  );
 
   // Matcher sanity: standalone reassurance words ARE caught...
   const positives = [
@@ -240,9 +283,18 @@ function runBannedPhrases(names: string[]): void {
     "recognized instructions within thresholds",
   ];
   let matcherOk = true;
-  for (const p of positives) if (findBannedPhrase(p) === null) { matcherOk = false; bad("banned matcher", `missed banned phrase in: ${p}`); }
-  for (const nstr of negatives) if (findBannedPhrase(nstr) !== null) { matcherOk = false; bad("banned matcher", `false positive on: ${nstr}`); }
-  if (matcherOk) ok("matcher catches reassurance words but not the skill name / compounds");
+  for (const p of positives)
+    if (findBannedPhrase(p) === null) {
+      matcherOk = false;
+      bad("banned matcher", `missed banned phrase in: ${p}`);
+    }
+  for (const nstr of negatives)
+    if (findBannedPhrase(nstr) !== null) {
+      matcherOk = false;
+      bad("banned matcher", `false positive on: ${nstr}`);
+    }
+  if (matcherOk)
+    ok("matcher catches reassurance words but not the skill name / compounds");
 
   for (const name of names) {
     const b64 = readFileSync(join(FIXTURES, `${name}.b64`), "utf8");
@@ -251,7 +303,8 @@ function runBannedPhrases(names: string[]): void {
       v.reason,
       ...v.findings.flatMap((f) => [f.label, f.detail, f.mapsToLoss]),
     ];
-    const hit = fields.map((t) => findBannedPhrase(t)).find((h) => h !== null) ?? null;
+    const hit =
+      fields.map((t) => findBannedPhrase(t)).find((h) => h !== null) ?? null;
     if (hit === null) ok(`${name}: no banned phrase in verdict prose`);
     else bad(`${name} banned phrase`, `found "${hit}"`);
   }
@@ -259,14 +312,23 @@ function runBannedPhrases(names: string[]): void {
 
 // ---- 6. BEHAVIORAL GUARDS (synthetic messages) ------------------------------
 
-function u8(n: number): number[] { return [n & 0xff]; }
-function u32le(n: number): number[] { return [n & 0xff, (n >>> 8) & 0xff, (n >>> 16) & 0xff, (n >>> 24) & 0xff]; }
+function u8(n: number): number[] {
+  return [n & 0xff];
+}
+function u32le(n: number): number[] {
+  return [n & 0xff, (n >>> 8) & 0xff, (n >>> 16) & 0xff, (n >>> 24) & 0xff];
+}
 function u64le(n: bigint): number[] {
   const out: number[] = [];
-  for (let i = 0; i < 8; i++) { out.push(Number(n & 0xffn)); n >>= 8n; }
+  for (let i = 0; i < 8; i++) {
+    out.push(Number(n & 0xffn));
+    n >>= 8n;
+  }
   return out;
 }
-function key(byte: number): number[] { return new Array(32).fill(byte); }
+function key(byte: number): number[] {
+  return new Array(32).fill(byte);
+}
 
 /**
  * Hand-build a raw legacy message. header = [numSigners, roSigned, roUnsigned];
@@ -328,10 +390,14 @@ function v0Bytes(
   return Uint8Array.from(out);
 }
 
-function b64(bytes: Uint8Array): string { return Buffer.from(bytes).toString("base64"); }
+function b64(bytes: Uint8Array): string {
+  return Buffer.from(bytes).toString("base64");
+}
 
 function runBehavioral(): void {
-  process.stdout.write("\n[6] Behavioral guards (decoder & verdict fail-closed correctness)\n");
+  process.stdout.write(
+    "\n[6] Behavioral guards (decoder & verdict fail-closed correctness)\n",
+  );
 
   // a) Outflow precision: a System Transfer above 2^53 lamports must survive as
   //    an EXACT decimal string (a JS number would round it).
@@ -347,12 +413,17 @@ function runBehavioral(): void {
     // (all-zero key -> base58 "111..."). The funding account (accts[0]) must be
     // the signer at index 0.
     const keyBytes = [1, 0, 2];
-    const bytes = legacyBytes([1, 0, 1], keyBytes, [{ prog: 1, accts: [0, 2], data }]);
+    const bytes = legacyBytes([1, 0, 1], keyBytes, [
+      { prog: 1, accts: [0, 2], data },
+    ]);
     const v = reviewBase64(b64(bytes));
     if (v.outflow.lamports === big.toString()) {
       ok(`outflow preserves ${big} lamports exactly as a string`);
     } else {
-      bad("outflow precision", `expected "${big}", got "${v.outflow.lamports}"`);
+      bad(
+        "outflow precision",
+        `expected "${big}", got "${v.outflow.lamports}"`,
+      );
     }
     if (v.decision === "HOLD" && v.outflow.exceedsLamportThreshold) {
       ok("large outflow above 2^53 still triggers HOLD");
@@ -383,10 +454,18 @@ function runBehavioral(): void {
     // index 2 which is ALT-sourced -> must be treated as writable.
     // DEFAULT mode: unknownProgramWritable → HOLD (not SIGN, not REJECT).
     // The fail-closed invariant: never SIGN when an unknown program writes.
-    if ((v.decision === "HOLD" || v.decision === "REJECT") && v.flags.unknownProgramPresent) {
-      ok("unknown program touching only an ALT-sourced account -> not SIGN (ALT-hiding closed, DEFAULT=HOLD)");
+    if (
+      (v.decision === "HOLD" || v.decision === "REJECT") &&
+      v.flags.unknownProgramPresent
+    ) {
+      ok(
+        "unknown program touching only an ALT-sourced account -> not SIGN (ALT-hiding closed, DEFAULT=HOLD)",
+      );
     } else {
-      bad("alt-hiding", `expected HOLD or REJECT (not SIGN), got ${v.decision} (flags=${JSON.stringify(v.flags)})`);
+      bad(
+        "alt-hiding",
+        `expected HOLD or REJECT (not SIGN), got ${v.decision} (flags=${JSON.stringify(v.flags)})`,
+      );
     }
   }
 
@@ -400,28 +479,50 @@ function runBehavioral(): void {
     // as one (byte[0] spoofing closed). u32 LE [2,1,0,0] = 258 != 2.
     const data = [2, 1, 0, 0, ...u64le(5_000_000_000n)]; // corrupt u32 tag
     const keyBytes = [0, 1, 2]; // system(0), signer(1), recipient(2)
-    const bytes = legacyBytes([1, 0, 1], keyBytes, [{ prog: 0, accts: [1, 2], data }]);
+    const bytes = legacyBytes([1, 0, 1], keyBytes, [
+      { prog: 0, accts: [1, 2], data },
+    ]);
     const v = reviewBase64(b64(bytes));
     // tag != 2 -> not a Transfer -> no large-transfer finding, outflow stays 0.
-    if (v.outflow.lamports === "0" && !v.findings.some((f) => f.id === "system-large-transfer")) {
-      ok("u32-tag programs reject crafted [tag,1,0,0] (byte[0] spoofing closed)");
+    if (
+      v.outflow.lamports === "0" &&
+      !v.findings.some((f) => f.id === "system-large-transfer")
+    ) {
+      ok(
+        "u32-tag programs reject crafted [tag,1,0,0] (byte[0] spoofing closed)",
+      );
     } else {
-      bad("u32-tag strictness", `crafted tag leaked: ${JSON.stringify(v.outflow)}`);
+      bad(
+        "u32-tag strictness",
+        `crafted tag leaked: ${JSON.stringify(v.outflow)}`,
+      );
     }
   }
 
   // d) durable-nonce-initialize detail distinguishes Initialize(6) vs Authorize(7).
   {
-    for (const [tag, wantVariant] of [[6, "InitializeNonceAccount"], [7, "AuthorizeNonceAccount"]] as const) {
+    for (const [tag, wantVariant] of [
+      [6, "InitializeNonceAccount"],
+      [7, "AuthorizeNonceAccount"],
+    ] as const) {
       const data = u32le(tag);
       const keyBytes = [0, 1, 2]; // system(0), signer(1), nonce-acct(2)
-      const bytes = legacyBytes([1, 0, 1], keyBytes, [{ prog: 0, accts: [2, 1], data }]);
+      const bytes = legacyBytes([1, 0, 1], keyBytes, [
+        { prog: 0, accts: [2, 1], data },
+      ]);
       const v = reviewBase64(b64(bytes));
       const f = v.findings.find((x) => x.id === "durable-nonce-initialize");
-      if (f && f.detail.includes(String(tag)) && f.detail.includes(wantVariant)) {
+      if (
+        f &&
+        f.detail.includes(String(tag)) &&
+        f.detail.includes(wantVariant)
+      ) {
         ok(`nonce tag ${tag} detail names ${wantVariant}`);
       } else {
-        bad("nonce variant detail", `tag ${tag}: ${f ? f.detail : "no finding"}`);
+        bad(
+          "nonce variant detail",
+          `tag ${tag}: ${f ? f.detail : "no finding"}`,
+        );
       }
     }
   }
@@ -451,9 +552,14 @@ function runBehavioral(): void {
     ];
     try {
       deepStrictEqual(altRoles, expected);
-      ok("multi-table ALT roles use canonical writable-then-readonly two-pass order");
+      ok(
+        "multi-table ALT roles use canonical writable-then-readonly two-pass order",
+      );
     } catch (e) {
-      bad("alt role order", (e as Error).message.split("\n").slice(0, 4).join(" "));
+      bad(
+        "alt role order",
+        (e as Error).message.split("\n").slice(0, 4).join(" "),
+      );
     }
   }
 
@@ -461,7 +567,11 @@ function runBehavioral(): void {
   //    decode error -> fail-closed REJECT (was previously accepted as a HOLD).
   {
     // legacy, 2 static keys, instruction references account index 200.
-    const bytes = legacyBytes([1, 0, 1], [1, 5], [{ prog: 1, accts: [200], data: [0] }]);
+    const bytes = legacyBytes(
+      [1, 0, 1],
+      [1, 5],
+      [{ prog: 1, accts: [200], data: [0] }],
+    );
     const v = reviewBase64(b64(bytes));
     if (v.decision === "REJECT" && v.flags.decodeFailed) {
       ok("out-of-range instruction account index -> REJECT (decodeFailed)");

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import packageJson from "../../package.json" with { type: "json" };
+import verdictSchema from "../schema/verdict.schema.json" with { type: "json" };
 import {
   MAX_MCP_LINE_LENGTH,
   MAX_MCP_TRANSACTION_BASE64_LENGTH,
@@ -48,7 +49,7 @@ describe("review_transaction MCP server", () => {
     expect(result.serverInfo.version).toBe(packageJson.version);
   });
 
-  it("lists only the review_transaction tool with its input schema", async () => {
+  it("lists only the review_transaction tool with input and output schemas", async () => {
     const response = await handleMcpRequest({
       jsonrpc: "2.0",
       id: "tools",
@@ -81,6 +82,7 @@ describe("review_transaction MCP server", () => {
             required: ["transaction"],
             additionalProperties: false,
           },
+          outputSchema: verdictSchema,
           annotations: {
             readOnlyHint: true,
           },

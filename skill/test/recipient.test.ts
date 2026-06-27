@@ -35,7 +35,7 @@ function base58ToBytes(b58: string): number[] {
   for (const ch of b58) {
     let carry = map[ch] ?? 0;
     for (let i = 0; i < digits.length; i++) {
-      carry += (digits[i]! * 58);
+      carry += digits[i]! * 58;
       digits[i] = carry & 0xff;
       carry >>= 8;
     }
@@ -93,7 +93,7 @@ function buildLegacyMessage(
 // (the signer at index 0, fill=0x01).
 // ─────────────────────────────────────────────────────────────────────────────
 const SIGNER_FILL = 0x01;
-const ATTACKER_FILL = 0xAA;
+const ATTACKER_FILL = 0xaa;
 
 describe("System Transfer — recipient surfacing", () => {
   it("surfaces the recipient base58 address in lamportTransfers", () => {
@@ -249,7 +249,7 @@ describe("ALT-sourced recipient — unresolved marker", () => {
       // ix: Transfer from idx0 (signer) to idx2 (ALT-loaded writable)
       [{ prog: 1, accts: [0, 2], data }],
       // LUT: table at fill 0xBB, writable=[0] (this becomes msg index 2), readonly=[]
-      [{ table: 0xBB, writable: [0], readonly: [] }],
+      [{ table: 0xbb, writable: [0], readonly: [] }],
     );
     const v = reviewBase64(toB64(bytes));
     // The ALT is present; lamportTransfers should mark the recipient as unresolved

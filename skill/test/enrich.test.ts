@@ -15,7 +15,11 @@
 
 import { describe, it, expect } from "vitest";
 import { enrichAlt, confirmMintExtensions } from "../src/enrich.ts";
-import type { AccountFetcher, AltResolution, MintExtensionInfo } from "../src/enrich.ts";
+import type {
+  AccountFetcher,
+  AltResolution,
+  MintExtensionInfo,
+} from "../src/enrich.ts";
 import type { AddressTableLookup } from "../src/types.ts";
 
 // ---------------------------------------------------------------------------
@@ -238,7 +242,10 @@ describe("E4: confirmMintExtensions with PermanentDelegate extension", () => {
       return null;
     };
 
-    const result: MintExtensionInfo = await confirmMintExtensions(mintAddr, frozenFetcher);
+    const result: MintExtensionInfo = await confirmMintExtensions(
+      mintAddr,
+      frozenFetcher,
+    );
 
     expect(result.mint).toBe(mintAddr);
     expect(result.isToken2022).toBe(true);
@@ -281,7 +288,9 @@ describe("E6: confirmMintExtensions throws on null fetcher response", () => {
   it("E6.1 null account → throws with mint address in message", async () => {
     const mintAddr = "MissingMintAddr111111111111111111111111111111";
     const nullFetcher: AccountFetcher = async () => null;
-    await expect(confirmMintExtensions(mintAddr, nullFetcher)).rejects.toThrow(mintAddr);
+    await expect(confirmMintExtensions(mintAddr, nullFetcher)).rejects.toThrow(
+      mintAddr,
+    );
   });
 });
 

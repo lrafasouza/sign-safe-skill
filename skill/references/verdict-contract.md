@@ -6,6 +6,10 @@ which is a **pure function** of the decoded message and a tunable context.
 
 ## `verdict.json` schema (`sign-safe/verdict@1`)
 
+The machine-readable JSON Schema lives at
+[`../schema/verdict.schema.json`](../schema/verdict.schema.json) and is also
+published by the MCP `review_transaction` tool as `outputSchema`.
+
 ```jsonc
 {
   "schema": "sign-safe/verdict@1",
@@ -19,9 +23,9 @@ which is a **pure function** of the decoded message and a tunable context.
       "id": "string",                 // catalog id, or synthetic id
       "label": "string",
       "severity": "INFO" | "HOLD" | "REJECT",
-      "category": "string",           // closed FindingCategory taxonomy
-      "instructionIndex": 0,
-      "programId": "base58",
+      "category": "string",           // current FindingCategory value; forward-compatible
+      "instructionIndex": 0,           // -1 for tx-level/contextual findings
+      "programId": "base58",          // or "" / "squads-inner:unresolved" sentinel
       "detail": "string",
       "mapsToLoss": "string"          // concrete real-world loss enabled
     }
@@ -47,7 +51,7 @@ which is a **pure function** of the decoded message and a tunable context.
 `requiresHumanReview` is the single agent-gating boolean: it is `false` only
 when `decision === "SIGN"`, and `true` when the decision is `HOLD` or `REJECT`.
 
-`Finding.category` is one of:
+Current `Finding.category` values are:
 
 `authority-change`, `ownership-transfer`, `value-outflow`,
 `delegate-approval`, `token-operation`, `token-2022-extension`,
@@ -58,14 +62,17 @@ when `decision === "SIGN"`, and `true` when the decision is `HOLD` or `REJECT`.
 
 The schema is additive within `sign-safe/verdict@1`. Consumers must ignore
 unknown object fields and tolerate unknown future `category` values rather than
-rejecting or mis-parsing the entire verdict. Security gates should continue to
-use `decision` or `requiresHumanReview` as the authoritative action signal.
+rejecting or mis-parsing the entire verdict. `Finding.instructionIndex = -1`
+marks a transaction-level or contextual finding; `Finding.programId` is usually
+base58, but can be `""` for no single program or `squads-inner:unresolved` for
+an ALT-sourced Squads inner program. Security gates should continue to use
+`decision` or `requiresHumanReview` as the authoritative action signal.
 
 ## Decision rules (deterministic, worst-severity wins)
 
-v0.4 operates in a **two-tier posture by default** (calibrated against 100 real
-benign mainnet transactions, 0 false-REJECTs). Pass `--strict` / `ctx.strict`
-to restore the aggressive single-tier behavior.
+The gate operates in a **two-tier posture by default** (calibrated against 100
+real benign mainnet transactions, 0 false-REJECTs). Pass `--strict` /
+`ctx.strict` to restore the aggressive single-tier behavior.
 
 Evaluated in this exact order:
 

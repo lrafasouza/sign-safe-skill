@@ -25,7 +25,7 @@ export type AccountFetcher = (
   pubkey: string,
 ) => Promise<{ data: Uint8Array } | null>;
 
-/** Closed taxonomy for machine-routing findings without parsing ids or prose. */
+/** Current taxonomy for machine-routing findings without parsing ids or prose. */
 export const FINDING_CATEGORIES = [
   "authority-change",
   "ownership-transfer",

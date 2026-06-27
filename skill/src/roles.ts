@@ -36,7 +36,12 @@
  * "unverified" bucket. The SIGN bar keys on `addressVerified` (R10/V7).
  */
 
-import type { AccountRole, DecodedMessage, RoleKind, VerdictContext } from "./types.ts";
+import type {
+  AccountRole,
+  DecodedMessage,
+  RoleKind,
+  VerdictContext,
+} from "./types.ts";
 
 /**
  * BPF Loader Upgradeable program id. When it is present in the combined account
@@ -167,8 +172,9 @@ export function deriveRoles(
   // demotion does NOT apply (R5b). Static keys are the only thing we can name;
   // an ALT account COULD be the loader, but offline we cannot know, so we only
   // consider static keys here (fail toward demotion = readonly, the safe side).
-  const upgradeableLoaderPresent =
-    msg.staticAccountKeys.includes(BPF_LOADER_UPGRADEABLE);
+  const upgradeableLoaderPresent = msg.staticAccountKeys.includes(
+    BPF_LOADER_UPGRADEABLE,
+  );
 
   const idxArgs = {
     numRequiredSignatures: S,
@@ -241,11 +247,19 @@ export function deriveRoles(
           : null;
       if (resolvedAddr !== null) {
         // Real address known: apply reserved-key demotion.
-        roles.push(buildRole(resolvedAddr, altCursor++, false, true, resolvedAddr));
+        roles.push(
+          buildRole(resolvedAddr, altCursor++, false, true, resolvedAddr),
+        );
       } else {
         // Address unknown offline: synthetic id, no demotion.
         roles.push(
-          buildRole(`alt:${lut.accountKey}#w${w}`, altCursor++, false, false, null),
+          buildRole(
+            `alt:${lut.accountKey}#w${w}`,
+            altCursor++,
+            false,
+            false,
+            null,
+          ),
         );
       }
     }
@@ -259,11 +273,19 @@ export function deriveRoles(
           : null;
       if (resolvedAddr !== null) {
         // Real address known: apply reserved-key demotion.
-        roles.push(buildRole(resolvedAddr, altCursor++, false, true, resolvedAddr));
+        roles.push(
+          buildRole(resolvedAddr, altCursor++, false, true, resolvedAddr),
+        );
       } else {
         // Address unknown offline: synthetic id, no demotion.
         roles.push(
-          buildRole(`alt:${lut.accountKey}#r${r}`, altCursor++, false, false, null),
+          buildRole(
+            `alt:${lut.accountKey}#r${r}`,
+            altCursor++,
+            false,
+            false,
+            null,
+          ),
         );
       }
     }

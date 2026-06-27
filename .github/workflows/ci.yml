@@ -30,14 +30,10 @@ jobs:
       - name: Install (clean)
         run: npm ci
 
-      # Type-check the whole project (strict, NodeNext) -- catches contract
-      # drift (e.g. the lamports number->string change) at compile time.
-      - name: Type-check
-        run: npm run build
-
-      # The deterministic test suite. Exit code is the gate.
-      - name: Test
-        run: npm test
+      # One-command evaluator gate: build, vitest suite, fixture runner,
+      # attack replay pack, package dry-run, and production dependency audit.
+      - name: Verify all
+        run: npm run verify:all
 
       # Determinism gate: the deterministic node runner's output must be
       # byte-for-byte identical across two runs (it prints no timing, unlike

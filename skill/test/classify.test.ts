@@ -23,7 +23,9 @@ const COMPUTE_BUDGET = "ComputeBudget111111111111111111111111111111";
 /** Decode a message and classify it with the runtime reserved set. */
 function review(bytes: Uint8Array) {
   const msg = decodeMessageBytes(bytes);
-  const roles = deriveRoles(msg, { reservedAccountKeys: RESERVED_ACCOUNT_KEYS });
+  const roles = deriveRoles(msg, {
+    reservedAccountKeys: RESERVED_ACCOUNT_KEYS,
+  });
   const cls = classify(msg, roles, DEFAULT_CONTEXT);
   const outflow = computeOutflow(msg, roles, DEFAULT_CONTEXT);
   return { msg, roles, cls, outflow };
@@ -34,7 +36,11 @@ function review(bytes: Uint8Array) {
  * given base58 program key, placed as a static key. Layout: idx0 fee payer,
  * idx1 program, plus extra accounts as needed. Returns the raw bytes.
  */
-function singleIxMessage(programId: string, data: number[], extraAccts = 0): Uint8Array {
+function singleIxMessage(
+  programId: string,
+  data: number[],
+  extraAccts = 0,
+): Uint8Array {
   const progKeyBytes = base58ToBytes(programId);
   const out: number[] = [];
   // header: 1 signer, 0 readonly-signed, (1 + extraAccts) readonly-unsigned.
@@ -142,9 +148,17 @@ describe("T6.4 / T6.5 / T6.6 TLV walk (C9/C10/V5)", () => {
     data[165] = 0x01;
     let o = 166;
     // entry 1: TransferHook (14), len 64
-    data[o++] = 14; data[o++] = 0; data[o++] = 64; data[o++] = 0; o += 64;
+    data[o++] = 14;
+    data[o++] = 0;
+    data[o++] = 64;
+    data[o++] = 0;
+    o += 64;
     // entry 2: TransferFeeConfig (1), len 8
-    data[o++] = 1; data[o++] = 0; data[o++] = 8; data[o++] = 0; o += 8;
+    data[o++] = 1;
+    data[o++] = 0;
+    data[o++] = 8;
+    data[o++] = 0;
+    o += 8;
     const res = walkTlv(data);
     const types = res.entries.map((e) => e.extensionType);
     expect(types).toContain(14);
@@ -153,21 +167,35 @@ describe("T6.4 / T6.5 / T6.6 TLV walk (C9/C10/V5)", () => {
   });
 
   it("a base-length (82 mint / 165 account) buffer has NO TLV and is not over-read (T6.6)", () => {
-    expect(walkTlv(new Uint8Array(82))).toEqual({ accountType: "none", entries: [], dangerous: [] });
-    expect(walkTlv(new Uint8Array(165))).toEqual({ accountType: "none", entries: [], dangerous: [] });
+    expect(walkTlv(new Uint8Array(82))).toEqual({
+      accountType: "none",
+      entries: [],
+      dangerous: [],
+    });
+    expect(walkTlv(new Uint8Array(165))).toEqual({
+      accountType: "none",
+      entries: [],
+      dangerous: [],
+    });
   });
 
   it("fail-closed on a TLV length that runs past the buffer", () => {
     const data = new Uint8Array(180);
     data[165] = 0x01;
-    data[166] = 12; data[167] = 0; data[168] = 0xff; data[169] = 0xff; // length 65535
+    data[166] = 12;
+    data[167] = 0;
+    data[168] = 0xff;
+    data[169] = 0xff; // length 65535
     expect(() => walkTlv(data)).toThrow(/runs past buffer/);
   });
 
   it("unknown ExtensionType is labelled unknown, not crashed (T6.7)", () => {
     const data = new Uint8Array(200);
     data[165] = 0x01;
-    data[166] = 99; data[167] = 0; data[168] = 0; data[169] = 0;
+    data[166] = 99;
+    data[167] = 0;
+    data[168] = 0;
+    data[169] = 0;
     const res = walkTlv(data);
     expect(res.entries[0]!.name).toContain("unknown(99)");
   });
@@ -182,23 +210,36 @@ describe("T7.2 loader Upgrade + new BPF/System primitives (C15/V4)", () => {
 
   it("BPF Loader Close (tag 5) is REJECT", () => {
     const { cls } = review(singleIxMessage(BPF_LOADER, u32le(5)));
-    expect(cls.findings.find((x) => x.id === "bpf-close")!.severity).toBe("REJECT");
+    expect(cls.findings.find((x) => x.id === "bpf-close")!.severity).toBe(
+      "REJECT",
+    );
   });
 
   it("BPF Loader SetAuthorityChecked (tag 7) is REJECT", () => {
     const { cls } = review(singleIxMessage(BPF_LOADER, u32le(7)));
-    expect(cls.findings.find((x) => x.id === "bpf-set-upgrade-authority-checked")!.severity).toBe("REJECT");
+    expect(
+      cls.findings.find((x) => x.id === "bpf-set-upgrade-authority-checked")!
+        .severity,
+    ).toBe("REJECT");
   });
 
   it("System Assign (tag 1) ownership change is REJECT", () => {
-    const { cls } = review(singleIxMessage("11111111111111111111111111111111", u32le(1)));
-    expect(cls.findings.find((x) => x.id === "system-assign")!.severity).toBe("REJECT");
+    const { cls } = review(
+      singleIxMessage("11111111111111111111111111111111", u32le(1)),
+    );
+    expect(cls.findings.find((x) => x.id === "system-assign")!.severity).toBe(
+      "REJECT",
+    );
     expect(cls.authorityOrOwnershipChange).toBe(true);
   });
 
   it("System AssignWithSeed (tag 10) is REJECT", () => {
-    const { cls } = review(singleIxMessage("11111111111111111111111111111111", u32le(10)));
-    expect(cls.findings.find((x) => x.id === "system-assign-with-seed")!.severity).toBe("REJECT");
+    const { cls } = review(
+      singleIxMessage("11111111111111111111111111111111", u32le(10)),
+    );
+    expect(
+      cls.findings.find((x) => x.id === "system-assign-with-seed")!.severity,
+    ).toBe("REJECT");
   });
 });
 
@@ -219,10 +260,14 @@ describe("T7.4 / T7.5 / T7.6 ComputeBudget benign + routing-by-program-id (C0/C1
   it("bytes `02 00 00 00 ...` are System Transfer under System but benign under ComputeBudget (C0)", () => {
     const transferData = [...u32le(2), ...u64le(2_000_000_000n)]; // 2 SOL
     // Under System: a large transfer above the 1 SOL threshold => HOLD finding.
-    const sys = review(singleIxMessage("11111111111111111111111111111111", transferData, 1));
+    const sys = review(
+      singleIxMessage("11111111111111111111111111111111", transferData, 1),
+    );
     // Need account[0] to be the signer for outflow; but classify large-transfer
     // is independent of outflow. Just assert the large-transfer finding fires.
-    expect(sys.cls.findings.some((f) => f.id === "system-large-transfer")).toBe(true);
+    expect(sys.cls.findings.some((f) => f.id === "system-large-transfer")).toBe(
+      true,
+    );
 
     // Under ComputeBudget: the SAME bytes are a borsh u8 tag 2 (SetCULimit) and
     // must NOT be read as a u32-LE System Transfer. No danger finding.
@@ -232,8 +277,12 @@ describe("T7.4 / T7.5 / T7.6 ComputeBudget benign + routing-by-program-id (C0/C1
 
   it("a crafted [2,1,0,0] under System is NOT a clean Transfer(2) (u32 strictness)", () => {
     const data = [2, 1, 0, 0, ...u64le(5_000_000_000n)];
-    const { cls, outflow } = review(singleIxMessage("11111111111111111111111111111111", data, 1));
-    expect(cls.findings.some((f) => f.id === "system-large-transfer")).toBe(false);
+    const { cls, outflow } = review(
+      singleIxMessage("11111111111111111111111111111111", data, 1),
+    );
+    expect(cls.findings.some((f) => f.id === "system-large-transfer")).toBe(
+      false,
+    );
     expect(outflow.lamports).toBe("0");
   });
 });

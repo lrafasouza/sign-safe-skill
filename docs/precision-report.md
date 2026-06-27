@@ -1,20 +1,20 @@
 # Sign-Safe Precision Report
 
-Generated: 2026-06-25T13:49:34.220Z
+Generated: 2026-06-26T18:17:37.520Z
 Pinned slots: 428290000, 428289500
 
 ## 1. Signing Precision and Review Rate
 
 Total benign fixtures: **100**
-Benign SIGN precision: **100.0%** (33/33 SIGN decisions across this corpus were benign).
-Benign HOLD rate: **67.0%** (67/100).
+Benign SIGN precision: **100.0%** (36/36 SIGN decisions across this corpus were benign).
+Benign HOLD rate: **64.0%** (64/100).
 
 These are corpus measurements, not population-wide guarantees. A zero false-REJECT count is useful calibration evidence, but zero false positives is not the optimization target for a fail-closed signing gate; the HOLD rate shows the review cost directly.
 
 | Decision | Count | Pct |
 |----------|-------|-----|
-| SIGN     |    33 | 33.0% |
-| HOLD     |    67 | 67.0% |
+| SIGN     |    36 | 36.0% |
+| HOLD     |    64 | 64.0% |
 | REJECT   |     0 | 0.0% |
 
 ### Category Breakdown (benign)
@@ -31,23 +31,21 @@ These are corpus measurements, not population-wide guarantees. A zero false-REJE
 
 ## 3. Benign HOLD Analysis
 
-Total benign HOLDs: **67**
+Total benign HOLDs: **64**
 
 | Category | Count | Explanation |
 |----------|-------|-------------|
 | Has unresolved ALT | 1 | ALT accounts could not be resolved (fail-closed HOLD) |
 | Has resolved ALT   | 28 | ALT resolved but other HOLD finding present |
-| No ALT (other)     | 38 | HOLD from non-ALT finding (large transfer, nonce, etc.) |
+| No ALT (other)     | 35 | HOLD from non-ALT finding (large transfer, nonce, etc.) |
 
 ### Benign HOLDs (non-ALT causes) — review findings:
 
 - **428289500-0.json** (slot=428289500): programIds=[T1pyyaTNZsKv2WcRAB8oVnk93mLJw2XzjtVYqCsaHqt] findings=[]
 - **428289500-11.json** (slot=428289500): programIds=[2DNbzPochEcyCcWMbL4d9S3u9QqQEj5bbe6cSZFvKsbh, ComputeBudget111111111111111111111111111111] findings=[]
 - **428289500-12.json** (slot=428289500): programIds=[9H6tua7jkLhdm3w8BvgpTn5LZNU7g4ZynDmCiNN3q6Rp, ComputeBudget111111111111111111111111111111] findings=[]
-- **428289500-15.json** (slot=428289500): programIds=[TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb, MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr] findings=[]
 - **428289500-19.json** (slot=428289500): programIds=[BiSoNHVpsVZW2F7rx2eQ59yQwKxzU5NvBcmKshCSUypi, ComputeBudget111111111111111111111111111111] findings=[]
 - **428289500-20.json** (slot=428289500): programIds=[9H6tua7jkLhdm3w8BvgpTn5LZNU7g4ZynDmCiNN3q6Rp, ComputeBudget111111111111111111111111111111] findings=[]
-- **428289500-22.json** (slot=428289500): programIds=[ComputeBudget111111111111111111111111111111, MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr, TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA] findings=[]
 - **428289500-27.json** (slot=428289500): programIds=[BiSoNHVpsVZW2F7rx2eQ59yQwKxzU5NvBcmKshCSUypi, ComputeBudget111111111111111111111111111111] findings=[]
 - **428289500-28.json** (slot=428289500): programIds=[11111111111111111111111111111111, dijkbkCAKfFTCxQg3u1pg82gVU1jJGHBBRcteD11mBu, ComputeBudget111111111111111111111111111111] findings=[durable-nonce-advance]
 - **428289500-3.json** (slot=428289500): programIds=[EtrnLzgbS7nMMy5fbD42kXiUzGg8XQzJ972Xtk1cjWih, ComputeBudget111111111111111111111111111111, 11111111111111111111111111111111] findings=[]
@@ -58,11 +56,10 @@ Total benign HOLDs: **67**
 - **428289500-43.json** (slot=428289500): programIds=[ComputeBudget111111111111111111111111111111, 11111111111111111111111111111111] findings=[system-large-transfer]
 - **428289500-44.json** (slot=428289500): programIds=[9H6tua7jkLhdm3w8BvgpTn5LZNU7g4ZynDmCiNN3q6Rp, ComputeBudget111111111111111111111111111111] findings=[]
 - **428289500-46.json** (slot=428289500): programIds=[ComputeBudget111111111111111111111111111111, ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL, 11111111111111111111111111111111, TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA, pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA] findings=[spl-close-account]
-- **428289500-7.json** (slot=428289500): programIds=[TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb, MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr] findings=[]
 - **428290000-0.json** (slot=428290000): programIds=[ComputeBudget111111111111111111111111111111, A5X6pdbNATpoPYm1Qk5igf31zkiz2UT44uMuDsbsqTAp] findings=[]
 - **428290000-1.json** (slot=428290000): programIds=[ComputeBudget111111111111111111111111111111, ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL, 11111111111111111111111111111111, TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA, pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA] findings=[registry-pump-amm-unknown-instruction, spl-close-account]
 - **428290000-12.json** (slot=428290000): programIds=[ComputeBudget111111111111111111111111111111, ojh19ojaKduoJZuaJADhcVGp4xt1TcdAvZmpVsCorch] findings=[]
-- **428290000-15.json** (slot=428290000): programIds=[ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL, TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb] findings=[]
+- **428290000-15.json** (slot=428290000): programIds=[ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL, TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb] findings=[ata-create-idempotent-external-wallet]
 - **428290000-2.json** (slot=428290000): programIds=[T1pyyaTNZsKv2WcRAB8oVnk93mLJw2XzjtVYqCsaHqt] findings=[]
 - **428290000-20.json** (slot=428290000): programIds=[ComputeBudget111111111111111111111111111111, ojh19ojaKduoJZuaJADhcVGp4xt1TcdAvZmpVsCorch] findings=[]
 - **428290000-23.json** (slot=428290000): programIds=[ComputeBudget111111111111111111111111111111, TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb] findings=[token2022-close-account]
@@ -77,7 +74,7 @@ Total benign HOLDs: **67**
 - **428290000-46.json** (slot=428290000): programIds=[ComputeBudget111111111111111111111111111111, ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL, cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG, TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA] findings=[]
 - **428290000-47.json** (slot=428290000): programIds=[DLv3NggMiSaef97YCkew5xKUHDh13tVGZ7tydt3ZeAru] findings=[]
 - **428290000-49.json** (slot=428290000): programIds=[ComputeBudget111111111111111111111111111111, TessVdML9pBGgG9yGks7o4HewRaXVAMuoVj4x83GLQH] findings=[]
-- **428290000-7.json** (slot=428290000): programIds=[ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL, TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb] findings=[]
+- **428290000-7.json** (slot=428290000): programIds=[ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL, TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb] findings=[ata-create-idempotent-external-wallet]
 - **428290000-8.json** (slot=428290000): programIds=[ComputeBudget111111111111111111111111111111, QuaNtZsgYRe5Z9Bk4LZ4cTD9tbkVoyCNf1R2BN9bBDv] findings=[]
 
 ## 4. ALT Sub-test (A2 Win: Resolution vs Empty Fetcher)
@@ -160,12 +157,12 @@ All curated malicious fixtures were caught (HOLD or REJECT). No fixture in this 
 | Metric | Value |
 |--------|-------|
 | Benign corpus size | 100 transactions |
-| Benign SIGN precision | 100.0% (33/33) |
-| Benign SIGN rate | 33.0% |
+| Benign SIGN precision | 100.0% (36/36) |
+| Benign SIGN rate | 36.0% |
 | Benign false-REJECT | 0 |
-| Benign HOLD rate | 67.0% |
+| Benign HOLD rate | 64.0% |
 | HOLDs with unresolved ALT | 1 |
-| HOLDs without ALT | 38 |
+| HOLDs without ALT | 35 |
 | Malicious corpus size | 37 fixtures |
 | Curated malicious-set recall | 100.0% (37/37) |
 | ALT sub-test wins | 1/5 |

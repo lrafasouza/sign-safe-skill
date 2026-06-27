@@ -15,15 +15,20 @@ describe("A5c: CLI parseArgs with --rpc and --vault-pda", () => {
   });
 
   it("C2 parses --vault-pda <pubkey>", () => {
-    const result = parseArgs(["--vault-pda", "SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf"]);
+    const result = parseArgs([
+      "--vault-pda",
+      "SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf",
+    ]);
     expect(result.vaultPda).toBe("SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf");
   });
 
   it("C3 parses --rpc and --vault-pda together with a file argument", () => {
     const result = parseArgs([
       "msg.b64",
-      "--rpc", "https://devnet.example.com",
-      "--vault-pda", "11111111111111111111111111111112",
+      "--rpc",
+      "https://devnet.example.com",
+      "--vault-pda",
+      "11111111111111111111111111111112",
     ]);
     expect(result.file).toBe("msg.b64");
     expect(result.rpcUrl).toBe("https://devnet.example.com");
@@ -43,9 +48,11 @@ describe("A5c: CLI parseArgs with --rpc and --vault-pda", () => {
   it("C6 existing --threshold and --json flags still parse correctly alongside new flags", () => {
     const result = parseArgs([
       "msg.b64",
-      "--threshold", "5000000000",
+      "--threshold",
+      "5000000000",
       "--json",
-      "--rpc", "https://api.mainnet-beta.solana.com",
+      "--rpc",
+      "https://api.mainnet-beta.solana.com",
     ]);
     expect(result.threshold).toBe(5_000_000_000);
     expect(result.jsonOnly).toBe(true);
@@ -72,7 +79,11 @@ describe("C_STRICT: parseArgs --strict flag", () => {
   });
 
   it("C10 --strict with --rpc composes correctly", () => {
-    const result = parseArgs(["--strict", "--rpc", "https://mainnet.example.com"]);
+    const result = parseArgs([
+      "--strict",
+      "--rpc",
+      "https://mainnet.example.com",
+    ]);
     expect(result.strict).toBe(true);
     expect(result.rpcUrl).toBe("https://mainnet.example.com");
   });
@@ -87,8 +98,10 @@ describe("C_STRICT: parseArgs --strict flag", () => {
     const result = parseArgs([
       "msg.b64",
       "--strict",
-      "--rpc", "https://api.devnet.solana.com",
-      "--threshold", "500000000",
+      "--rpc",
+      "https://api.devnet.solana.com",
+      "--threshold",
+      "500000000",
     ]);
     expect(result.file).toBe("msg.b64");
     expect(result.strict).toBe(true);
@@ -97,7 +110,11 @@ describe("C_STRICT: parseArgs --strict flag", () => {
   });
 
   it("C13 strict is undefined when --strict is not provided", () => {
-    const result = parseArgs(["msg.b64", "--rpc", "https://api.mainnet-beta.solana.com"]);
+    const result = parseArgs([
+      "msg.b64",
+      "--rpc",
+      "https://api.mainnet-beta.solana.com",
+    ]);
     expect(result.strict).toBeUndefined();
   });
 });
@@ -112,7 +129,11 @@ describe("v0.5 C_SIMULATE: parseArgs --simulate flag", () => {
   });
 
   it("C15 --simulate with --rpc parses correctly", () => {
-    const result = parseArgs(["--simulate", "--rpc", "https://api.mainnet-beta.solana.com"]);
+    const result = parseArgs([
+      "--simulate",
+      "--rpc",
+      "https://api.mainnet-beta.solana.com",
+    ]);
     expect(result.simulate).toBe(true);
     expect(result.rpcUrl).toBe("https://api.mainnet-beta.solana.com");
   });
@@ -125,10 +146,12 @@ describe("v0.5 C_SIMULATE: parseArgs --simulate flag", () => {
   it("C17 --simulate with --rpc and other flags composes correctly", () => {
     const result = parseArgs([
       "msg.b64",
-      "--rpc", "https://api.mainnet-beta.solana.com",
+      "--rpc",
+      "https://api.mainnet-beta.solana.com",
       "--simulate",
       "--strict",
-      "--threshold", "2000000000",
+      "--threshold",
+      "2000000000",
     ]);
     expect(result.simulate).toBe(true);
     expect(result.strict).toBe(true);
