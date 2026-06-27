@@ -20,3 +20,7 @@ id_rsa*
 .idea/
 .vscode/
 *.log
+
+# Private bounty/social drafts
+BOUNTY_SUBMISSION_DRAFT.md
+X_POST_DRAFT.md
