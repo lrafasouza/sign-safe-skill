@@ -7,7 +7,7 @@
 - Bounty PR: https://github.com/solanabr/skill-bounty/pull/4
 - Solana AI Kit PR: https://github.com/solanabr/solana-ai-kit/pull/34
 - Version: `0.5.0`
-- Local validation target: 755 tests across 38 files
+- Local validation target: 758 tests across 38 files
 - Precision report: 36% SIGN / 64% HOLD / 0% false-REJECT on the frozen benign corpus
 - Curated malicious corpus: 37/37 held or rejected before signing
 - Runtime dependency posture: zero runtime dependencies in the deterministic core

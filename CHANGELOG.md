@@ -49,7 +49,7 @@ fail-closed (escalate-only); all new analysis only adds or raises severity.
   simulation → SIGN, a benign simulation overwriting a prior simulation HOLD (downgrade),
   and large unattributed simulated SOL loss → SIGN.
 
-755 tests across 38 files; `tsc` clean; `npm run build` produces `dist/`.
+758 tests across 38 files; `tsc` clean; `npm run build` produces `dist/`.
 
 ## [0.4.0] - 2026-06-23
 

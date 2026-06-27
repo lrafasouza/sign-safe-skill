@@ -11,6 +11,36 @@ REJECT** verdict plus a machine-readable `verdict.json` for autonomous-agent gat
 > -- core Solana development (programs, frontend, testing, security). sign-safe
 > layers a signing-time gate on top; it does not duplicate the core skill.
 
+## Judge in 3 minutes
+
+sign-safe answers one question: **what does this Solana transaction do to me
+before I sign it?**
+
+```bash
+git clone https://github.com/lrafasouza/sign-safe-skill sign-safe
+cd sign-safe
+npm ci
+npm run verify:all
+npm run demo:attack-pack
+```
+
+Expected result:
+
+- `npm test` reports **758 passed / 38 files**.
+- The deterministic fixture runner reports **65 PASS / 0 FAIL**.
+- The attack replay reports **37/37 held or rejected before signing**.
+- `False SIGN: 0`.
+- Package dry-run and production dependency audit pass.
+
+How to read the verdict:
+
+- **REJECT**: known dangerous shape or untrusted bytes; do not sign.
+- **HOLD**: unclear, policy-sensitive, or human-review case; do not auto-sign.
+- **SIGN**: recognized benign shape under the current static policy. **SIGN is not a universal safety guarantee**; recipient, amount, business intent, and external policy still matter.
+
+For a shorter walkthrough, see [DEMO.md](DEMO.md). For a compact proof transcript,
+see [docs/evaluator-transcript.md](docs/evaluator-transcript.md).
+
 ## What's new in v0.5
 
 - **Transaction simulation** (`--simulate`, escalate-only): parses `simulateTransaction`
@@ -34,7 +64,7 @@ REJECT** verdict plus a machine-readable `verdict.json` for autonomous-agent gat
 - **More coverage**: durable-nonce fee-payer asymmetry (the Drift council shape), the
   Lighthouse guard as an INFO-only positive signal, and Marginfi v2 + Squads v4 in
   the registry.
-- **755 tests across 38 files** (up from 607/29 in v0.4), including a 13-case adversarial
+- **758 tests across 38 files** (up from 607/29 in v0.4), including a 13-case adversarial
   threat sweep and a 37-fixture attack replay pack; the precision report now leads with
   benign SIGN precision + HOLD rate (`36% SIGN / 64% HOLD / 0% false-REJECT` on the
   frozen benign corpus).
@@ -196,7 +226,7 @@ git clone https://github.com/lrafasouza/sign-safe-skill sign-safe
 cd sign-safe
 npm install
 npm run gen-fixtures   # (re)generate the 10 synthetic .b64 fixtures from @solana/web3.js
-npm test               # 755 tests across 38 files
+npm test               # 758 tests across 38 files
 npm run verify:all     # build + tests + fixtures + attack replay + pack + production audit
 npm run demo:attack-pack
 ```
@@ -561,7 +591,7 @@ a blob *is*; you still confirm it is what you *meant*.
 
 Most skills are prose. This one ships a small, **pure-function** TypeScript core
 with a deterministic, fully **offline** test suite (`vitest` + `fast-check`),
-**755 tests across 38 files** (`npm test`):
+**758 tests across 38 files** (`npm test`):
 
 - **10 synthetic golden fixtures** -- serialized messages built with
   `@solana/web3.js`, decoded by *our own* parser, verdicts deep-equal-checked
@@ -659,12 +689,12 @@ $ npm test            # vitest run -- the full suite (exits nonzero on any fail)
  ✓ skill/test/precision.test.ts                  (11 tests)   offline precision harness: 100 benign + 37 malicious, confusion matrix
  ✓ skill/test/schema.test.ts                     (14 tests)   verdict JSON Schema + MCP outputSchema contract
  ✓ skill/test/auxiliary-programs.test.ts         ( 7 tests)   ATA/Memo bounded recognition; external ATA/RecoverNested/invalid memo still HOLD
- ✓ skill/test/submission-assets.test.ts          ( 6 tests)   SECURITY/SUBMISSION/RUBRIC docs + attack replay script proof
+ ✓ skill/test/submission-assets.test.ts          ( 9 tests)   SECURITY/SUBMISSION/RUBRIC docs + evaluator demo/transcript/example proof
  ✓ skill/test/extract-vault-address.test.ts      ( 4 tests)   auto-extract Squads vault PDA from account index 2
  ... (additional files)
 
  Test Files  38 passed (38)
-      Tests  755 passed (755)
+      Tests  758 passed (758)
 ```
 
 There are two entry points: `npm test` (vitest, the full suite) and
@@ -703,16 +733,16 @@ commands and no network access at test time:
 ```bash
 npm install            # deps for generation + cross-validation only (no postinstall, no curl)
 npm run gen-fixtures   # rebuild the 10 synthetic .b64 from @solana/web3.js (deterministic, byte-identical)
-npm test               # 755 checks, 38 files, fully offline; exits nonzero on any failure
+npm test               # 758 checks, 38 files, fully offline; exits nonzero on any failure
 npm run demo:attack-pack # replay 37 curated malicious fixtures; fails on any SIGN
 npm run verify:all     # build + tests + fixtures + attack replay + pack dry-run + production audit
 ```
 
-Expected: `Tests  755 passed (755)`, and `git status` clean afterward (the
+Expected: `Tests  758 passed (758)`, and `git status` clean afterward (the
 deterministic generator reproduces the committed `.b64` byte-for-byte). To also
 confirm the type contract: `npx tsc --noEmit` (exit 0).
 
-What those 755 checks actually validate:
+What those 758 checks actually validate:
 
 | Coverage area | Where | What it proves |
 |---|---|---|
@@ -732,7 +762,7 @@ What those 755 checks actually validate:
 | **Recipient surfacing** | `recipient.test.ts` | System Transfer surfaces recipient base58 address, `outboundToNonSigner` true when non-signer, SIGN reason names destination; SPL Transfer, TransferChecked, ALT-sourced recipient marked unresolved. |
 | **Auxiliary native programs** | `auxiliary-programs.test.ts` | ATA Create/CreateIdempotent is INFO only when the same verified signer funds and owns it; valid UTF-8 Memo is INFO; ATA creation for distinct-signers/non-signer/unresolved wallets, RecoverNested, unknown ATA tags, and invalid Memo payloads remain HOLD. |
 | **Verdict schema + MCP contract** | `schema.test.ts`, `mcp.test.ts` | Every fixture verdict validates against `skill/schema/verdict.schema.json`; the MCP `review_transaction` tool advertises that schema as `outputSchema`. |
-| **Submission proof assets** | `submission-assets.test.ts` | `SECURITY.md`, `SUBMISSION.md`, `RUBRIC_CHECKLIST.md`, `verify:all`, and `demo:attack-pack` stay present and consistent with current evidence. |
+| **Submission proof assets** | `submission-assets.test.ts` | `SECURITY.md`, `SUBMISSION.md`, `RUBRIC_CHECKLIST.md`, `DEMO.md`, `docs/evaluator-transcript.md`, `examples/guarded-sign-reject.ts`, `verify:all`, and `demo:attack-pack` stay present and consistent with current evidence. |
 | **Blocklist + policy** | `reputation.test.ts` | Blocklist REJECT on SOL transfer to known-bad address; SPL Approve delegate blocklist; `holdOutboundTransfers` escalation; `reconRecipients` injectable. |
 | **ALT decoding + resolution** | `alt.test.ts` | Bincode layout decoder, `resolvedAltTables` channel pass-through, fail-closed on malformed account bytes, partial-table index out-of-range. |
 | **RPC fetcher** | `rpc.test.ts` | JSON-RPC `getAccountInfo` injector; frozen stub; offline-identical behavior when no `--rpc`. |
