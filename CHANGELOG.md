@@ -3,6 +3,22 @@
 All notable changes to sign-safe are documented here.
 Format: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.1] - 2026-06-29
+
+Verification depth + corpus growth. No deterministic-core behavior change.
+
+### Added
+
+- **IDL-verified clear-signing registry:** every anchor-8 discriminator across Jupiter / Raydium (CLMM+CPMM) / Orca / Kamino / Drift cross-checked against the canonical on-chain Anchor IDLs (69/69 ixNames verified, snake<->camel aware). Reproducible audit `skill/corpus/verify-idls.ts` + frozen `skill/catalog/idl-sources.json`. (`registry-discriminators.test.ts` already locks discHex == sha256("global:"+ixName).)
+- **Mutation testing (Stryker):** `npm run mutation` on `classify.ts`; honest score in `docs/mutation-report.md` — 58.4% total, 70.2% behavioral excluding cosmetic string-literal mutants; logic survivors documented as a coverage target. Complements the fuzz fail-closed proof.
+- CLI demo image for the post/README.
+
+### Changed
+
+- **Benign precision corpus 100 -> 500** real mainnet transactions (frozen; `capture-benign.ts` is now idempotent -- re-runs never mutate frozen fixtures, manifest built from disk). Recomputed precision over 500: **18.4% SIGN / 81.6% HOLD / 0 false-REJECT** (92/92 SIGN precision). The larger, more diverse sample is more conservative; the fail-closed 0-false-REJECT property holds.
+
+800 tests across 42 files; 80-fixture runner ALL GREEN; 37/37 synthetic + 2/2 real attack replay; False SIGN 0; verify:all green.
+
 ## [0.6.0] - 2026-06-29
 
 Real-attack evidence, npm packaging, deeper adversarial coverage, and verifiable test robustness. The deterministic core stays pure/offline/fail-closed. (Clear-signing registry expansion, benign-corpus growth to 500, Stryker mutation testing, and a CLI GIF are planned for v0.6.1.)
