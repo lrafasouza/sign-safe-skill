@@ -94,7 +94,7 @@ see [docs/evaluator-transcript.md](docs/evaluator-transcript.md).
 - **Native Stake program**: Authorize / AuthorizeChecked / AuthorizeWithSeed → REJECT
   (authority transfer); Withdraw → HOLD (REJECT under `--strict`).
 - **Programmatic API + adapters**: import `reviewBase64` / `reviewWithEnrichment` directly,
-  or pass a web3.js / `@solana/kit` transaction via `sign-safe-skill/adapters`. Zero-dependency
+  or pass a web3.js / `@solana/kit` transaction via `sign-safe/adapters`. Zero-dependency
   core; web3.js + kit are optional peers.
 - **Signing gate + MCP**: `guardedSignTransaction` / MWA wrapper throws on REJECT *before*
   the key is touched; a zero-dep `sign-safe-mcp` stdio server exposes `review_transaction` to agents.
