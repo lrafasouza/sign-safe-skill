@@ -6,10 +6,11 @@
 - Repository: https://github.com/lrafasouza/sign-safe-skill
 - Bounty PR: https://github.com/solanabr/skill-bounty/pull/4
 - Solana AI Kit PR: https://github.com/solanabr/solana-ai-kit/pull/34
-- Version: `0.5.1`
-- Local validation target: 777 tests across 40 files
+- Version: `0.6.0`
+- Local validation target: 800 tests across 42 files
 - Precision report: 36% SIGN / 64% HOLD / 0% false-REJECT on the frozen benign corpus
 - Curated malicious corpus: 37/37 held or rejected before signing
+- Real on-chain attacks: 2 publicly-documented Drift (Apr 2026) exploit transactions held (HOLD) — see docs/real-attacks.md
 - Runtime dependency posture: zero runtime dependencies in the deterministic core
 - Reproducible sample verdicts (verbatim CLI output): `docs/sample-verdicts/` (SIGN / HOLD / REJECT / Squads-HOLD)
 - Adversarial RPC test: findings derived from the signed bytes cannot be removed or downgraded by RPC enrichment (`skill/test/rpc-adversarial.test.ts`)
@@ -84,7 +85,7 @@ Compare against the committed verbatim outputs in `docs/sample-verdicts/`. For t
 ## Suggested Judge Flow
 
 1. Read the **Evaluator Quickstart** at the top of the README (3-minute framing + commands).
-2. Run `npm run verify:all` (777 tests / 40 files, fixtures, attack replay, pack, audit).
+2. Run `npm run verify:all` (800 tests / 42 files, fixtures, attack replay, pack, audit).
 3. Run `npm run demo:attack-pack` (37/37 held or rejected, False SIGN: 0).
 4. Run a per-transaction verdict via `npm run cli -- <fixture> --json` and compare to `docs/sample-verdicts/`.
 5. Read `DEMO.md` Scenario 4 (Squads hidden-authority HOLD) and `docs/failure-recovery.md` (fail-closed behavior).

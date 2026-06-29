@@ -26,8 +26,8 @@ npm run demo:attack-pack
 
 Expected result:
 
-- `npm test` reports **777 passed / 40 files**.
-- The deterministic fixture runner reports **70 PASS / 0 FAIL**.
+- `npm test` reports **800 passed / 42 files**.
+- The deterministic fixture runner reports **80 PASS / 0 FAIL**.
 - The attack replay reports **37/37 held or rejected before signing**.
 - `False SIGN: 0`.
 - Package dry-run and production dependency audit pass.
@@ -108,7 +108,7 @@ see [docs/evaluator-transcript.md](docs/evaluator-transcript.md).
 - **More coverage**: durable-nonce fee-payer asymmetry (the Drift council shape), the
   Lighthouse guard as an INFO-only positive signal, and Marginfi v2 + Squads v4 in
   the registry.
-- **777 tests across 40 files** (up from 607/29 in v0.4), including a 13-case adversarial
+- **800 tests across 42 files** (up from 607/29 in v0.4), including a 13-case adversarial
   threat sweep and a 37-fixture attack replay pack; the precision report now leads with
   benign SIGN precision + HOLD rate (`36% SIGN / 64% HOLD / 0% false-REJECT` on the
   frozen benign corpus).
@@ -270,7 +270,7 @@ git clone https://github.com/lrafasouza/sign-safe-skill sign-safe
 cd sign-safe
 npm install
 npm run gen-fixtures   # (re)generate the 10 synthetic .b64 fixtures from @solana/web3.js
-npm test               # 777 tests across 40 files
+npm test               # 800 tests across 42 files
 npm run verify:all     # build + tests + fixtures + attack replay + pack + production audit
 npm run demo:attack-pack
 ```
@@ -651,7 +651,7 @@ Each finding id listed above is present in `skill/catalog/danger-primitives.json
 
 Most skills are prose. This one ships a small, **pure-function** TypeScript core
 with a deterministic, fully **offline** test suite (`vitest` + `fast-check`),
-**777 tests across 40 files** (`npm test`):
+**800 tests across 42 files** (`npm test`):
 
 - **10 synthetic golden fixtures** -- serialized messages built with
   `@solana/web3.js`, decoded by *our own* parser, verdicts deep-equal-checked
@@ -753,8 +753,8 @@ $ npm test            # vitest run -- the full suite (exits nonzero on any fail)
  ✓ skill/test/extract-vault-address.test.ts      ( 4 tests)   auto-extract Squads vault PDA from account index 2
  ... (additional files)
 
- Test Files  40 passed (40)
-      Tests  777 passed (777)
+ Test Files  42 passed (42)
+      Tests  800 passed (800)
 ```
 
 There are two entry points: `npm test` (vitest, the full suite) and
@@ -793,16 +793,16 @@ commands and no network access at test time:
 ```bash
 npm install            # deps for generation + cross-validation only (no postinstall, no curl)
 npm run gen-fixtures   # rebuild the 10 synthetic .b64 from @solana/web3.js (deterministic, byte-identical)
-npm test               # 777 checks, 40 files, fully offline; exits nonzero on any failure
+npm test               # 800 checks, 42 files, fully offline; exits nonzero on any failure
 npm run demo:attack-pack # replay 37 curated malicious fixtures; fails on any SIGN
 npm run verify:all     # build + tests + fixtures + attack replay + pack dry-run + production audit
 ```
 
-Expected: `Tests  777 passed (777)`, and `git status` clean afterward (the
+Expected: `Tests  800 passed (800)`, and `git status` clean afterward (the
 deterministic generator reproduces the committed `.b64` byte-for-byte). To also
 confirm the type contract: `npx tsc --noEmit` (exit 0).
 
-What those 777 checks actually validate:
+What those 800 checks actually validate:
 
 | Coverage area | Where | What it proves |
 |---|---|---|
@@ -845,7 +845,7 @@ the frozen bytes.
 
 ### Verifying CI
 
-The CI badge at the top of this file reflects the latest run status for the `lrafasouza/sign-safe-skill` repository. The CI workflow (`.github/workflows/ci.yml`) runs on every push to `main`/`master` and on pull requests; it is triggered on Node 20.x and Node 22.x, executes `npm ci` followed by `npm run verify:all` (build, tests, fixture runner, attack replay, pack dry-run, and production dependency audit), and additionally gates determinism (two byte-identical fixture-runner runs) and fixture-drift (regenerating `.b64` files must produce no diff). The workflow does not run on this feature branch (`feat/competitive-improvements-v0.5.1`), so the badge reflects the last run against the main branch.
+The CI badge at the top of this file reflects the latest run status for the `lrafasouza/sign-safe-skill` repository. The CI workflow (`.github/workflows/ci.yml`) runs on every push to `main`/`master` and on pull requests; it is triggered on Node 20.x and Node 22.x, executes `npm ci` followed by `npm run verify:all` (build, tests, fixture runner, attack replay, pack dry-run, and production dependency audit), and additionally gates determinism (two byte-identical fixture-runner runs) and fixture-drift (regenerating `.b64` files must produce no diff). The workflow reflects the latest run on the `main` branch.
 
 See also [docs/failure-recovery.md](docs/failure-recovery.md) for a concrete mapping of failure modes to verdict outcomes and finding ids.
 

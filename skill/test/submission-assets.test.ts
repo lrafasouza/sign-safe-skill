@@ -92,7 +92,7 @@ describe("submission proof assets", () => {
 
   it("submission packet reflects the current local evidence", () => {
     const submission = readRoot("SUBMISSION.md");
-    expect(submission).toContain("777 tests across 40 files");
+    expect(submission).toContain("800 tests across 42 files");
     expect(submission).toContain("36% SIGN / 64% HOLD / 0% false-REJECT");
     expect(submission).toContain("npm run verify:all");
     expect(submission).toContain("npm run demo:attack-pack");
