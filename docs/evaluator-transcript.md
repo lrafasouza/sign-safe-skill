@@ -20,12 +20,12 @@ $ npm run build
 $ npm test
 
  Test Files  38 passed (38)
-      Tests  758 passed (758)
+      Tests  764 passed (764)
 
 ==> Deterministic fixture runner
 $ npm run test:fixtures
 
-PASS 65   FAIL 0
+PASS 70   FAIL 0
 RESULT: ALL GREEN
 
 ==> Attack replay pack
