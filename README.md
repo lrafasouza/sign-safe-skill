@@ -557,7 +557,7 @@ for the machine-readable source.
 - **DeFi/NFT program registry** (14 programs, `catalog/program-registry.json`):
   Metaplex Token Metadata, Metaplex Bubblegum (cNFT), Jupiter Aggregator v6,
   Orca Whirlpools, Raydium AMM v4, Pump.fun, Pump AMM/PumpSwap, Raydium CLMM,
-  Raydium CPMM, Drift, Kamino klend, Meteora DLMM, Marginfi v2, Squads v4. Safe instructions SIGN;
+  Raydium CPMM, Drift, Kamino klend, Meteora DLMM, Marginfi v2, Squads v4. Every Anchor (anchor-8) discriminator is recompute-locked (`sha256("global:"+ixName)`) by `skill/test/registry-discriminators.test.ts` and cross-verified against the canonical on-chain IDLs (audit + provenance in `catalog/idl-sources.json`). Safe instructions SIGN;
   dangerous instructions are labeled at the correct severity; unrecognized
   instructions on recognized programs are HOLD (never SIGN).
 - **Transfer recipient surfacing**: every SOL and SPL transfer surfaces the
