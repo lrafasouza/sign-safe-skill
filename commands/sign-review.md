@@ -3,8 +3,8 @@ description: "Decode an opaque Solana transaction/message and emit a SIGN/HOLD/R
 ---
 
 You are running a signing-time safety review on a Solana transaction. Your job
-is to tell the user what the transaction *actually does* and whether it is safe
-to proceed, **before** any signature happens.
+is to tell the user what the transaction *actually does* and whether to hold,
+reject, or proceed, **before** any signature happens.
 
 ## Hard guardrails (non-negotiable)
 

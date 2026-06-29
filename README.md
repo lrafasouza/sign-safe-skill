@@ -422,11 +422,11 @@ patterns** across 7 attack families. Full methodology and per-fixture detail: se
 |--------|-------|
 | Benign corpus size | 100 transactions |
 | Benign false-REJECT | **0** |
-| Benign SIGN rate | 33% |
-| Benign HOLD rate | 67% |
-| Malicious recall | **100%** (37 / 37) |
+| Benign SIGN rate | 36% |
+| Benign HOLD rate | 64% |
+| Malicious recall | **100%** \* (37 / 37) |
 
-All 37 malicious patterns are caught (HOLD or REJECT). No missed detections.
+\* Across the curated 37-fixture corpus (illustrative, mostly-synthetic set, not a population sample); recall measures coverage of these fixtures only and does not mean every malicious transaction is caught.
 Zero benign transactions are false-REJECTed.
 
 ## Demo fixtures
