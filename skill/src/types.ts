@@ -97,10 +97,7 @@ export type CatalogFindingId =
  * "role unknown" loses information the runtime determines purely from ordering.
  */
 export type RoleKind =
-  | "signer-writable"
-  | "signer-readonly"
-  | "writable"
-  | "readonly";
+  "signer-writable" | "signer-readonly" | "writable" | "readonly";
 
 /** A single account in the message, with its statically-derived role. */
 export interface AccountRole {

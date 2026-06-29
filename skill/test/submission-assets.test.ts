@@ -25,7 +25,11 @@ describe("submission proof assets", () => {
   });
 
   it("ships judge-facing security, submission, and rubric documents", () => {
-    for (const path of ["SECURITY.md", "SUBMISSION.md", "RUBRIC_CHECKLIST.md"]) {
+    for (const path of [
+      "SECURITY.md",
+      "SUBMISSION.md",
+      "RUBRIC_CHECKLIST.md",
+    ]) {
       expect(existsSync(rootPath(path)), `${path} should exist`).toBe(true);
     }
   });

@@ -13,12 +13,7 @@ import {
 } from "./helpers.ts";
 
 type JsonValue =
-  | null
-  | boolean
-  | number
-  | string
-  | JsonValue[]
-  | { [key: string]: JsonValue };
+  null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 
 type JsonObject = { [key: string]: JsonValue };
 
@@ -68,10 +63,7 @@ function validate(
   }
 
   const enumValues = schema["enum"];
-  if (
-    Array.isArray(enumValues) &&
-    !enumValues.some((item) => item === value)
-  ) {
+  if (Array.isArray(enumValues) && !enumValues.some((item) => item === value)) {
     errors.push(`${path} must be one of ${JSON.stringify(enumValues)}`);
   }
 
@@ -262,7 +254,9 @@ describe("sign-safe/verdict@1 schema", () => {
     const verdict = reviewBase64(b64, {
       ...CONTEXT,
       holdOutboundTransfers: true,
-      mintExtensions: new Map([[touchedAccount, { permanentDelegate: delegate }]]),
+      mintExtensions: new Map([
+        [touchedAccount, { permanentDelegate: delegate }],
+      ]),
       simulation: {
         ok: false,
         err: "offline schema regression probe",
@@ -299,7 +293,11 @@ describe("sign-safe/verdict@1 schema", () => {
     );
     expectSchemaAccepts("unverified Squads execute finding", unverified);
 
-    const unresolvedInner = reviewBase64(b64, CONTEXT, buildUnresolvedVaultTx());
+    const unresolvedInner = reviewBase64(
+      b64,
+      CONTEXT,
+      buildUnresolvedVaultTx(),
+    );
     expect(unresolvedInner.findings).toContainEqual(
       expect.objectContaining({
         id: "squads-inner-unresolved",
@@ -315,7 +313,9 @@ describe("sign-safe/verdict@1 schema", () => {
     ) as JsonObject;
     const findings = verdict["findings"];
     if (!Array.isArray(findings) || !isObject(findings[0])) {
-      throw new Error("fixture verdict must contain at least one object finding");
+      throw new Error(
+        "fixture verdict must contain at least one object finding",
+      );
     }
 
     findings[0]["instructionIndex"] = -2;
