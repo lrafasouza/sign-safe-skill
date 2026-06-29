@@ -13,8 +13,16 @@
  */
 
 import { execFileSync } from "node:child_process";
+import {
+  existsSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const ROOT = new URL("../..", import.meta.url);
 const FIXTURES = join(ROOT.pathname, "skill/fixtures");
@@ -79,5 +87,58 @@ describe("CLI e2e", () => {
     expect(verdict.findings.some((f) => f.id === "spl-approve-delegate")).toBe(
       true,
     );
+  });
+});
+
+// Regression: the PUBLISHED binary is invoked by its bin name (npx sign-safe /
+// node_modules/.bin/sign-safe -> symlink -> dist/src/cli.js). argv[1] is then
+// ".../sign-safe", not "...cli.js". A prior guard keyed only on the "cli.js"
+// suffix, so the bin ran nothing and exited 0 for EVERY transaction (the
+// exit-code gate silently broke). This block runs the COMPILED entry through a
+// bin-named symlink and asserts the verdict exit codes survive.
+describe("CLI e2e — published bin (compiled, invoked by bin name)", () => {
+  const distCli = join(ROOT.pathname, "dist/src/cli.js");
+  let binDir: string;
+  let binPath: string;
+
+  beforeAll(() => {
+    if (!existsSync(distCli)) {
+      execFileSync("npm", ["run", "build"], {
+        cwd: ROOT.pathname,
+        timeout: 120000,
+        stdio: "ignore",
+      });
+    }
+    binDir = mkdtempSync(join(tmpdir(), "sign-safe-bin-"));
+    binPath = join(binDir, "sign-safe"); // bin NAME, mimicking node_modules/.bin/sign-safe
+    symlinkSync(realpathSync(distCli), binPath);
+  });
+
+  afterAll(() => {
+    if (binDir) rmSync(binDir, { recursive: true, force: true });
+  });
+
+  function runBin(fixture: string): number {
+    try {
+      execFileSync("node", [binPath, join(FIXTURES, fixture), "--json"], {
+        encoding: "utf8",
+        timeout: 30000,
+      });
+      return 0;
+    } catch (err: unknown) {
+      return (err as { status?: number }).status ?? 1;
+    }
+  }
+
+  it("REJECT via bin name -> exit 20 (regression: bin must run main(), not exit 0)", () => {
+    expect(runBin("02_setauthority_reject.b64")).toBe(20);
+  });
+
+  it("SIGN via bin name -> exit 0", () => {
+    expect(runBin("01_safe_sol_transfer.b64")).toBe(0);
+  });
+
+  it("HOLD via bin name -> exit 10", () => {
+    expect(runBin("05_approve_delegate_hold.b64")).toBe(10);
   });
 });

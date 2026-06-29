@@ -27,7 +27,8 @@
  * address from the message). Without --rpc, --vault-pda is silently ignored.
  */
 
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { DEFAULT_CONTEXT, type Verdict, type VerdictContext } from "./types.ts";
 import { reviewBase64, verdictToJson, rejectVerdict } from "./verdict.ts";
 import { transactionDigest, TransactionDigestError } from "./digest.ts";
@@ -344,13 +345,26 @@ async function main(): Promise<void> {
     verdict!.decision === "SIGN" ? 0 : verdict!.decision === "HOLD" ? 10 : 20;
 }
 
-// Guard: only run main() when executed directly, not when imported by tests.
-// When vitest imports this module, process.argv[1] is the vitest runner path
-// (e.g., /path/to/node_modules/.bin/vitest) — it does NOT end with "cli.ts".
-// When executed directly (node --import tsx skill/src/cli.ts), argv[1] ends
-// with "cli.ts" (or "cli.js" for compiled output).
+// Guard: run main() only when this module IS the entry point — run directly
+// (node dist/src/cli.js), via tsx (node --import tsx skill/src/cli.ts), OR via
+// the published bin (npx sign-safe / node_modules/.bin/sign-safe). It must NOT
+// run when vitest imports the module.
+//
+// For the bin, argv[1] is the symlink path ".../sign-safe", which does NOT end
+// with "cli.js" — the old endsWith() guard therefore left the published binary
+// inert (printed nothing, exited 0 for every transaction). Resolve argv[1]
+// through realpath (following the bin symlink) and compare to this module's own
+// real path so the bin, the compiled entry, and the tsx entry all run main().
 const _argv1 = typeof process !== "undefined" ? (process.argv[1] ?? "") : "";
-if (_argv1.endsWith("cli.ts") || _argv1.endsWith("cli.js")) {
+let _isMain = _argv1.endsWith("cli.ts") || _argv1.endsWith("cli.js");
+if (!_isMain && _argv1) {
+  try {
+    _isMain = realpathSync(_argv1) === fileURLToPath(import.meta.url);
+  } catch {
+    _isMain = false;
+  }
+}
+if (_isMain) {
   main().catch((err) => {
     process.stderr.write(String(err) + "\n");
     process.exitCode = 20;

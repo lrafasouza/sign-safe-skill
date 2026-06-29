@@ -20,7 +20,7 @@ $ npm run build
 $ npm test
 
  Test Files  42 passed (42)
-      Tests  800 passed (800)
+      Tests  803 passed (803)
 
 ==> Deterministic fixture runner
 $ npm run test:fixtures

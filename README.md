@@ -26,7 +26,7 @@ npm run demo:attack-pack
 
 Expected result:
 
-- `npm test` reports **800 passed / 42 files**.
+- `npm test` reports **803 passed / 42 files**.
 - The deterministic fixture runner reports **80 PASS / 0 FAIL**.
 - The attack replay reports **37/37 held or rejected before signing**.
 - `False SIGN: 0`.
@@ -108,7 +108,7 @@ see [docs/evaluator-transcript.md](docs/evaluator-transcript.md).
 - **More coverage**: durable-nonce fee-payer asymmetry (the Drift council shape), the
   Lighthouse guard as an INFO-only positive signal, and Marginfi v2 + Squads v4 in
   the registry.
-- **800 tests across 42 files** (up from 607/29 in v0.4), including a 13-case adversarial
+- **803 tests across 42 files** (up from 607/29 in v0.4), including a 13-case adversarial
   threat sweep and a 37-fixture attack replay pack; the precision report now leads with
   benign SIGN precision + HOLD rate (`18.4% SIGN / 81.6% HOLD / 0% false-REJECT` on the
   frozen benign corpus).
@@ -270,7 +270,7 @@ git clone https://github.com/lrafasouza/sign-safe-skill sign-safe
 cd sign-safe
 npm install
 npm run gen-fixtures   # (re)generate the 10 synthetic .b64 fixtures from @solana/web3.js
-npm test               # 800 tests across 42 files
+npm test               # 803 tests across 42 files
 npm run verify:all     # build + tests + fixtures + attack replay + pack + production audit
 npm run demo:attack-pack
 ```
@@ -651,7 +651,7 @@ Each finding id listed above is present in `skill/catalog/danger-primitives.json
 
 Most skills are prose. This one ships a small, **pure-function** TypeScript core
 with a deterministic, fully **offline** test suite (`vitest` + `fast-check`),
-**800 tests across 42 files** (`npm test`):
+**803 tests across 42 files** (`npm test`):
 
 - **10 synthetic golden fixtures** -- serialized messages built with
   `@solana/web3.js`, decoded by *our own* parser, verdicts deep-equal-checked
@@ -754,7 +754,7 @@ $ npm test            # vitest run -- the full suite (exits nonzero on any fail)
  ... (additional files)
 
  Test Files  42 passed (42)
-      Tests  800 passed (800)
+      Tests  803 passed (803)
 ```
 
 There are two entry points: `npm test` (vitest, the full suite) and
@@ -793,16 +793,16 @@ commands and no network access at test time:
 ```bash
 npm install            # deps for generation + cross-validation only (no postinstall, no curl)
 npm run gen-fixtures   # rebuild the 10 synthetic .b64 from @solana/web3.js (deterministic, byte-identical)
-npm test               # 800 checks, 42 files, fully offline; exits nonzero on any failure
+npm test               # 803 checks, 42 files, fully offline; exits nonzero on any failure
 npm run demo:attack-pack # replay 37 curated malicious fixtures; fails on any SIGN
 npm run verify:all     # build + tests + fixtures + attack replay + pack dry-run + production audit
 ```
 
-Expected: `Tests  800 passed (800)`, and `git status` clean afterward (the
+Expected: `Tests  803 passed (803)`, and `git status` clean afterward (the
 deterministic generator reproduces the committed `.b64` byte-for-byte). To also
 confirm the type contract: `npx tsc --noEmit` (exit 0).
 
-What those 800 checks actually validate:
+What those 803 checks actually validate:
 
 | Coverage area | Where | What it proves |
 |---|---|---|

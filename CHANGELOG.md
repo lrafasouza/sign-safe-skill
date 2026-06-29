@@ -3,6 +3,17 @@
 All notable changes to sign-safe are documented here.
 Format: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.2] - 2026-06-29
+
+Critical fix: the published CLI binary was inert when invoked by its bin name.
+
+### Fixed
+
+- **`npx sign-safe` / the `sign-safe` bin ran nothing and exited 0 for every transaction.** The "run as main" guard in `cli.ts` only fired when `process.argv[1]` ended with `cli.js`/`cli.ts`; invoked via the bin symlink (`node_modules/.bin/sign-safe`), argv[1] is `.../sign-safe`, so `main()` never ran and the exit-code gate (0 SIGN / 10 HOLD / 20 REJECT) silently collapsed to 0 for all. The guard now resolves argv[1] through realpath (following the bin symlink) and compares it to the module's own path, so the bin, the compiled entry, and the tsx entry all run. Found by installing the packed tarball and running `npx sign-safe`.
+- **Regression test** (`cli-e2e.test.ts`): runs the compiled `dist/src/cli.js` through a bin-named symlink and asserts REJECT->20 / SIGN->0 / HOLD->10, so the published-bin path can never silently break again.
+
+803 tests across 42 files; verify:all green. The offline core and `node dist/src/cli.js` were always correct; only bin-name invocation was affected, and the package had not yet been published to npm.
+
 ## [0.6.1] - 2026-06-29
 
 Verification depth + corpus growth. No deterministic-core behavior change.
