@@ -27,8 +27,7 @@ export interface McpResponse {
 export type McpLineResponse = McpResponse | McpResponse[];
 
 type McpValidationResult =
-  | { ok: true; request: McpRequest }
-  | { ok: false; response: McpResponse };
+  { ok: true; request: McpRequest } | { ok: false; response: McpResponse };
 
 const PROTOCOL_VERSION = "2025-06-18";
 export const MCP_SERVER_VERSION = packageJson.version;

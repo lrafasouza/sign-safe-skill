@@ -26,8 +26,8 @@ npm run demo:attack-pack
 
 Expected result:
 
-- `npm test` reports **758 passed / 38 files**.
-- The deterministic fixture runner reports **65 PASS / 0 FAIL**.
+- `npm test` reports **777 passed / 40 files**.
+- The deterministic fixture runner reports **70 PASS / 0 FAIL**.
 - The attack replay reports **37/37 held or rejected before signing**.
 - `False SIGN: 0`.
 - Package dry-run and production dependency audit pass.
@@ -37,6 +37,50 @@ How to read the verdict:
 - **REJECT**: known dangerous shape or untrusted bytes; do not sign.
 - **HOLD**: unclear, policy-sensitive, or human-review case; do not auto-sign.
 - **SIGN**: recognized benign shape under the current static policy. **SIGN is not a universal safety guarantee**; recipient, amount, business intent, and external policy still matter.
+
+### Proofs at a glance
+
+| Document | What it proves |
+|----------|---------------|
+| [docs/precision-report.md](docs/precision-report.md) | 36% SIGN / 64% HOLD / 0 false-REJECT on frozen 100-tx benign corpus + 37 malicious patterns |
+| [docs/evaluator-transcript.md](docs/evaluator-transcript.md) | Annotated terminal session: build → test → replay → pack |
+| [SECURITY.md](SECURITY.md) | Threat model, scope, responsible disclosure |
+| [RUBRIC_CHECKLIST.md](RUBRIC_CHECKLIST.md) | Bounty rubric mapped to concrete evidence |
+| [DEMO.md](DEMO.md) | Four step-by-step CLI scenarios (SIGN / REJECT / attack replay / Squads hidden-authority) |
+| [docs/sample-verdicts/](docs/sample-verdicts/) | Verbatim JSON outputs for SIGN, HOLD, REJECT, and Squads-HOLD — reproducible from fixtures |
+
+### Per-transaction CLI (one command)
+
+```bash
+# REJECT example — authority transfer blocked before signing:
+npm run cli -- skill/fixtures/02_setauthority_reject.b64
+```
+
+### What offline-static detection catches that simulation misses
+
+Static decoding flags danger shapes that are invisible to simulation because they
+are structural properties of the message bytes, not execution outcomes:
+
+- **SetAuthority / owner change** — authority transfer is in the instruction
+  discriminator, not an account balance delta.
+- **System Assign / AssignWithSeed** — reassigns program-owner without moving
+  lamports; a simulated balance check shows nothing.
+- **SPL Token Approve (delegate)** — grants a third party unlimited spend rights;
+  the signer's balance does not change at sign time.
+- **Durable nonce (AdvanceNonceAccount at ix0)** — a non-expiring message that
+  can be replayed at any future block; simulation runs at one block, misses the
+  replay vector entirely.
+- **ALT-obscured instructions** — a v0 message with unresolved Address Lookup
+  Table entries hides the real account set; static detection flags rolesUnverified
+  before the ALT is fetched.
+- **Squads hidden inner instructions** — a `vaultTransactionExecute` top-level
+  instruction embeds inner CPI calls in an off-chain PDA; simulation sees only
+  the shell unless the PDA is fetched first.
+
+Honest limits: the offline-deterministic core requires no network. Recall figures
+are corpus-scoped (see [docs/precision-report.md](docs/precision-report.md) for
+methodology). Transaction simulation (`--simulate`) and RPC enrichment (`--rpc`)
+are optional online extensions — they never downgrade a static REJECT.
 
 For a shorter walkthrough, see [DEMO.md](DEMO.md). For a compact proof transcript,
 see [docs/evaluator-transcript.md](docs/evaluator-transcript.md).
@@ -64,7 +108,7 @@ see [docs/evaluator-transcript.md](docs/evaluator-transcript.md).
 - **More coverage**: durable-nonce fee-payer asymmetry (the Drift council shape), the
   Lighthouse guard as an INFO-only positive signal, and Marginfi v2 + Squads v4 in
   the registry.
-- **758 tests across 38 files** (up from 607/29 in v0.4), including a 13-case adversarial
+- **777 tests across 40 files** (up from 607/29 in v0.4), including a 13-case adversarial
   threat sweep and a 37-fixture attack replay pack; the precision report now leads with
   benign SIGN precision + HOLD rate (`36% SIGN / 64% HOLD / 0% false-REJECT` on the
   frozen benign corpus).
@@ -226,7 +270,7 @@ git clone https://github.com/lrafasouza/sign-safe-skill sign-safe
 cd sign-safe
 npm install
 npm run gen-fixtures   # (re)generate the 10 synthetic .b64 fixtures from @solana/web3.js
-npm test               # 758 tests across 38 files
+npm test               # 777 tests across 40 files
 npm run verify:all     # build + tests + fixtures + attack replay + pack + production audit
 npm run demo:attack-pack
 ```
@@ -422,11 +466,11 @@ patterns** across 7 attack families. Full methodology and per-fixture detail: se
 |--------|-------|
 | Benign corpus size | 100 transactions |
 | Benign false-REJECT | **0** |
-| Benign SIGN rate | 33% |
-| Benign HOLD rate | 67% |
-| Malicious recall | **100%** (37 / 37) |
+| Benign SIGN rate | 36% |
+| Benign HOLD rate | 64% |
+| Malicious recall | **100%** \* (37 / 37) |
 
-All 37 malicious patterns are caught (HOLD or REJECT). No missed detections.
+\* Across the curated 37-fixture corpus (illustrative, mostly-synthetic set, not a population sample); recall measures coverage of these fixtures only and does not mean every malicious transaction is caught.
 Zero benign transactions are false-REJECTed.
 
 ## Demo fixtures
@@ -587,11 +631,27 @@ a blob *is*; you still confirm it is what you *meant*.
 
 **One-line coverage summary:** sign-safe catches owner-reassignment, durable nonces, approvals, closes, honeypots, hidden Squads inner instructions, and named NFT/DeFi dangers; a plain transfer to an attacker is SIGN by default (surfaced recipient + optional blocklist/policy mitigate it); address-poisoning, lookalike mints, economic-oracle effects, post-sign TOCTOU, and endpoint malware are out of scope and need reputation data, simulation, or endpoint security.
 
+### Pattern comparison: static analysis vs balance-delta-only defenses
+
+The table below lists attack patterns that sign-safe **detects from the signed bytes** but that **balance-delta-only defenses tend not to flag** — because balance deltas are not meaningful until after simulation, and these patterns either have no balance delta at all (authority handoffs), or mask one (Squads hidden inner instructions, ALT-obscured accounts).
+
+| Attack pattern | Finding id(s) | Why balance-delta-only defenses tend not to flag it |
+|---|---|---|
+| Token / mint authority handoff | `spl-set-authority`, `token2022-set-authority` | No SOL or token balance delta at signing time; the loss (minting, freezing, seizing) happens after the authority is transferred |
+| Program upgrade authority transfer | `bpf-set-upgrade-authority` | No on-chain state change visible at signing; the upgrade that drains users happens in a subsequent transaction |
+| Account ownership reassignment | `system-assign`, `system-assign-with-seed` | Owner-program change has no balance delta; the new owner exploits the account in a later transaction |
+| Delegate approval for silent drain | `spl-approve-delegate` | Approval grants a spending right with no immediate balance change; the delegate calls `transfer` later, invisibly |
+| Durable-nonce hold/replay | `durable-nonce-advance` | Transaction remains replayable indefinitely; no balance delta occurs until the attacker decides to submit the held transaction |
+| ALT-obscured instruction accounts | `altLookupsPresent` + `rolesUnverified` flags → HOLD | Account roles cannot be determined without resolving the ALT on-chain; sign-safe flags this conservative state rather than silently passing |
+| Squads hidden inner instruction | `squads-execute-unverified` (offline) / `anchor-inner-update_admin` (with PDA bytes) | The outer VaultTransaction shell has no visible balance delta; the destructive inner CPI is only visible by decoding the PDA bytes |
+
+Each finding id listed above is present in `skill/catalog/danger-primitives.json` or derived from `skill/catalog/anchor-danger.json`. ALT-obscured instructions are a flag-driven path, not a catalog entry.
+
 ## Why this skill is different: it actually runs, and it is tested
 
 Most skills are prose. This one ships a small, **pure-function** TypeScript core
 with a deterministic, fully **offline** test suite (`vitest` + `fast-check`),
-**758 tests across 38 files** (`npm test`):
+**777 tests across 40 files** (`npm test`):
 
 - **10 synthetic golden fixtures** -- serialized messages built with
   `@solana/web3.js`, decoded by *our own* parser, verdicts deep-equal-checked
@@ -693,8 +753,8 @@ $ npm test            # vitest run -- the full suite (exits nonzero on any fail)
  ✓ skill/test/extract-vault-address.test.ts      ( 4 tests)   auto-extract Squads vault PDA from account index 2
  ... (additional files)
 
- Test Files  38 passed (38)
-      Tests  758 passed (758)
+ Test Files  40 passed (40)
+      Tests  777 passed (777)
 ```
 
 There are two entry points: `npm test` (vitest, the full suite) and
@@ -733,16 +793,16 @@ commands and no network access at test time:
 ```bash
 npm install            # deps for generation + cross-validation only (no postinstall, no curl)
 npm run gen-fixtures   # rebuild the 10 synthetic .b64 from @solana/web3.js (deterministic, byte-identical)
-npm test               # 758 checks, 38 files, fully offline; exits nonzero on any failure
+npm test               # 777 checks, 40 files, fully offline; exits nonzero on any failure
 npm run demo:attack-pack # replay 37 curated malicious fixtures; fails on any SIGN
 npm run verify:all     # build + tests + fixtures + attack replay + pack dry-run + production audit
 ```
 
-Expected: `Tests  758 passed (758)`, and `git status` clean afterward (the
+Expected: `Tests  777 passed (777)`, and `git status` clean afterward (the
 deterministic generator reproduces the committed `.b64` byte-for-byte). To also
 confirm the type contract: `npx tsc --noEmit` (exit 0).
 
-What those 758 checks actually validate:
+What those 777 checks actually validate:
 
 | Coverage area | Where | What it proves |
 |---|---|---|
@@ -782,6 +842,12 @@ Node 20 and 22, plus a determinism gate (two byte-identical runner runs) and a
 fixture-drift guard (`gen-fixtures` must not change any committed `.b64`). The
 real fixtures are committed, so CI never depends on the network — it just decodes
 the frozen bytes.
+
+### Verifying CI
+
+The CI badge at the top of this file reflects the latest run status for the `lrafasouza/sign-safe-skill` repository. The CI workflow (`.github/workflows/ci.yml`) runs on every push to `main`/`master` and on pull requests; it is triggered on Node 20.x and Node 22.x, executes `npm ci` followed by `npm run verify:all` (build, tests, fixture runner, attack replay, pack dry-run, and production dependency audit), and additionally gates determinism (two byte-identical fixture-runner runs) and fixture-drift (regenerating `.b64` files must produce no diff). The workflow does not run on this feature branch (`feat/competitive-improvements-v0.5.1`), so the badge reflects the last run against the main branch.
+
+See also [docs/failure-recovery.md](docs/failure-recovery.md) for a concrete mapping of failure modes to verdict outcomes and finding ids.
 
 ## Repository structure
 

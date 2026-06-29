@@ -1,0 +1,34 @@
+{
+  "schema": "sign-safe/verdict@1",
+  "decision": "HOLD",
+  "requiresHumanReview": true,
+  "reason": "Manual review required: HOLD-class primitive(s): SPL Token Approve / ApproveChecked.",
+  "messageVersion": "legacy",
+  "worstSeverity": "HOLD",
+  "findings": [
+    {
+      "id": "spl-approve-delegate",
+      "label": "SPL Token Approve / ApproveChecked",
+      "severity": "HOLD",
+      "category": "delegate-approval",
+      "instructionIndex": 0,
+      "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+      "detail": "Matched Approve on spl-token; instruction discriminator 4 (Approve).",
+      "mapsToLoss": "Grants a delegate authority to spend tokens from the account; a malicious delegate can silently drain it afterward."
+    }
+  ],
+  "outflow": {
+    "lamports": "0",
+    "splTransfers": [],
+    "exceedsLamportThreshold": false,
+    "lamportTransfers": [],
+    "outboundToNonSigner": false
+  },
+  "flags": {
+    "unknownProgramPresent": false,
+    "altLookupsPresent": false,
+    "rolesUnverified": false,
+    "decodeFailed": false
+  },
+  "unknownPrograms": []
+}

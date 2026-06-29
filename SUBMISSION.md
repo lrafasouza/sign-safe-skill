@@ -6,11 +6,14 @@
 - Repository: https://github.com/lrafasouza/sign-safe-skill
 - Bounty PR: https://github.com/solanabr/skill-bounty/pull/4
 - Solana AI Kit PR: https://github.com/solanabr/solana-ai-kit/pull/34
-- Version: `0.5.0`
-- Local validation target: 758 tests across 38 files
+- Version: `0.5.1`
+- Local validation target: 777 tests across 40 files
 - Precision report: 36% SIGN / 64% HOLD / 0% false-REJECT on the frozen benign corpus
 - Curated malicious corpus: 37/37 held or rejected before signing
 - Runtime dependency posture: zero runtime dependencies in the deterministic core
+- Reproducible sample verdicts (verbatim CLI output): `docs/sample-verdicts/` (SIGN / HOLD / REJECT / Squads-HOLD)
+- Adversarial RPC test: findings derived from the signed bytes cannot be removed or downgraded by RPC enrichment (`skill/test/rpc-adversarial.test.ts`)
+- Fail-closed behavior documented in `docs/failure-recovery.md`
 
 ## What It Does
 
@@ -46,6 +49,15 @@ False SIGN: 0
 RESULT: 37/37 attack fixtures held or rejected before signing
 ```
 
+Per-transaction verdict (offline, no RPC):
+
+```bash
+npm run cli -- skill/fixtures/02_setauthority_reject.b64 --json   # REJECT (exit 20)
+npm run cli -- skill/fixtures/01_safe_sol_transfer.b64 --json     # SIGN (exit 0)
+```
+
+Compare against the committed verbatim outputs in `docs/sample-verdicts/`. For the 3-minute path, see the **Evaluator Quickstart** at the top of the README.
+
 ## Coverage Highlights
 
 - 37 native danger primitives, including SPL Token, Token-2022, System Program,
@@ -56,6 +68,8 @@ RESULT: 37/37 attack fixtures held or rejected before signing
   supplied or fetched through RPC enrichment.
 - JSON Schema and MCP `outputSchema` for agent integration.
 - `guardedSignTransaction` wrapper for signer gates.
+- Runnable MCP client example (`examples/mcp-client-call.ts`) calling the real `sign-safe-mcp` server: base64 in, verdict.json out.
+- `--simulate` (with `--rpc`) ingests innerInstructions + balance diff, escalate-only; fail-closed (REJECT) when used without `--rpc`.
 
 ## Honest Limitations
 
@@ -69,8 +83,9 @@ RESULT: 37/37 attack fixtures held or rejected before signing
 
 ## Suggested Judge Flow
 
-1. Read the README top section for the product framing.
-2. Run `npm run verify:all`.
-3. Run `npm run demo:attack-pack`.
-4. Inspect `docs/precision-report.md`.
-5. Inspect `SECURITY.md` for the exact security boundary.
+1. Read the **Evaluator Quickstart** at the top of the README (3-minute framing + commands).
+2. Run `npm run verify:all` (777 tests / 40 files, fixtures, attack replay, pack, audit).
+3. Run `npm run demo:attack-pack` (37/37 held or rejected, False SIGN: 0).
+4. Run a per-transaction verdict via `npm run cli -- <fixture> --json` and compare to `docs/sample-verdicts/`.
+5. Read `DEMO.md` Scenario 4 (Squads hidden-authority HOLD) and `docs/failure-recovery.md` (fail-closed behavior).
+6. Inspect `docs/precision-report.md` and `SECURITY.md` for the exact metrics and security boundary.

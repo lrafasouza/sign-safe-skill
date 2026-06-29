@@ -25,7 +25,11 @@ describe("submission proof assets", () => {
   });
 
   it("ships judge-facing security, submission, and rubric documents", () => {
-    for (const path of ["SECURITY.md", "SUBMISSION.md", "RUBRIC_CHECKLIST.md"]) {
+    for (const path of [
+      "SECURITY.md",
+      "SUBMISSION.md",
+      "RUBRIC_CHECKLIST.md",
+    ]) {
       expect(existsSync(rootPath(path)), `${path} should exist`).toBe(true);
     }
   });
@@ -88,7 +92,7 @@ describe("submission proof assets", () => {
 
   it("submission packet reflects the current local evidence", () => {
     const submission = readRoot("SUBMISSION.md");
-    expect(submission).toContain("758 tests across 38 files");
+    expect(submission).toContain("777 tests across 40 files");
     expect(submission).toContain("36% SIGN / 64% HOLD / 0% false-REJECT");
     expect(submission).toContain("npm run verify:all");
     expect(submission).toContain("npm run demo:attack-pack");
