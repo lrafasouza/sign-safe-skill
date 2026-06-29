@@ -6,7 +6,7 @@
 - Repository: https://github.com/lrafasouza/sign-safe-skill
 - Bounty PR: https://github.com/solanabr/skill-bounty/pull/4
 - Solana AI Kit PR: https://github.com/solanabr/solana-ai-kit/pull/34
-- Version: `0.5.0`
+- Version: `0.5.1`
 - Local validation target: 777 tests across 40 files
 - Precision report: 36% SIGN / 64% HOLD / 0% false-REJECT on the frozen benign corpus
 - Curated malicious corpus: 37/37 held or rejected before signing

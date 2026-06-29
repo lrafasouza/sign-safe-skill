@@ -3,6 +3,30 @@
 All notable changes to sign-safe are documented here.
 Format: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.1] - 2026-06-29
+
+Competitive-analysis pass: evaluator experience, honesty/consistency, and proof depth.
+No change to the deterministic core's behavior; all changes are docs, tests, and examples.
+
+### Added
+
+- Evaluator Quickstart card at the top of the README (3-minute judge path).
+- `docs/sample-verdicts/` — reproducible SIGN / HOLD / REJECT / Squads-HOLD verdicts, verbatim from the CLI.
+- DEMO.md Scenario 4: a Squads hidden-authority HOLD walkthrough with its source fixture.
+- Pattern-comparison table (static decode vs balance-delta-only defenses), each row grounded in a real finding id.
+- Dedicated MCP section in SKILL.md + runnable `examples/mcp-client-call.ts`.
+- `docs/failure-recovery.md` documenting fail-closed behavior (decode-fail, unknown program, unresolved ALT, RPC timeout).
+- `skill/test/cli-e2e.test.ts` — end-to-end CLI verdict + exit-code test.
+- `skill/test/rpc-adversarial.test.ts` — proves RPC enrichment cannot remove or downgrade findings derived from the signed bytes.
+
+### Fixed
+
+- Corrected the README precision table to the v0.5 numbers (36% SIGN / 64% HOLD / 0 false-REJECT) and scoped every recall/precision claim to the curated synthetic corpus.
+- Removed "safe to proceed" reassurance phrasing from commands/sign-review.md.
+- Reconciled documented test counts to the real suite size.
+
+777 tests across 40 files; `tsc` clean; `npm run build` produces `dist/`; `verify:all` green.
+
 ## [0.5.0] - 2026-06-25
 
 Coverage, integration, and honesty pass. The deterministic core stays pure/offline and
