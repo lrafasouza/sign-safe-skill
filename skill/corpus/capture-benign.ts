@@ -10,7 +10,13 @@
  */
 
 import { createHash } from "node:crypto";
-import { writeFileSync, mkdirSync } from "node:fs";
+import {
+  writeFileSync,
+  mkdirSync,
+  existsSync,
+  readdirSync,
+  readFileSync,
+} from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -20,8 +26,12 @@ import { extractVaultTransactionAddress } from "../src/squads.ts";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BENIGN_DIR = join(HERE, "benign");
 
-const RPC_URL = "https://api.mainnet-beta.solana.com";
-const PINNED_SLOTS = [428290000, 428289500];
+const RPC_URL =
+  process.env.SIGN_SAFE_RPC || "https://api.mainnet-beta.solana.com";
+const PINNED_SLOTS = [
+  428290000, 428289500, 429745000, 429746000, 429747000, 429748000, 429749000,
+  429750000, 429751000, 429752000,
+];
 const MAX_PER_SLOT = 50;
 const VOTE_PROGRAM = "Vote111111111111111111111111111111111111111";
 const TOKEN_2022_PID = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
@@ -302,33 +312,33 @@ async function main(): Promise<void> {
     for (const fixture of fixtures) {
       const filename = `${fixture.slot}-${fixture.index}.json`;
       const filepath = join(BENIGN_DIR, filename);
+      if (existsSync(filepath)) continue; // preserve frozen fixtures on re-run
       writeFileSync(filepath, JSON.stringify(fixture, null, 2));
       console.log(`  Written: ${filename}`);
     }
   }
 
-  // Write manifest with sha256 of each file
-  const manifest: Array<{
-    filename: string;
-    sha256: string;
-    slot: number;
-    index: number;
-    version: string;
-    programIds: string[];
-  }> = [];
-  for (const fixture of allFixtures) {
-    const filename = `${fixture.slot}-${fixture.index}.json`;
-    const content = JSON.stringify(fixture, null, 2);
-    const sha256 = createHash("sha256").update(content).digest("hex");
-    manifest.push({
-      filename,
-      sha256,
-      slot: fixture.slot,
-      index: fixture.index,
-      version: String(fixture.version),
-      programIds: fixture.programIds,
+  // Manifest: sha256 of every benign fixture on disk (frozen-stable across re-runs).
+  const manifest = readdirSync(BENIGN_DIR)
+    .filter((f) => f.endsWith(".json") && f !== "manifest.json")
+    .sort()
+    .map((filename) => {
+      const content = readFileSync(join(BENIGN_DIR, filename), "utf8");
+      const fx = JSON.parse(content) as {
+        slot: number;
+        index: number;
+        version: unknown;
+        programIds: string[];
+      };
+      return {
+        filename,
+        sha256: createHash("sha256").update(content).digest("hex"),
+        slot: fx.slot,
+        index: fx.index,
+        version: String(fx.version),
+        programIds: fx.programIds,
+      };
     });
-  }
 
   const manifestPath = join(BENIGN_DIR, "manifest.json");
   writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));

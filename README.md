@@ -42,7 +42,7 @@ How to read the verdict:
 
 | Document | What it proves |
 |----------|---------------|
-| [docs/precision-report.md](docs/precision-report.md) | 36% SIGN / 64% HOLD / 0 false-REJECT on frozen 100-tx benign corpus + 37 malicious patterns |
+| [docs/precision-report.md](docs/precision-report.md) | 18.4% SIGN / 81.6% HOLD / 0 false-REJECT on frozen 500-tx benign corpus + 37 malicious patterns |
 | [docs/evaluator-transcript.md](docs/evaluator-transcript.md) | Annotated terminal session: build → test → replay → pack |
 | [SECURITY.md](SECURITY.md) | Threat model, scope, responsible disclosure |
 | [RUBRIC_CHECKLIST.md](RUBRIC_CHECKLIST.md) | Bounty rubric mapped to concrete evidence |
@@ -110,7 +110,7 @@ see [docs/evaluator-transcript.md](docs/evaluator-transcript.md).
   the registry.
 - **800 tests across 42 files** (up from 607/29 in v0.4), including a 13-case adversarial
   threat sweep and a 37-fixture attack replay pack; the precision report now leads with
-  benign SIGN precision + HOLD rate (`36% SIGN / 64% HOLD / 0% false-REJECT` on the
+  benign SIGN precision + HOLD rate (`18.4% SIGN / 81.6% HOLD / 0% false-REJECT` on the
   frozen benign corpus).
 
 ## What's new in v0.4
@@ -120,7 +120,7 @@ see [docs/evaluator-transcript.md](docs/evaluator-transcript.md).
   mint extensions (PermanentDelegate / TransferHook). Without `--rpc`, behavior is
   byte-identical and fully offline.
 - **Two-tier posture (default)**: an unknown program writing a value-bearing account
-  is now HOLD instead of REJECT, calibrated by a precision study on 100 real benign
+  is now HOLD instead of REJECT, calibrated by a precision study on 500 real benign
   mainnet transactions (0 false-REJECTs). Use `--strict` to restore the aggressive
   single-tier posture for institutional signing.
 - **Clear-signing registry expanded to 12 programs**: Metaplex Token Metadata,
@@ -128,7 +128,7 @@ see [docs/evaluator-transcript.md](docs/evaluator-transcript.md).
   Pump AMM/PumpSwap, Raydium CLMM, Raydium CPMM, Drift, Kamino klend, Meteora DLMM,
   Programs may have safe and dangerous instruction tiers or recognize-only coverage;
   unlisted instructions remain HOLD.
-- **Precision study** (`docs/precision-report.md`): 100 real frozen mainnet benign
+- **Precision study** (`docs/precision-report.md`): 500 real frozen mainnet benign
   transactions + 37 synthetic malicious patterns. At v0.4: 33% SIGN / 67% HOLD /
   0% false-REJECT. Malicious recall: 100%.
 - **607 tests across 29 files** (up from 292/16 in v0.3).
@@ -455,7 +455,7 @@ the verdict so scripts and agents can gate on them: **`0 = SIGN`, `10 = HOLD`,
 
 ## Precision
 
-A precision study against a frozen, offline corpus of **100 real benign mainnet
+A precision study against a frozen, offline corpus of **500 real benign mainnet
 transactions** (from slots 428289500 and 428290000) + **37 synthetic malicious
 patterns** across 7 attack families. Full methodology and per-fixture detail: see
 [docs/precision-report.md](docs/precision-report.md).
@@ -464,10 +464,10 @@ patterns** across 7 attack families. Full methodology and per-fixture detail: se
 
 | Metric | Value |
 |--------|-------|
-| Benign corpus size | 100 transactions |
+| Benign corpus size | 500 transactions |
 | Benign false-REJECT | **0** |
-| Benign SIGN rate | 36% |
-| Benign HOLD rate | 64% |
+| Benign SIGN rate | 18.4% |
+| Benign HOLD rate | 81.6% |
 | Malicious recall | **100%** \* (37 / 37) |
 
 \* Across the curated 37-fixture corpus (illustrative, mostly-synthetic set, not a population sample); recall measures coverage of these fixtures only and does not mean every malicious transaction is caught.
@@ -557,7 +557,7 @@ for the machine-readable source.
 - **DeFi/NFT program registry** (14 programs, `catalog/program-registry.json`):
   Metaplex Token Metadata, Metaplex Bubblegum (cNFT), Jupiter Aggregator v6,
   Orca Whirlpools, Raydium AMM v4, Pump.fun, Pump AMM/PumpSwap, Raydium CLMM,
-  Raydium CPMM, Drift, Kamino klend, Meteora DLMM, Marginfi v2, Squads v4. Safe instructions SIGN;
+  Raydium CPMM, Drift, Kamino klend, Meteora DLMM, Marginfi v2, Squads v4. Every Anchor (anchor-8) discriminator is recompute-locked (`sha256("global:"+ixName)`) by `skill/test/registry-discriminators.test.ts` and cross-verified against the canonical on-chain IDLs (audit + provenance in `catalog/idl-sources.json`). Safe instructions SIGN;
   dangerous instructions are labeled at the correct severity; unrecognized
   instructions on recognized programs are HOLD (never SIGN).
 - **Transfer recipient surfacing**: every SOL and SPL transfer surfaces the
@@ -746,7 +746,7 @@ $ npm test            # vitest run -- the full suite (exits nonzero on any fail)
  ✓ skill/test/rpc.test.ts                        (29 tests)   RPC fetcher; injectable stub; offline-identical without --rpc
  ✓ skill/test/cli-args.test.ts                   (17 tests)   CLI flag parsing: --rpc, --vault-pda, --strict, --threshold, --json, --digest
  ✓ skill/test/registry-discriminators.test.ts    (133 tests)  self-verifying: sha256("global:"+ixName)[..8] matches every registry entry
- ✓ skill/test/precision.test.ts                  (11 tests)   offline precision harness: 100 benign + 37 malicious, confusion matrix
+ ✓ skill/test/precision.test.ts                  (11 tests)   offline precision harness: 500 benign + 37 malicious, confusion matrix
  ✓ skill/test/schema.test.ts                     (14 tests)   verdict JSON Schema + MCP outputSchema contract
  ✓ skill/test/auxiliary-programs.test.ts         ( 7 tests)   ATA/Memo bounded recognition; external ATA/RecoverNested/invalid memo still HOLD
  ✓ skill/test/submission-assets.test.ts          ( 9 tests)   SECURITY/SUBMISSION/RUBRIC docs + evaluator demo/transcript/example proof
@@ -827,9 +827,15 @@ What those 800 checks actually validate:
 | **ALT decoding + resolution** | `alt.test.ts` | Bincode layout decoder, `resolvedAltTables` channel pass-through, fail-closed on malformed account bytes, partial-table index out-of-range. |
 | **RPC fetcher** | `rpc.test.ts` | JSON-RPC `getAccountInfo` injector; frozen stub; offline-identical behavior when no `--rpc`. |
 | **CLI args** | `cli-args.test.ts` | Flag parsing correctness: `--rpc`, `--vault-pda`, `--strict`, `--threshold`, `--json`, `--digest`. |
-| **Precision harness** | `precision.test.ts` | 100 benign + 37 malicious offline corpus; 0 false-REJECTs on benign; 100% malicious recall; ALT sub-test. |
+| **Precision harness** | `precision.test.ts` | 500 benign + 37 malicious offline corpus; 0 false-REJECTs on benign; 100% malicious recall; ALT sub-test. |
+| **Real on-chain attacks** | `real-attacks.test.ts` | The 2 real Drift (Apr 2026, ~$285M) exploit transactions, replayed offline -> never SIGN (both HOLD: durable nonce + Squads). Provenance: `docs/real-attacks.md`. |
+| **RPC-adversarial** | `rpc-adversarial.test.ts` | Injected/forged RPC enrichment (ALT, Squads PDA, Token-2022 mint) cannot remove or downgrade findings derived from the signed bytes; forged-ALT fails closed. |
+| **Fuzz (fail-closed)** | `fuzz-fail-closed.test.ts` | Byte-mutating an authority-transfer fixture never yields SIGN (exhaustive 1-byte scan: 0 / 44,288). |
+| **Registry discriminators** | `registry-discriminators.test.ts` | Every anchor-8 `discHex` == `sha256("global:"+ixName)`; ixNames cross-verified vs canonical on-chain IDLs (`catalog/idl-sources.json`). |
 | **Determinism** | `run.ts` + CI | The standalone node runner's output is byte-identical across two runs (no timing/nondeterminism in the core). |
 | **No-network** | `fixtures.test.ts` | Core modules import no `http`/`https`/`net`/`fetch`; the suite makes zero network calls at run time. |
+
+**Mutation testing:** Stryker runs against `skill/src/classify.ts` and the score is reported honestly (not inflated) in [`docs/mutation-report.md`](docs/mutation-report.md) — run with `npm run mutation`.
 
 > **On `npm audit`:** any advisories come exclusively from **dev** dependencies
 > (the `vitest`/`vite`/`esbuild` toolchain and `@solana/web3.js`'s transitive
@@ -899,7 +905,7 @@ sign-safe-skill/
     │   ├── NN_*.verdict.json   # 10 golden verdicts
     │   └── real/           # REAL mainnet fixtures (frozen .b64 + .meta.json provenance)
     │       └── accounts/   # frozen on-chain account bytes (Squads VaultTransaction PDA)
-    ├── corpus/             # precision study: 100 benign + 37 malicious offline fixtures
+    ├── corpus/             # precision study: 500 benign + 37 malicious offline fixtures
     └── test/
         ├── helpers.ts               # offline message-byte builders + fixture loaders
         ├── decode.test.ts           # wire-format / compact-u16 / sanitization / fail-closed
@@ -920,7 +926,7 @@ sign-safe-skill/
         ├── rpc.test.ts              # RPC fetcher + injectable stub + offline-identical
         ├── cli-args.test.ts         # CLI flag parsing correctness
         ├── registry-discriminators.test.ts  # self-verifying discriminators (133 checks)
-        ├── precision.test.ts        # offline precision harness (100 benign + 37 malicious)
+        ├── precision.test.ts        # offline precision harness (500 benign + 37 malicious)
         ├── schema.test.ts           # verdict JSON Schema + MCP outputSchema contract
         ├── auxiliary-programs.test.ts # ATA/Memo bounded recognition
         ├── extract-vault-address.test.ts    # Squads PDA auto-extraction

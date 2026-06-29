@@ -1,0 +1,9 @@
+{
+  "testRunner": "vitest",
+  "coverageAnalysis": "perTest",
+  "mutate": ["skill/src/classify.ts"],
+  "reporters": ["clear-text", "json"],
+  "jsonReporter": { "fileName": "reports/mutation/mutation.json" },
+  "concurrency": 2,
+  "timeoutMS": 60000
+}

@@ -1,0 +1,67 @@
+{
+  "$schema": "./idl-sources.schema.json",
+  "description": "Provenance + verification record for the Anchor (anchor-8) program-registry entries. Every entry's discHex is recompute-locked offline by skill/test/registry-discriminators.test.ts (discHex == sha256(\"global:\"+ixName)[0..8]). This file records the canonical IDL each ixName was cross-checked against (snake_case ixName <-> camelCase IDL name), so the names are verified REAL, not just self-consistent. Re-verify with: SIGN_SAFE_RPC=<archival rpc> node --import tsx skill/corpus/verify-idls.ts",
+  "verified_at": "2026-06-29",
+  "method": "On-chain Anchor IDL account (PDA createWithSeed(findProgramAddress([],pid), \"anchor:idl\", pid)), zlib-inflated, instruction names compared snake<->camel against the registry ixNames. Drift's on-chain IDL account is stale (241 ix); its one name not in the on-chain copy was confirmed against the canonical GitHub master IDL.",
+  "programs": [
+    {
+      "id": "jupiter-v6",
+      "programId": "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4",
+      "idl": "on-chain",
+      "idl_instructions": 17,
+      "registry_ixnames": 7,
+      "verified": 7,
+      "result": "ALL VERIFIED"
+    },
+    {
+      "id": "orca-whirlpools",
+      "programId": "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc",
+      "idl": "on-chain",
+      "idl_instructions": 66,
+      "registry_ixnames": 15,
+      "verified": 15,
+      "result": "ALL VERIFIED"
+    },
+    {
+      "id": "raydium-clmm",
+      "programId": "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK",
+      "idl": "on-chain",
+      "idl_instructions": 34,
+      "registry_ixnames": 15,
+      "verified": 15,
+      "result": "ALL VERIFIED"
+    },
+    {
+      "id": "raydium-cpmm",
+      "programId": "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C",
+      "idl": "on-chain",
+      "idl_instructions": 14,
+      "registry_ixnames": 10,
+      "verified": 10,
+      "result": "ALL VERIFIED"
+    },
+    {
+      "id": "drift",
+      "programId": "dRiftyHA39MWEi3m9aunc5MzRF1JYuBsbn6VPcn33UH",
+      "idl": "on-chain (241 ix, stale) + GitHub master (drift-labs/protocol-v2 sdk/src/idl/drift.json, 249 ix)",
+      "idl_instructions": 241,
+      "registry_ixnames": 10,
+      "verified": 10,
+      "result": "ALL VERIFIED (9 on-chain; admin_withdraw_from_insurance_fund_vault via canonical GitHub master IDL)"
+    },
+    {
+      "id": "kamino-klend",
+      "programId": "KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD",
+      "idl": "on-chain",
+      "idl_instructions": 63,
+      "registry_ixnames": 12,
+      "verified": 12,
+      "result": "ALL VERIFIED"
+    }
+  ],
+  "totals": {
+    "registry_ixnames": 69,
+    "verified": 69,
+    "note": "60 dangerous+safe ixNames across the 5 Jupiter/Raydium/Orca/Kamino/Drift targets verified; recompute test additionally locks every anchor-8 discHex across all 14 registry programs."
+  }
+}
