@@ -19,8 +19,8 @@ $ npm run build
 ==> Vitest suite
 $ npm test
 
- Test Files  38 passed (38)
-      Tests  764 passed (764)
+ Test Files  40 passed (40)
+      Tests  777 passed (777)
 
 ==> Deterministic fixture runner
 $ npm run test:fixtures
