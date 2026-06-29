@@ -1,0 +1,47 @@
+{
+  "schema": "sign-safe/verdict@1",
+  "decision": "HOLD",
+  "requiresHumanReview": true,
+  "reason": "Manual review required: HOLD-class primitive(s): Outbound token transfer exceeds the context-free exact integer range.",
+  "messageVersion": "legacy",
+  "worstSeverity": "HOLD",
+  "findings": [
+    {
+      "id": "oversized-token-transfer",
+      "label": "Outbound token transfer exceeds the context-free exact integer range",
+      "severity": "HOLD",
+      "category": "value-outflow",
+      "instructionIndex": 0,
+      "programId": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+      "detail": "This transaction sends 18446744073709551615 raw token units to a non-signer account. The amount exceeds JavaScript's exact integer range and cannot be treated as a routine transfer without mint decimals and value context.",
+      "mapsToLoss": "An extremely large raw token amount can represent a full-balance drain or an amount that downstream displays round incorrectly."
+    }
+  ],
+  "outflow": {
+    "lamports": "0",
+    "splTransfers": [
+      {
+        "instructionIndex": 0,
+        "programId": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+        "amount": "18446744073709551615",
+        "decimals": 6,
+        "destination": {
+          "index": 2,
+          "address": "9hSR6S7WPtxmTojgo6GG3k4yDPecgJY292j7xrsUGWBu",
+          "addressUnresolved": false,
+          "outboundToNonSigner": true
+        }
+      }
+    ],
+    "exceedsLamportThreshold": false,
+    "lamportTransfers": [],
+    "outboundToNonSigner": true
+  },
+  "flags": {
+    "unknownProgramPresent": false,
+    "altLookupsPresent": false,
+    "rolesUnverified": false,
+    "decodeFailed": false
+  },
+  "unknownPrograms": []
+}

@@ -253,6 +253,77 @@ function v0WithAltB64(): string {
   return v0B64([ix], [lut]);
 }
 
+/**
+ * Build a v0 message where the writable target of an spl-set-authority
+ * instruction is supplied via an ALT — so the account's concrete address can't
+ * be derived offline without resolving the table.
+ *
+ * The MINT account (the writable target) is placed in the ALT at writable
+ * index 0. SIGNER stays as a static account (required for the signer role).
+ * The offline verdict is REJECT (spl-set-authority finding fires from the
+ * instruction discriminator alone, regardless of ALT resolution), AND
+ * altLookupsPresent=true / rolesUnverified=true, so reviewWithEnrichment MUST
+ * call the fetcher at least once (to resolve the ALT table account).
+ */
+function v0AltSetAuthorityB64(): string {
+  // ALT key — a fresh deterministic keypair that does NOT appear elsewhere.
+  const altAddress = seededKeypair(21).publicKey;
+  const lut = new AddressLookupTableAccount({
+    key: altAddress,
+    state: {
+      deactivationSlot: 2n ** 64n - 1n,
+      lastExtendedSlot: 0,
+      lastExtendedSlotStartIndex: 0,
+      authority: SIGNER.publicKey,
+      addresses: [MINT.publicKey], // ALT entry 0 = MINT (the writable target)
+    },
+  });
+  // spl-set-authority (disc=6): MINT is the writable target (ALT-sourced),
+  // SIGNER is the current authority (static, required for signer role).
+  const ix = new TransactionInstruction({
+    programId: SPL_TOKEN,
+    keys: [
+      { pubkey: MINT.publicKey, isSigner: false, isWritable: true },
+      { pubkey: SIGNER.publicKey, isSigner: true, isWritable: false },
+    ],
+    data: concat(Uint8Array.from([6, 0, 1]), NEW_AUTHORITY.publicKey.toBytes()),
+  });
+  return v0B64([ix], [lut]);
+}
+
+/**
+ * Build a legacy transaction with a Token-2022 TransferChecked instruction
+ * (disc=12) so the mint-extension enrichment path in reviewWithEnrichment is
+ * reachable. The mint address is a static account (verified offline), so the
+ * enricher will call fetcher(MINT) for that instruction.
+ *
+ * We pair it with a very large token amount (u64::MAX) so the offline verdict
+ * is HOLD (oversized-token-transfer finding) — confirming the decision is
+ * never downgraded to SIGN even before enrichment.
+ *
+ * Token-2022 TransferChecked layout (disc=12):
+ *   [u8 12][u64 amount LE][u8 decimals]
+ *   accounts: [source(writable), mint(readonly), destination(writable), authority(signer)]
+ */
+function token2022TransferCheckedB64(): string {
+  // u64::MAX as the transfer amount — triggers oversized-token-transfer HOLD.
+  const MAX_U64 = 2n ** 64n - 1n;
+  const amountBytes = new Uint8Array(8);
+  new DataView(amountBytes.buffer).setBigUint64(0, MAX_U64, true);
+  const data = concat(Uint8Array.from([12]), amountBytes, Uint8Array.from([6]));
+  const ix = new TransactionInstruction({
+    programId: TOKEN_2022,
+    keys: [
+      { pubkey: TOKEN_ACCOUNT.publicKey, isSigner: false, isWritable: true }, // source
+      { pubkey: MINT.publicKey, isSigner: false, isWritable: false }, // mint at [1]
+      { pubkey: RECIPIENT.publicKey, isSigner: false, isWritable: true }, // destination at [2]
+      { pubkey: SIGNER.publicKey, isSigner: true, isWritable: false }, // authority
+    ],
+    data,
+  });
+  return legacyB64([ix]);
+}
+
 // ---- the 10 fixtures --------------------------------------------------------
 
 const fixtures: Array<{ name: string; b64: string }> = [
@@ -294,6 +365,14 @@ const fixtures: Array<{ name: string; b64: string }> = [
   {
     name: "10_token2022_permdelegate_hold",
     b64: legacyB64([token2022PermanentDelegate()]),
+  },
+  {
+    name: "13_v0_alt_setauthority",
+    b64: v0AltSetAuthorityB64(),
+  },
+  {
+    name: "14_token2022_permanent_delegate",
+    b64: token2022TransferCheckedB64(),
   },
 ];
 
