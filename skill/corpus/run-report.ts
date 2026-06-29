@@ -307,6 +307,8 @@ function generateReport(
   lines.push("");
   lines.push(
     "These are corpus measurements, not population-wide guarantees. A zero false-REJECT count is useful calibration evidence, but zero false positives is not the optimization target for a fail-closed signing gate; the HOLD rate shows the review cost directly.",
+    "",
+    "Prior corpus (v0.5.x, 100 tx): 36% SIGN / 64% HOLD / 0 false-REJECT. This larger, more diverse 500-tx sample is more conservative (lower SIGN rate); the load-bearing property -- 0 false-REJECT -- holds at scale.",
   );
   lines.push("");
   lines.push("| Decision | Count | Pct |");

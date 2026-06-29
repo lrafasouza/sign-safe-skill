@@ -1,6 +1,6 @@
 # Sign-Safe Precision Report
 
-Generated: 2026-06-29T22:29:39.073Z
+Generated: 2026-06-29T22:59:00.599Z
 Pinned slots: 428290000, 428289500
 
 ## 1. Signing Precision and Review Rate
@@ -10,6 +10,8 @@ Benign SIGN precision: **100.0%** (92/92 SIGN decisions across this corpus were 
 Benign HOLD rate: **81.6%** (408/500).
 
 These are corpus measurements, not population-wide guarantees. A zero false-REJECT count is useful calibration evidence, but zero false positives is not the optimization target for a fail-closed signing gate; the HOLD rate shows the review cost directly.
+
+Prior corpus (v0.5.x, 100 tx): 36% SIGN / 64% HOLD / 0 false-REJECT. This larger, more diverse 500-tx sample is more conservative (lower SIGN rate); the load-bearing property -- 0 false-REJECT -- holds at scale.
 
 | Decision | Count | Pct |
 |----------|-------|-----|

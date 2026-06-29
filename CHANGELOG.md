@@ -17,6 +17,10 @@ Verification depth + corpus growth. No deterministic-core behavior change.
 
 - **Benign precision corpus 100 -> 500** real mainnet transactions (frozen; `capture-benign.ts` is now idempotent -- re-runs never mutate frozen fixtures, manifest built from disk). Recomputed precision over 500: **18.4% SIGN / 81.6% HOLD / 0 false-REJECT** (92/92 SIGN precision). The larger, more diverse sample is more conservative; the fail-closed 0-false-REJECT property holds.
 
+### Fixed
+
+- Corrected `skill/corpus/benign/manifest.json`: the original 100 entries' SHA256s did not match their (unchanged) fixture files; the manifest is now rebuilt from disk and consistent for all 500. Fixture bytes were not modified.
+
 800 tests across 42 files; 80-fixture runner ALL GREEN; 37/37 synthetic + 2/2 real attack replay; False SIGN 0; verify:all green.
 
 ## [0.6.0] - 2026-06-29
