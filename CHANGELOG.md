@@ -3,6 +3,23 @@
 All notable changes to sign-safe are documented here.
 Format: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-06-29
+
+Real-attack evidence, npm packaging, deeper adversarial coverage, and verifiable test robustness. The deterministic core stays pure/offline/fail-closed. (Clear-signing registry expansion, benign-corpus growth to 500, Stryker mutation testing, and a CLI GIF are planned for v0.6.1.)
+
+### Added
+
+- **Real on-chain malicious corpus** (`skill/corpus/malicious/`, `docs/real-attacks.md`): the two real Drift Protocol (~$285M, Apr 1 2026) exploit transactions, captured from chain and replayed offline -- both **HOLD** (durable-nonce + Squads execution). Honest floor: a documented attack is never auto-signed. `capture-malicious.ts` reads the RPC from `$SIGN_SAFE_RPC`; no secret committed.
+- **npm packaging:** published as **`sign-safe`** (`npx sign-safe`, `sign-safe-mcp`); see `PUBLISH.md`.
+- **rpc-adversarial coverage (RPA6-RPA8):** v0+ALT and Token-2022 fixtures that genuinely drive the ALT-resolution and mint-extension enrichment paths (fetcher call-count > 0), plus a forged-ALT-injects-a-writable-signer case -- all fail-closed; proves RPC enrichment cannot remove or downgrade findings derived from the signed bytes.
+- **Fuzz fail-closed harness** (`skill/test/fuzz-fail-closed.test.ts`): byte-mutating an authority-transfer fixture never yields SIGN.
+
+### Fixed
+
+- **Fail-closed gap in the SPL Token classifier** (`classify.ts`, GAP-FC1), found by the fuzz harness: a mutated SPL discriminator byte could previously yield SIGN. Exhaustive 1-byte scan now: 0 SIGN with the fix (243 without).
+
+800 tests across 42 files; 80-fixture runner ALL GREEN; 37/37 synthetic + 2/2 real attack replay, False SIGN 0; `tsc` clean; `verify:all` green.
+
 ## [0.5.1] - 2026-06-29
 
 Competitive-analysis pass: evaluator experience, honesty/consistency, and proof depth.

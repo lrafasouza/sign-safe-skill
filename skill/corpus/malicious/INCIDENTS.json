@@ -1,0 +1,23 @@
+{
+  "_comment": "Curated list of publicly-documented, in-class attack transactions. Each entry's RAW signed bytes are captured by capture-malicious.ts into <incident>__<sig8>.json (frozen; tests read only the frozen JSON, fully offline). Only incidents with a public postmortem + retrievable on-chain bytes are listed. No fabrication.",
+  "incidents": [
+    {
+      "incident": "drift-2026-04",
+      "title": "Drift Protocol ~$285M durable-nonce blind-signing exploit",
+      "date": "2026-04-01",
+      "threat_class": "durable-nonce + Squads v4 governance execution",
+      "signature": "2HvMSgDEfKhNryYZKhjowrBY55rUx5MWtcWkG9hqxZCFBaTiahPwfynP1dxBSRk9s5UTVc8LFeS4Btvkm9pc2C4H",
+      "source_url": "https://www.quillaudits.com/blog/hack-analysis/drift-protocol-multisig-exploit",
+      "explorer": "https://solscan.io/tx/2HvMSgDEfKhNryYZKhjowrBY55rUx5MWtcWkG9hqxZCFBaTiahPwfynP1dxBSRk9s5UTVc8LFeS4Btvkm9pc2C4H"
+    },
+    {
+      "incident": "drift-2026-04",
+      "title": "Drift Protocol ~$285M durable-nonce blind-signing exploit",
+      "date": "2026-04-01",
+      "threat_class": "durable-nonce + Squads v4 execute (unverified inner)",
+      "signature": "4BKBmAJn6TdsENij7CsVbyMVLJU1tX27nfrMM1zgKv1bs2KJy6Am2NqdA3nJm4g9C6eC64UAf5sNs974ygB9RsN1",
+      "source_url": "https://www.quillaudits.com/blog/hack-analysis/drift-protocol-multisig-exploit",
+      "explorer": "https://solscan.io/tx/4BKBmAJn6TdsENij7CsVbyMVLJU1tX27nfrMM1zgKv1bs2KJy6Am2NqdA3nJm4g9C6eC64UAf5sNs974ygB9RsN1"
+    }
+  ]
+}

@@ -166,6 +166,44 @@ const AUTHORITY_TYPE_NAMES: Record<number, string> = {
 };
 
 const SPL_TOKEN = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+const TOKEN_2022 = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
+
+/**
+ * Known-safe SPL Token / Token-2022 instruction discriminators NOT in the
+ * danger catalog, with exact data-length bounds.
+ *
+ * Fail-closed rule (GAP-FC1): any SPL Token / Token-2022 instruction whose
+ * discriminator is NOT in the danger catalog AND NOT in this known-safe table
+ * (or whose data length falls outside the allowed range) produces a HOLD
+ * "spl-unrecognized-instruction" finding -- never SIGN.
+ *
+ * Each entry:
+ *   disc     — single byte discriminator (ix.data[0])
+ *   minLen   — minimum acceptable data length (inclusive)
+ *   maxLen   — maximum acceptable data length (inclusive)
+ *
+ * Instructions omitted from this table are only benign when their primary
+ * discriminator already matches a catalog entry with a sub-discriminator
+ * condition (e.g. Token-2022 disc=42 sub=0). Those are handled separately
+ * via hadDiscriminatorMatch.
+ *
+ * Transfer (disc=3, 9 bytes): [u8 disc][u64 amount].
+ * TransferChecked (disc=12, 10 bytes): [u8 disc][u64 amount][u8 decimals].
+ *
+ * All other benign SPL Token instructions (InitializeMint=1, InitializeAccount=0,
+ * Revoke=5, SyncNative=11, etc.) are omitted intentionally: they are rare in
+ * signing flows and their omission is fail-closed. A wallet presenting such an
+ * instruction receives a HOLD (manual-review) verdict rather than an auto-SIGN,
+ * which is the correct conservative posture.
+ */
+const SPL_KNOWN_SAFE: ReadonlyArray<{
+  readonly disc: number;
+  readonly minLen: number;
+  readonly maxLen: number;
+}> = [
+  { disc: 3, minLen: 9, maxLen: 9 }, // Transfer: [disc u8][amount u64]
+  { disc: 12, minLen: 10, maxLen: 10 }, // TransferChecked: [disc u8][amount u64][decimals u8]
+];
 
 /**
  * Decode a SPL/Token-2022 SetAuthority (tag 6) detail (C4/C5/V1): byte1 =
@@ -749,6 +787,11 @@ export function classify(
     const u32Disc = usesU32Tag ? u32TagDiscriminator(ix.data) : null;
     const byteDisc = ix.data.length > 0 ? (ix.data[0] as number) : null;
     const findingsBeforeInstruction = findings.length;
+    // Track whether ANY catalog entry matched on the primary discriminator
+    // (before sub-discriminator filtering). When true but no finding was
+    // produced, the instruction is a known-extension config sub-command
+    // (e.g. Token-2022 disc=42 sub=0) and is treated as benign (SIGN).
+    let hadDiscriminatorMatch = false;
 
     for (const entry of ENTRIES) {
       if (entry.programId !== pid) continue;
@@ -760,6 +803,7 @@ export function classify(
           (entry.detection.discriminator?.includes(byteDisc) ?? false);
 
       if (!matched) continue;
+      hadDiscriminatorMatch = true;
 
       // Token-2022 extension sub-discriminator (byte 1): tags like 26/37/42
       // select an extension; the sub-instruction is byte[1]. An entry with a
@@ -928,6 +972,59 @@ export function classify(
         mapsToLoss:
           "Stake-account effects are recognized but not fully decoded; manual review is required before signing.",
       });
+    }
+
+    // GAP-FC1 fail-closed fallthrough for SPL Token and Token-2022.
+    //
+    // When a known SPL Token / Token-2022 instruction produced NO finding:
+    //   - If the primary discriminator matched a catalog entry (hadDiscriminatorMatch)
+    //     but the sub-discriminator filtering excluded it, this is a known-safe
+    //     extension config sub-command (e.g. ConfidentialMintBurn::InitializeMint
+    //     at disc=42, sub=0 vs the dangerous Mint/Burn at sub=3/4). Allow SIGN.
+    //   - If the primary discriminator did NOT match any catalog entry, check the
+    //     SPL_KNOWN_SAFE table (Transfer disc=3, TransferChecked disc=12). If the
+    //     discriminator and data length match a known-safe entry, allow SIGN.
+    //   - Otherwise, emit a HOLD "spl-unrecognized-instruction". This is the
+    //     fail-closed rule: an unrecognized SPL Token instruction can be a hidden
+    //     authority-transfer or delegate-approval with a malformed or unknown
+    //     discriminator byte. We must never auto-SIGN an instruction we cannot
+    //     positively classify as benign.
+    if (
+      (pid === SPL_TOKEN || pid === TOKEN_2022) &&
+      findings.length === findingsBeforeInstruction
+    ) {
+      if (!hadDiscriminatorMatch) {
+        // Primary disc was not in the catalog at all.
+        // Check the known-safe benign-instruction table.
+        const safe =
+          byteDisc !== null &&
+          SPL_KNOWN_SAFE.some(
+            (s) =>
+              s.disc === byteDisc &&
+              ix.data.length >= s.minLen &&
+              ix.data.length <= s.maxLen,
+          );
+        if (!safe) {
+          findings.push({
+            id: "spl-unrecognized-instruction",
+            label: `${pid === SPL_TOKEN ? "SPL Token" : "Token-2022"}: unrecognized or malformed instruction`,
+            severity: "HOLD",
+            category: "unknown-program",
+            instructionIndex,
+            programId: pid,
+            detail:
+              `Instruction discriminator ${byteDisc ?? "none"} on ${KNOWN_PROGRAMS[pid] ?? pid} (${pid}) ` +
+              `does not match any catalogued danger primitive or verified benign instruction. ` +
+              `Data length: ${ix.data.length} byte(s). ` +
+              `Manual review is required before signing.`,
+            mapsToLoss:
+              "Unrecognized SPL Token / Token-2022 instructions can hide authority transfers, " +
+              "delegate approvals, or other state mutations not visible to the static classifier.",
+          });
+        }
+      }
+      // If hadDiscriminatorMatch is true (sub-disc filtering excluded the entry),
+      // the instruction is a known extension config command -- no finding needed.
     }
   });
 

@@ -16,14 +16,27 @@
  *   RPA2  Squads vaultTransactionExecute (squads fixture): stub RPC returning
  *         null for the VaultTransaction PDA — squads-execute-unverified stays HOLD.
  *   RPA3  SPL SetAuthority + an injected ALT fetcher. 02_setauthority_reject
- *         carries no ALT references, so the fetcher is never consulted; this
- *         proves the enrichment ENTRY POINT cannot downgrade the offline REJECT
- *         (it does not by itself exercise ALT decoding).
+ *         carries no ALT references, so the fetcher is never consulted (the
+ *         legacy fixture carries no addressTableLookups), proving the enrichment
+ *         ENTRY POINT cannot downgrade the offline REJECT. Does NOT exercise ALT
+ *         decoding (the fetcher call count stays 0 for this fixture).
  *   RPA4  Squads execute + an injected PDA fetcher returning undecodable bytes.
  *         Exercises the real Squads PDA fetch + decode-failure path; HOLD stands
  *         (no Token-2022 mints present, so mint screening is not reached).
  *   RPA5  reviewWithEnrichment: stub returning null for every account still
  *         preserves the spl-set-authority finding from 02_setauthority_reject.
+ *   RPA6  v0 tx (13_v0_alt_setauthority) + a call-counting ALT fetcher: proves
+ *         the ALT enrichment path is genuinely exercised (fetcher.calls > 0),
+ *         that the offline spl-set-authority finding is not removed, and that
+ *         the enriched decision is not downgraded below the offline verdict.
+ *   RPA7  Token-2022 TransferChecked tx (14_token2022_permanent_delegate) + a
+ *         benign mint fetcher: proves the mint-extension enrichment path is
+ *         genuinely exercised (fetcher.calls > 0) and that the decision is not
+ *         downgraded to SIGN.
+ *   RPA8  Forged ALT fetcher on 13_v0_alt_setauthority returning attacker-
+ *         controlled addresses in the ALT slot — decision must still be not SIGN
+ *         (the byte-derived spl-set-authority finding is preserved regardless of
+ *         what the enricher resolves).
  */
 
 import { describe, it, expect } from "vitest";
@@ -32,6 +45,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { reviewBase64 } from "../src/verdict.ts";
 import { reviewWithEnrichment } from "../src/review-online.ts";
+import type { AccountFetcher } from "../src/enrich.ts";
 import type { VerdictContext } from "../src/types.ts";
 
 // ---------------------------------------------------------------------------
@@ -412,5 +426,265 @@ describe("RPA5: offline decision is the floor — RPC enrichment can only escala
 
       expect(enrichedRank).toBeGreaterThanOrEqual(offlineRank);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ALT byte builder (reused across RPA6 and RPA8)
+// ---------------------------------------------------------------------------
+
+/**
+ * Build a syntactically valid on-chain ALT account buffer that decodeAddressLookupTable
+ * accepts. The ALT contains a single address (32-byte payload).
+ *
+ * Layout (matches alt.ts LOOKUP_TABLE_META_SIZE = 56):
+ *   [0..4)   discriminator u32-LE = 1
+ *   [4..12)  deactivation_slot u64-LE = u64::MAX (active)
+ *   [12..20) last_extended_slot u64-LE = 0
+ *   [20]     last_extended_slot_start_index u8 = 0
+ *   [21]     authority option tag = 0x01 (Some)
+ *   [22..54) authority pubkey (32 bytes)
+ *   [54..56) padding u16
+ *   [56..88) single address (32 bytes)
+ */
+function buildAltBytes(address32: Uint8Array): Uint8Array {
+  const buf: number[] = [];
+  // discriminator = 1 (LookupTable), u32-LE
+  buf.push(1, 0, 0, 0);
+  // deactivation_slot = u64::MAX (active)
+  buf.push(0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff);
+  // last_extended_slot = 0, u64-LE
+  buf.push(0, 0, 0, 0, 0, 0, 0, 0);
+  // last_extended_slot_start_index = 0
+  buf.push(0);
+  // authority = Some; any 32-byte pubkey as authority
+  buf.push(0x01);
+  buf.push(...new Array(32).fill(0xaa)); // authority bytes (unused by decoder beyond tag)
+  // padding u16
+  buf.push(0, 0);
+  // addresses: the single 32-byte entry
+  buf.push(...Array.from(address32));
+  return Uint8Array.from(buf);
+}
+
+// ---------------------------------------------------------------------------
+// RPA6: v0 ALT fixture — fetcher IS consulted, spl-set-authority finding
+//        survives, enriched decision not below offline
+// ---------------------------------------------------------------------------
+
+describe("RPA6: v0+ALT fixture (13_v0_alt_setauthority) — ALT fetcher is genuinely exercised", () => {
+  it("RPA6.1 offline verdict is REJECT (spl-set-authority from instruction bytes)", () => {
+    const b64 = readFixtureB64("13_v0_alt_setauthority");
+    const verdict = reviewBase64(b64, DEFAULT_CTX);
+    expect(verdict.decision).toBe("REJECT");
+    expect(verdict.flags.altLookupsPresent).toBe(true);
+    expect(verdict.flags.rolesUnverified).toBe(true);
+    const finding = verdict.findings.find(
+      (f) => f.id === SPL_SET_AUTHORITY_FINDING_ID,
+    );
+    expect(finding).toBeDefined();
+    expect(finding!.severity).toBe("REJECT");
+  });
+
+  it("RPA6.2 reviewWithEnrichment: fetcher IS consulted (calls>0), decision not SIGN, spl-set-authority present", async () => {
+    const b64 = readFixtureB64("13_v0_alt_setauthority");
+
+    // A call-counting ALT fetcher that returns valid, benign ALT bytes.
+    // The ALT contains a single address (all-0xee filler) at writable slot 0.
+    let fetcherCallCount = 0;
+    const benignAltBytes = buildAltBytes(
+      Uint8Array.from(new Array(32).fill(0xee)),
+    );
+    const countingFetcher: AccountFetcher = async (_pubkey: string) => {
+      fetcherCallCount++;
+      return { data: benignAltBytes };
+    };
+
+    const offlineVerdict = reviewBase64(b64, DEFAULT_CTX);
+    const enrichedVerdict = await reviewWithEnrichment(
+      b64,
+      DEFAULT_CTX,
+      countingFetcher,
+      { rpcUrl: "https://adversarial-alt-counting.example.com" },
+    );
+
+    // The ALT enrichment path must have been entered: the fixture has an
+    // addressTableLookup, so reviewWithEnrichment calls fetcher(altAccountKey).
+    expect(fetcherCallCount).toBeGreaterThan(0);
+
+    // The byte-derived spl-set-authority finding must survive enrichment.
+    const finding = enrichedVerdict.findings.find(
+      (f) => f.id === SPL_SET_AUTHORITY_FINDING_ID,
+    );
+    expect(finding).toBeDefined();
+    expect(finding!.severity).toBe("REJECT");
+
+    // Enriched decision must not be downgraded below the offline verdict.
+    const DECISION_RANK: Record<string, number> = {
+      SIGN: 0,
+      HOLD: 1,
+      REJECT: 2,
+    };
+    expect(DECISION_RANK[enrichedVerdict.decision] ?? 0).toBeGreaterThanOrEqual(
+      DECISION_RANK[offlineVerdict.decision] ?? 0,
+    );
+
+    // Specifically: must NOT be SIGN.
+    expect(enrichedVerdict.decision).not.toBe("SIGN");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// RPA7: Token-2022 TransferChecked fixture — mint fetcher IS consulted
+// ---------------------------------------------------------------------------
+
+describe("RPA7: Token-2022 TransferChecked fixture (14_token2022_permanent_delegate) — mint fetcher is genuinely exercised", () => {
+  it("RPA7.1 offline verdict is HOLD (oversized token transfer)", () => {
+    const b64 = readFixtureB64("14_token2022_permanent_delegate");
+    const verdict = reviewBase64(b64, DEFAULT_CTX);
+    // Offline HOLD due to oversized-token-transfer; no ALT lookups.
+    expect(verdict.decision).toBe("HOLD");
+    expect(verdict.flags.altLookupsPresent).toBe(false);
+    expect(verdict.flags.rolesUnverified).toBe(false);
+  });
+
+  it("RPA7.2 reviewWithEnrichment with benign mint fetcher: fetcher IS consulted (calls>0), decision not SIGN", async () => {
+    const b64 = readFixtureB64("14_token2022_permanent_delegate");
+
+    // Benign mint fetcher: returns an 82-byte zeroed SPL-style account (no extensions).
+    // The enricher will call this for the mint at accountIndexes[1].
+    let fetcherCallCount = 0;
+    const benignMintFetcher: AccountFetcher = async (_pubkey: string) => {
+      fetcherCallCount++;
+      return { data: new Uint8Array(82).fill(0) };
+    };
+
+    const enrichedVerdict = await reviewWithEnrichment(
+      b64,
+      DEFAULT_CTX,
+      benignMintFetcher,
+      { rpcUrl: "https://adversarial-mint-benign.example.com" },
+    );
+
+    // The mint-extension enrichment path must have been entered: the fixture has
+    // a TransferChecked (disc=12) on TOKEN_2022 with a static mint address.
+    expect(fetcherCallCount).toBeGreaterThan(0);
+
+    // Even with a benign mint (no extensions), the offline HOLD from
+    // oversized-token-transfer must not be removed (fail-closed).
+    expect(enrichedVerdict.decision).not.toBe("SIGN");
+  });
+
+  it("RPA7.3 reviewWithEnrichment with permanent-delegate mint fetcher: fetcher IS consulted and decision escalated to HOLD", async () => {
+    const b64 = readFixtureB64("14_token2022_permanent_delegate");
+
+    // A mint fetcher returning Token-2022 account data with a PermanentDelegate extension.
+    // Token-2022 mint layout (tlv.ts ACCOUNT_TYPE_OFFSET = 165):
+    //   [0..165)  base bytes (must reach offset 165 for account_type to be read)
+    //   [165]     account_type = 0x01 (Mint)
+    //   [166..)   TLV: [type u16-LE][length u16-LE][value bytes...]
+    // ExtensionType 12 (PermanentDelegate): 32-byte delegate pubkey value
+    let fetcherCallCount = 0;
+    const delegateAddr = new Uint8Array(32).fill(0x55); // non-zero delegate
+    const mintDataWithDelegate: number[] = [
+      ...new Array(165).fill(0x00), // 165 base bytes (ACCOUNT_TYPE_OFFSET)
+      0x01, // account_type = Mint at offset 165
+      0x0c,
+      0x00, // ExtensionType 12 (PermanentDelegate) u16-LE
+      0x20,
+      0x00, // length 32 u16-LE
+      ...Array.from(delegateAddr), // delegate pubkey (32 bytes)
+    ];
+    const pdMintFetcher: AccountFetcher = async (_pubkey: string) => {
+      fetcherCallCount++;
+      return { data: Uint8Array.from(mintDataWithDelegate) };
+    };
+
+    const enrichedVerdict = await reviewWithEnrichment(
+      b64,
+      DEFAULT_CTX,
+      pdMintFetcher,
+      { rpcUrl: "https://adversarial-mint-delegate.example.com" },
+    );
+
+    expect(fetcherCallCount).toBeGreaterThan(0);
+    expect(enrichedVerdict.decision).not.toBe("SIGN");
+
+    // The enriched verdict should now include the token2022-permanent-delegate finding.
+    const delegateFinding = enrichedVerdict.findings.find(
+      (f) => f.id === "token2022-permanent-delegate",
+    );
+    expect(delegateFinding).toBeDefined();
+    expect(delegateFinding!.severity).toBe("HOLD");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// RPA8: Forged ALT fetcher — attacker returns fake addresses, still not SIGN
+// ---------------------------------------------------------------------------
+
+describe("RPA8: forged ALT fetcher on 13_v0_alt_setauthority — fail-closed even with attacker-controlled ALT data", () => {
+  it("RPA8.1 forged ALT bytes with attacker address at slot 0 — decision still not SIGN, spl-set-authority preserved", async () => {
+    const b64 = readFixtureB64("13_v0_alt_setauthority");
+
+    // Forged ALT: returns attacker-controlled address at writable slot 0 instead
+    // of the real MINT. The classifier sees the instruction discriminator (disc=6
+    // on SPL_TOKEN) and fires spl-set-authority from the instruction bytes alone —
+    // the resolved account address is irrelevant to the finding.
+    let fetcherCallCount = 0;
+    const attackerControlledAddr = new Uint8Array(32).fill(0xf0); // forged address
+    const forgedAltBytes = buildAltBytes(attackerControlledAddr);
+    const forgedFetcher: AccountFetcher = async (_pubkey: string) => {
+      fetcherCallCount++;
+      return { data: forgedAltBytes };
+    };
+
+    const enrichedVerdict = await reviewWithEnrichment(
+      b64,
+      DEFAULT_CTX,
+      forgedFetcher,
+      { rpcUrl: "https://adversarial-forged-alt.example.com" },
+    );
+
+    // Fetcher was consulted (ALT resolution attempted).
+    expect(fetcherCallCount).toBeGreaterThan(0);
+
+    // Fail-closed: even with forged ALT bytes the gate must not be bypassed.
+    expect(enrichedVerdict.decision).not.toBe("SIGN");
+
+    // The spl-set-authority finding (byte-derived) must be present regardless
+    // of what the ALT resolves to — it fires from instruction discriminator alone.
+    const finding = enrichedVerdict.findings.find(
+      (f) => f.id === SPL_SET_AUTHORITY_FINDING_ID,
+    );
+    expect(finding).toBeDefined();
+    expect(finding!.severity).toBe("REJECT");
+  });
+
+  it("RPA8.2 ALT fetcher returning null (withheld table) — decision still not SIGN, finding preserved", async () => {
+    const b64 = readFixtureB64("13_v0_alt_setauthority");
+
+    // Worst-case: ALT fetcher returns null for the table.
+    // The enricher silently omits the unresolvable table (fail-closed).
+    let fetcherCallCount = 0;
+    const nullAltFetcher: AccountFetcher = async (_pubkey: string) => {
+      fetcherCallCount++;
+      return null;
+    };
+
+    const enrichedVerdict = await reviewWithEnrichment(
+      b64,
+      DEFAULT_CTX,
+      nullAltFetcher,
+      { rpcUrl: "https://adversarial-null-alt.example.com" },
+    );
+
+    expect(fetcherCallCount).toBeGreaterThan(0);
+    expect(enrichedVerdict.decision).not.toBe("SIGN");
+
+    const finding = enrichedVerdict.findings.find(
+      (f) => f.id === SPL_SET_AUTHORITY_FINDING_ID,
+    );
+    expect(finding).toBeDefined();
   });
 });

@@ -19,13 +19,13 @@ $ npm run build
 ==> Vitest suite
 $ npm test
 
- Test Files  40 passed (40)
-      Tests  777 passed (777)
+ Test Files  42 passed (42)
+      Tests  800 passed (800)
 
 ==> Deterministic fixture runner
 $ npm run test:fixtures
 
-PASS 70   FAIL 0
+PASS 80   FAIL 0
 RESULT: ALL GREEN
 
 ==> Attack replay pack
