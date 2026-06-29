@@ -77,10 +77,10 @@
     "verify:all": "node scripts/verify-all.mjs",
     "gen-fixtures": "node --import tsx skill/fixtures/generate.ts",
     "gen-goldens": "node --import tsx skill/fixtures/gen-goldens.ts",
-    "cli": "node --import tsx skill/src/cli.ts"
+    "cli": "node --import tsx skill/src/cli.ts",
+    "mutation": "stryker run"
   },
   "comment:dependencies": "The deterministic core has zero runtime dependencies. @solana/web3.js and @solana/kit are optional peers used only by adapters, fixture generation, and cross-validation tests.",
-  "dependencies": {},
   "peerDependencies": {
     "@solana/kit": "^2.1.0",
     "@solana/web3.js": "^1.95.3"
@@ -96,6 +96,8 @@
   "devDependencies": {
     "@solana/kit": "^2.1.0",
     "@solana/web3.js": "^1.95.3",
+    "@stryker-mutator/core": "^9.6.1",
+    "@stryker-mutator/vitest-runner": "^9.6.1",
     "@types/node": "^22.5.0",
     "fast-check": "^3.23.2",
     "tsx": "^4.19.0",
