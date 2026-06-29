@@ -828,8 +828,14 @@ What those 800 checks actually validate:
 | **RPC fetcher** | `rpc.test.ts` | JSON-RPC `getAccountInfo` injector; frozen stub; offline-identical behavior when no `--rpc`. |
 | **CLI args** | `cli-args.test.ts` | Flag parsing correctness: `--rpc`, `--vault-pda`, `--strict`, `--threshold`, `--json`, `--digest`. |
 | **Precision harness** | `precision.test.ts` | 500 benign + 37 malicious offline corpus; 0 false-REJECTs on benign; 100% malicious recall; ALT sub-test. |
+| **Real on-chain attacks** | `real-attacks.test.ts` | The 2 real Drift (Apr 2026, ~$285M) exploit transactions, replayed offline -> never SIGN (both HOLD: durable nonce + Squads). Provenance: `docs/real-attacks.md`. |
+| **RPC-adversarial** | `rpc-adversarial.test.ts` | Injected/forged RPC enrichment (ALT, Squads PDA, Token-2022 mint) cannot remove or downgrade findings derived from the signed bytes; forged-ALT fails closed. |
+| **Fuzz (fail-closed)** | `fuzz-fail-closed.test.ts` | Byte-mutating an authority-transfer fixture never yields SIGN (exhaustive 1-byte scan: 0 / 44,288). |
+| **Registry discriminators** | `registry-discriminators.test.ts` | Every anchor-8 `discHex` == `sha256("global:"+ixName)`; ixNames cross-verified vs canonical on-chain IDLs (`catalog/idl-sources.json`). |
 | **Determinism** | `run.ts` + CI | The standalone node runner's output is byte-identical across two runs (no timing/nondeterminism in the core). |
 | **No-network** | `fixtures.test.ts` | Core modules import no `http`/`https`/`net`/`fetch`; the suite makes zero network calls at run time. |
+
+**Mutation testing:** Stryker runs against `skill/src/classify.ts` and the score is reported honestly (not inflated) in [`docs/mutation-report.md`](docs/mutation-report.md) — run with `npm run mutation`.
 
 > **On `npm audit`:** any advisories come exclusively from **dev** dependencies
 > (the `vitest`/`vite`/`esbuild` toolchain and `@solana/web3.js`'s transitive
