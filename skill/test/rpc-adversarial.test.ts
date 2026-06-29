@@ -15,10 +15,13 @@
  *         benign/empty enrichment — REJECT finding spl-set-authority stays present.
  *   RPA2  Squads vaultTransactionExecute (squads fixture): stub RPC returning
  *         null for the VaultTransaction PDA — squads-execute-unverified stays HOLD.
- *   RPA3  SPL SetAuthority + stub ALT (benign enrichment from RPC) — offline
- *         REJECT is not downgraded even when ALT resolution returns benign data.
- *   RPA4  Squads execute + stub fetcher returning empty mint data — offline
- *         decision not downgraded.
+ *   RPA3  SPL SetAuthority + an injected ALT fetcher. 02_setauthority_reject
+ *         carries no ALT references, so the fetcher is never consulted; this
+ *         proves the enrichment ENTRY POINT cannot downgrade the offline REJECT
+ *         (it does not by itself exercise ALT decoding).
+ *   RPA4  Squads execute + an injected PDA fetcher returning undecodable bytes.
+ *         Exercises the real Squads PDA fetch + decode-failure path; HOLD stands
+ *         (no Token-2022 mints present, so mint screening is not reached).
  *   RPA5  reviewWithEnrichment: stub returning null for every account still
  *         preserves the spl-set-authority finding from 02_setauthority_reject.
  */
@@ -253,8 +256,8 @@ describe("RPA2: squads-execute-unverified finding persists when RPC withholds Va
 // RPA3: SPL SetAuthority + benign ALT enrichment — REJECT not downgraded
 // ---------------------------------------------------------------------------
 
-describe("RPA3: byte-derived REJECT survives ALT enrichment returning benign data", () => {
-  it("RPA3.1 setauthority fixture: offline REJECT matches reviewWithEnrichment REJECT even when fetcher provides benign ALT-like data", async () => {
+describe("RPA3: byte-derived REJECT survives the ALT-enrichment entry point", () => {
+  it("RPA3.1 setauthority fixture: offline REJECT matches reviewWithEnrichment REJECT with an ALT fetcher injected (fixture has no ALT refs, so it is not consulted)", async () => {
     const b64 = readFixtureB64("02_setauthority_reject");
 
     // Offline baseline
@@ -278,8 +281,9 @@ describe("RPA3: byte-derived REJECT survives ALT enrichment returning benign dat
     }
     const benignAlt = Uint8Array.from(benignAltBytes);
 
-    // Adversarial stub: always returns a benign ALT account, trying to make enrichment
-    // appear to "resolve" all references in a way that seems harmless.
+    // Adversarial stub that WOULD return a benign ALT account if consulted. This fixture
+    // has no ALT references, so it is never invoked; the assertion below proves the
+    // enrichment entry point cannot downgrade the byte-derived REJECT.
     const benignAltFetcher = async (_pubkey: string) => ({
       data: benignAlt,
     });

@@ -1,7 +1,7 @@
 {
   "name": "sign-safe-skill",
   "version": "0.5.0",
-  "description": "v0.5 signing-time gate for Solana: decode any base64 tx offline, classify 37 danger primitives + Native Stake + bounded ATA/Memo recognition + a 14-program DeFi/NFT clear-signing registry, resolve ALTs and clear-sign Squads proposals with --rpc, optionally --simulate (innerInstructions + balance diff, escalate-only), and emit a SIGN/HOLD/REJECT verdict with requiresHumanReview + finding categories. Ships a programmatic API, a signTransaction/MWA gate, MCP outputSchema, JSON Schema, verify:all, and an attack replay pack. Deterministic, fail-closed, zero-dependency core, 758 tests.",
+  "description": "v0.5 signing-time gate for Solana: decode any base64 tx offline, classify 37 danger primitives + Native Stake + bounded ATA/Memo recognition + a 14-program DeFi/NFT clear-signing registry, resolve ALTs and clear-sign Squads proposals with --rpc, optionally --simulate (innerInstructions + balance diff, escalate-only), and emit a SIGN/HOLD/REJECT verdict with requiresHumanReview + finding categories. Ships a programmatic API, a signTransaction/MWA gate, MCP outputSchema, JSON Schema, verify:all, and an attack replay pack. Deterministic, fail-closed, zero-dependency core, 777 tests.",
   "type": "module",
   "license": "MIT",
   "author": "Raffx <rafinha-lima1@live.com> (https://github.com/lrafasouza)",

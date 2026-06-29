@@ -1,6 +1,6 @@
 # sign-safe evaluator demo
 
-This walkthrough is intentionally short. It shows how sign-safe behaves on three
+This walkthrough is intentionally short. It shows how sign-safe behaves on four
 pre-sign cases without needing RPC, a wallet, a keypair, or devnet funds.
 
 Run from the repository root after `npm ci`.
@@ -78,7 +78,7 @@ unresolved.
 npm run cli -- skill/fixtures/squads_hidden_authority_hold.b64 --json
 ```
 
-Key output (verbatim from the CLI; full JSON at
+Selected fields (excerpt — the full, unmodified verdict.json, including the leading `registry-squads-v4-safe` INFO finding and all per-finding fields, is at
 [docs/sample-verdicts/squads-hold.json](docs/sample-verdicts/squads-hold.json)):
 
 ```json
