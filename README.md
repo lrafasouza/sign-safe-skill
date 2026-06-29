@@ -38,6 +38,50 @@ How to read the verdict:
 - **HOLD**: unclear, policy-sensitive, or human-review case; do not auto-sign.
 - **SIGN**: recognized benign shape under the current static policy. **SIGN is not a universal safety guarantee**; recipient, amount, business intent, and external policy still matter.
 
+### Proofs at a glance
+
+| Document | What it proves |
+|----------|---------------|
+| [docs/precision-report.md](docs/precision-report.md) | 36% SIGN / 64% HOLD / 0 false-REJECT on frozen 100-tx benign corpus + 37 malicious patterns |
+| [docs/evaluator-transcript.md](docs/evaluator-transcript.md) | Annotated terminal session: build → test → replay → pack |
+| [SECURITY.md](SECURITY.md) | Threat model, scope, responsible disclosure |
+| [RUBRIC_CHECKLIST.md](RUBRIC_CHECKLIST.md) | Bounty rubric mapped to concrete evidence |
+| [DEMO.md](DEMO.md) | Four step-by-step CLI scenarios (SIGN / REJECT / attack replay / Squads hidden-authority) |
+| [docs/sample-verdicts/](docs/sample-verdicts/) | Verbatim JSON outputs for SIGN, HOLD, REJECT, and Squads-HOLD — reproducible from fixtures |
+
+### Per-transaction CLI (one command)
+
+```bash
+# REJECT example — authority transfer blocked before signing:
+npm run cli -- skill/fixtures/02_setauthority_reject.b64
+```
+
+### What offline-static detection catches that simulation misses
+
+Static decoding flags danger shapes that are invisible to simulation because they
+are structural properties of the message bytes, not execution outcomes:
+
+- **SetAuthority / owner change** — authority transfer is in the instruction
+  discriminator, not an account balance delta.
+- **System Assign / AssignWithSeed** — reassigns program-owner without moving
+  lamports; a simulated balance check shows nothing.
+- **SPL Token Approve (delegate)** — grants a third party unlimited spend rights;
+  the signer's balance does not change at sign time.
+- **Durable nonce (AdvanceNonceAccount at ix0)** — a non-expiring message that
+  can be replayed at any future block; simulation runs at one block, misses the
+  replay vector entirely.
+- **ALT-obscured instructions** — a v0 message with unresolved Address Lookup
+  Table entries hides the real account set; static detection flags rolesUnverified
+  before the ALT is fetched.
+- **Squads hidden inner instructions** — a `vaultTransactionExecute` top-level
+  instruction embeds inner CPI calls in an off-chain PDA; simulation sees only
+  the shell unless the PDA is fetched first.
+
+Honest limits: the offline-deterministic core requires no network. Recall figures
+are corpus-scoped (see [docs/precision-report.md](docs/precision-report.md) for
+methodology). Transaction simulation (`--simulate`) and RPC enrichment (`--rpc`)
+are optional online extensions — they never downgrade a static REJECT.
+
 For a shorter walkthrough, see [DEMO.md](DEMO.md). For a compact proof transcript,
 see [docs/evaluator-transcript.md](docs/evaluator-transcript.md).
 

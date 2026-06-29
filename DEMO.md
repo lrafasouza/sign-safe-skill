@@ -67,6 +67,45 @@ Interpretation: the replay pack is a reproducible evaluator proof over a curated
 attack corpus. It is not a claim that every malicious Solana transaction is
 detected.
 
+## Scenario 4: Squads hidden-authority (HOLD)
+
+A Squads v4 `vaultTransactionExecute` instruction without its VaultTransaction
+PDA bytes supplied. The inner CPI instructions are unknown offline; the verdict is
+**HOLD**, not REJECT, because sign-safe fails conservatively when inner bytes are
+unresolved.
+
+```bash
+npm run cli -- skill/fixtures/squads_hidden_authority_hold.b64 --json
+```
+
+Key output (verbatim from the CLI; full JSON at
+[docs/sample-verdicts/squads-hold.json](docs/sample-verdicts/squads-hold.json)):
+
+```json
+{
+  "decision": "HOLD",
+  "requiresHumanReview": true,
+  "reason": "Manual review required: HOLD-class primitive(s): Squads vaultTransactionExecute: inner content not provided.",
+  "findings": [
+    {
+      "id": "squads-execute-unverified",
+      "severity": "HOLD",
+      "category": "squads",
+      "detail": "A top-level Squads vaultTransactionExecute instruction is present but the VaultTransaction PDA bytes were not supplied. The inner instruction(s) executed via CPI are unknown. Fetch the VaultTransaction PDA to see what this proposal will execute before signing."
+    }
+  ]
+}
+```
+
+This is the canonical offline representation of the Drift blind-signing attack
+class. The signer sees only the Squads shell; the inner instruction is hidden in
+the VaultTransaction PDA. The verdict is always **HOLD** offline — never SIGN.
+
+With `--rpc` (or `--vault-pda`), sign-safe resolves the inner bytes and
+re-classifies: if the inner instruction is an authority mutation (e.g.
+`update_admin`), the verdict escalates to **REJECT** (exit code 20). That online
+path is the resolved case; the offline default shown above is HOLD.
+
 ## Safe claims
 
 - sign-safe decodes and classifies transaction bytes before signing.

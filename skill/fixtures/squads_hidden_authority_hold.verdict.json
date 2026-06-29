@@ -1,0 +1,44 @@
+{
+  "schema": "sign-safe/verdict@1",
+  "decision": "HOLD",
+  "requiresHumanReview": true,
+  "reason": "Manual review required: HOLD-class primitive(s): Squads vaultTransactionExecute: inner content not provided.",
+  "messageVersion": "legacy",
+  "worstSeverity": "HOLD",
+  "findings": [
+    {
+      "id": "registry-squads-v4-safe",
+      "label": "Squads v4: vaultTransactionExecute (inner proposal decoded separately)",
+      "severity": "INFO",
+      "category": "program-interaction",
+      "instructionIndex": 0,
+      "programId": "SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf",
+      "detail": "Squads v4: vaultTransactionExecute (inner proposal decoded separately) on Squads v4 (SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf). Recognized user instruction (clear-signed by registry entry).",
+      "mapsToLoss": ""
+    },
+    {
+      "id": "squads-execute-unverified",
+      "label": "Squads vaultTransactionExecute: inner content not provided",
+      "severity": "HOLD",
+      "category": "squads",
+      "instructionIndex": -1,
+      "programId": "SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf",
+      "detail": "A top-level Squads vaultTransactionExecute instruction is present but the VaultTransaction PDA bytes were not supplied. The inner instruction(s) executed via CPI are unknown. Fetch the VaultTransaction PDA to see what this proposal will execute before signing.",
+      "mapsToLoss": "Hidden inner instructions executed via Squads CPI can transfer admin authority, upgrade programs, or drain funds -- exactly the Drift blind-signing attack class."
+    }
+  ],
+  "outflow": {
+    "lamports": "0",
+    "splTransfers": [],
+    "exceedsLamportThreshold": false,
+    "lamportTransfers": [],
+    "outboundToNonSigner": false
+  },
+  "flags": {
+    "unknownProgramPresent": false,
+    "altLookupsPresent": false,
+    "rolesUnverified": false,
+    "decodeFailed": false
+  },
+  "unknownPrograms": []
+}

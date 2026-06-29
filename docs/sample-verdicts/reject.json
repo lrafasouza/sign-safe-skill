@@ -1,0 +1,34 @@
+{
+  "schema": "sign-safe/verdict@1",
+  "decision": "REJECT",
+  "requiresHumanReview": true,
+  "reason": "Contains a REJECT-class danger primitive: SPL Token SetAuthority.",
+  "messageVersion": "legacy",
+  "worstSeverity": "REJECT",
+  "findings": [
+    {
+      "id": "spl-set-authority",
+      "label": "SPL Token SetAuthority",
+      "severity": "REJECT",
+      "category": "authority-change",
+      "instructionIndex": 0,
+      "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+      "detail": "SetAuthority on spl-token: authority_type=0 (MintTokens), new_authority=AKkzLhjhyFtM9j7WAhbaqYpFe49cXeJBg2kzLRC2PnNa.",
+      "mapsToLoss": "Hands mint/freeze/owner authority to an attacker, who can then mint, freeze, or seize at will."
+    }
+  ],
+  "outflow": {
+    "lamports": "0",
+    "splTransfers": [],
+    "exceedsLamportThreshold": false,
+    "lamportTransfers": [],
+    "outboundToNonSigner": false
+  },
+  "flags": {
+    "unknownProgramPresent": false,
+    "altLookupsPresent": false,
+    "rolesUnverified": false,
+    "decodeFailed": false
+  },
+  "unknownPrograms": []
+}
