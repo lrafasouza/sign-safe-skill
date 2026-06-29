@@ -8,7 +8,7 @@
 - Solana AI Kit PR: https://github.com/solanabr/solana-ai-kit/pull/34
 - Version: `0.6.0`
 - Local validation target: 800 tests across 42 files
-- Precision report: 36% SIGN / 64% HOLD / 0% false-REJECT on the frozen benign corpus
+- Precision report: 18.4% SIGN / 81.6% HOLD / 0% false-REJECT on the frozen benign corpus
 - Curated malicious corpus: 37/37 held or rejected before signing
 - Real on-chain attacks: 2 publicly-documented Drift (Apr 2026) exploit transactions held (HOLD) — see docs/real-attacks.md
 - Runtime dependency posture: zero runtime dependencies in the deterministic core
