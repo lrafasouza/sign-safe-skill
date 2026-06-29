@@ -28,6 +28,18 @@ reject, or proceed, **before** any signature happens.
   If omitted, the message's fee payer (account index 0) is assumed to be the signer.
 - `--offline <dir>`: a fixture directory of `.b64` files to review in batch.
 - `--threshold <lamports>`: override the large-transfer threshold (default 1 SOL).
+- `--rpc <url>`: enable online enrichment (ALT resolution, Squads PDA fetch,
+  Token-2022 mint extension screening). The offline verdict is still computed first;
+  enrichment only provides better input for a second deterministic pass.
+- `--simulate` (requires `--rpc`): after the offline pass, calls `simulateTransaction`
+  on the RPC endpoint to parse inner-instruction and balance-diff context. This is a
+  host-layer escalate-only step — it can raise a SIGN to HOLD/REJECT but can never
+  lower or downgrade an offline HOLD/REJECT. Without `--rpc`, the CLI REJECTs
+  fail-closed with a clear error. Example:
+  ```bash
+  node --import tsx skill/src/cli.ts <file.b64> --rpc https://api.mainnet-beta.solana.com --simulate
+  ```
+  This flag is optional and requires network access; the default path is offline.
 
 ## Procedure
 

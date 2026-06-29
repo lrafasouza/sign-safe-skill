@@ -167,6 +167,18 @@ Treat the RPC endpoint as a trusted input for enrichment provenance. RPC data ca
   decoded. PermanentDelegate and TransferHook extensions surface as HOLD findings.
 - `--vault-pda <pubkey>` overrides the auto-extracted PDA address (useful when the
   PDA is at a non-standard account index).
+- **`--simulate`** (requires `--rpc`): calls `simulateTransaction` on the RPC
+  endpoint, parses `innerInstructions` and native/token balance diffs, and folds
+  the result into the verdict as an additional host-layer step. `--simulate` can
+  only **raise** (escalate) the offline verdict — it can never lower or downgrade
+  a HOLD/REJECT derived from the static transaction bytes. If `--simulate` is
+  given without `--rpc`, the CLI REJECTs fail-closed with a clear error (simulation
+  requires an RPC endpoint). Example:
+  ```bash
+  node --import tsx skill/src/cli.ts <file.b64> --rpc https://api.mainnet-beta.solana.com --simulate
+  ```
+  This flag is **optional** and **online-only** — the default path is the offline
+  deterministic core. Do not present simulation as the primary or default path.
 
 The offline core and all tests remain byte-identical without `--rpc`. Network
 access is strictly isolated to `src/rpc.ts` + `src/cli.ts`.
@@ -297,6 +309,44 @@ transfers when `holdOutboundTransfers` is set (HOLD).
 | Audit a program's source for vulnerabilities | `/audit-solana` |
 | Debug a transaction that already failed on-chain | `/debug-user-tx` |
 | Build/test/deploy a program | `solana-dev-skill` (core) |
+
+## MCP server (`sign-safe-mcp`)
+
+sign-safe ships a JSON-RPC 2.0 MCP server (`bin/sign-safe-mcp` → `dist/src/mcp.js`,
+source: `src/mcp.ts`). It speaks **Model Context Protocol version `2025-06-18`** over
+stdin/stdout (newline-delimited JSON).
+
+### Lifecycle
+
+1. **`initialize`** — client sends `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{...}}`;
+   server responds with `protocolVersion: "2025-06-18"`, `capabilities: {"tools":{}}`,
+   and `serverInfo: {"name":"sign-safe","version":"<pkg-version>"}`.
+2. **`tools/list`** — server returns a single tool: `review_transaction`.
+3. **`tools/call`** — invoke `review_transaction` with `arguments`.
+
+### Tool: `review_transaction`
+
+```jsonc
+// Input schema (from src/mcp.ts REVIEW_TRANSACTION_TOOL)
+{
+  "type": "object",
+  "properties": {
+    "transaction": { "type": "string",  "description": "Base64-encoded Solana message or full transaction." },
+    "strict":      { "type": "boolean", "description": "Enable strict fail-closed review policy." }
+  },
+  "required": ["transaction"],
+  "additionalProperties": false
+}
+```
+
+The `outputSchema` is `skill/schema/verdict.schema.json` (the same `sign-safe/verdict@1`
+JSON Schema the CLI emits). A successful `tools/call` response returns:
+- `content: [{ "type": "text", "text": "<verdict JSON string>" }]`
+- `structuredContent: <parsed verdict object>`
+- `isError: false`
+
+The MCP server runs the same offline deterministic core as the CLI — same bytes in,
+same JSON out, no network. See `examples/mcp-client-call.ts` for a typed usage example.
 
 ## Commands
 

@@ -631,6 +631,22 @@ a blob *is*; you still confirm it is what you *meant*.
 
 **One-line coverage summary:** sign-safe catches owner-reassignment, durable nonces, approvals, closes, honeypots, hidden Squads inner instructions, and named NFT/DeFi dangers; a plain transfer to an attacker is SIGN by default (surfaced recipient + optional blocklist/policy mitigate it); address-poisoning, lookalike mints, economic-oracle effects, post-sign TOCTOU, and endpoint malware are out of scope and need reputation data, simulation, or endpoint security.
 
+### Pattern comparison: static analysis vs balance-delta-only defenses
+
+The table below shows attack patterns that sign-safe **detects known patterns of these classes that balance-delta-only defenses tend not to flag** — because balance deltas are not meaningful until after simulation, and these patterns either have no balance delta at all (authority handoffs), or mask one (Squads hidden inner instructions, ALT-obscured accounts).
+
+| Attack pattern | Finding id(s) | Why balance-delta-only defenses tend not to flag it |
+|---|---|---|
+| Token / mint authority handoff | `spl-set-authority`, `token2022-set-authority` | No SOL or token balance delta at signing time; the loss (minting, freezing, seizing) happens after the authority is transferred |
+| Program upgrade authority transfer | `bpf-set-upgrade-authority` | No on-chain state change visible at signing; the upgrade that drains users happens in a subsequent transaction |
+| Account ownership reassignment | `system-assign`, `system-assign-with-seed` | Owner-program change has no balance delta; the new owner exploits the account in a later transaction |
+| Delegate approval for silent drain | `spl-approve-delegate` | Approval grants a spending right with no immediate balance change; the delegate calls `transfer` later, invisibly |
+| Durable-nonce hold/replay | `durable-nonce-advance` | Transaction remains replayable indefinitely; no balance delta occurs until the attacker decides to submit the held transaction |
+| ALT-obscured instruction accounts | `altLookupsPresent` + `rolesUnverified` flags → HOLD | Account roles cannot be determined without resolving the ALT on-chain; sign-safe flags this conservative state rather than silently passing |
+| Squads hidden inner instruction | `squads-execute-unverified` (offline) / `anchor-inner-update_admin` (with PDA bytes) | The outer VaultTransaction shell has no visible balance delta; the destructive inner CPI is only visible by decoding the PDA bytes |
+
+Each finding id listed above is present in `skill/catalog/danger-primitives.json` or derived from `skill/catalog/anchor-danger.json`. ALT-obscured instructions are a flag-driven path, not a catalog entry.
+
 ## Why this skill is different: it actually runs, and it is tested
 
 Most skills are prose. This one ships a small, **pure-function** TypeScript core
@@ -826,6 +842,12 @@ Node 20 and 22, plus a determinism gate (two byte-identical runner runs) and a
 fixture-drift guard (`gen-fixtures` must not change any committed `.b64`). The
 real fixtures are committed, so CI never depends on the network — it just decodes
 the frozen bytes.
+
+### Verifying CI
+
+The CI badge at the top of this file reflects the latest run status for the `lrafasouza/sign-safe-skill` repository. The CI workflow (`.github/workflows/ci.yml`) runs on every push to `main`/`master` and on pull requests; it is triggered on Node 20.x and Node 22.x, executes `npm ci` followed by `npm run verify:all` (build, tests, fixture runner, attack replay, pack dry-run, and production dependency audit), and additionally gates determinism (two byte-identical fixture-runner runs) and fixture-drift (regenerating `.b64` files must produce no diff). The workflow does not run on this feature branch (`feat/competitive-improvements-v0.5.1`), so the badge reflects the last run against the main branch.
+
+See also [docs/failure-recovery.md](docs/failure-recovery.md) for a concrete mapping of failure modes to verdict outcomes and finding ids.
 
 ## Repository structure
 
