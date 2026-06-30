@@ -82,7 +82,7 @@
   },
   "comment:dependencies": "The deterministic core has zero runtime dependencies. @solana/web3.js and @solana/kit are optional peers used only by adapters, fixture generation, and cross-validation tests.",
   "peerDependencies": {
-    "@solana/kit": "^2.1.0",
+    "@solana/kit": "^7.0.0",
     "@solana/web3.js": "^1.95.3"
   },
   "peerDependenciesMeta": {
@@ -94,14 +94,14 @@
     }
   },
   "devDependencies": {
-    "@solana/kit": "^2.1.0",
+    "@solana/kit": "^7.0.0",
     "@solana/web3.js": "^1.95.3",
     "@stryker-mutator/core": "^9.6.1",
     "@stryker-mutator/vitest-runner": "^9.6.1",
-    "@types/node": "^22.5.0",
-    "fast-check": "^3.23.2",
+    "@types/node": "^26.0.1",
+    "fast-check": "^4.8.0",
     "tsx": "^4.19.0",
-    "typescript": "^5.6.0",
-    "vitest": "^2.1.9"
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
   }
 }
