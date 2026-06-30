@@ -111,6 +111,26 @@ are optional online extensions — they never downgrade a static REJECT.
 For a shorter walkthrough, see [DEMO.md](DEMO.md). For a compact proof transcript,
 see [docs/evaluator-transcript.md](docs/evaluator-transcript.md).
 
+## What's new in v0.6
+
+- **Now on npm**: `npx sign-safe <tx.b64>` (nothing installed) and `npx sign-safe-mcp`
+  for agents — see [Install](#install). The published CLI is regression-tested *by its
+  bin name*, so the exit-code gate (0 SIGN / 10 HOLD / 20 REJECT) can never silently break.
+- **Real on-chain attack corpus**: the actual Drift exploit transactions (April 2026,
+  ~$285M) captured by signature, decoded offline, and frozen as fixtures — both decode to
+  **HOLD before signing** (durable-nonce advance + Squads v4). Complements the 37 synthetic
+  attack patterns; deliberately small (the publicly-documented, retrievable set), never overclaimed.
+- **IDL-cross-verified registry**: 69/69 Anchor instruction discriminators checked
+  programmatically against canonical on-chain IDLs (snake_case preimage vs camelCase IDL),
+  so a wrong discriminator fails a test instead of mis-clear-signing a transaction.
+- **Mutation + fuzz testing**: Stryker on the classifier (**70.2% behavioral kill rate**,
+  reported as-is, not inflated to a target); a fast-check fuzz harness proves the fail-closed
+  invariant — across **44,288 single-byte mutations** of an authority transfer, **0 ever flip
+  to SIGN** (and it's falsifiable: disabling the fix yields 243 SIGN).
+- **Benign corpus grown 100 → 500** real frozen mainnet transactions, precision recomputed:
+  **18.4% SIGN / 81.6% HOLD / 0% false-REJECT** (curated set — not "catches everything").
+- **803 tests across 42 files** (up from 777/40 in v0.5).
+
 ## What's new in v0.5
 
 - **Transaction simulation** (`--simulate`, escalate-only): parses `simulateTransaction`
@@ -134,10 +154,8 @@ see [docs/evaluator-transcript.md](docs/evaluator-transcript.md).
 - **More coverage**: durable-nonce fee-payer asymmetry (the Drift council shape), the
   Lighthouse guard as an INFO-only positive signal, and Marginfi v2 + Squads v4 in
   the registry.
-- **803 tests across 42 files** (up from 607/29 in v0.4), including a 13-case adversarial
-  threat sweep and a 37-fixture attack replay pack; the precision report now leads with
-  benign SIGN precision + HOLD rate (`18.4% SIGN / 81.6% HOLD / 0% false-REJECT` on the
-  frozen benign corpus).
+- **777 tests across 40 files** (up from 607/29 in v0.4), including a 13-case adversarial
+  threat sweep and a 37-fixture attack replay pack.
 
 ## What's new in v0.4
 
