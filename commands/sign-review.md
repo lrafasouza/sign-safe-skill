@@ -23,10 +23,8 @@ reject, or proceed, **before** any signature happens.
 ## Inputs you accept
 
 - A base64-encoded serialized **message** (legacy or v0).
-- A path to a `.b64` file containing the above.
-- `--signer <pubkey>`: the wallet being asked to sign (used to attribute outflow).
-  If omitted, the message's fee payer (account index 0) is assumed to be the signer.
-- `--offline <dir>`: a fixture directory of `.b64` files to review in batch.
+- A path to a `.b64` file containing the above, or the base64 piped on stdin.
+- The message's fee payer (account index 0) is treated as the signer for outflow attribution.
 - `--threshold <lamports>`: override the large-transfer threshold (default 1 SOL).
 - `--rpc <url>`: enable online enrichment (ALT resolution, Squads PDA fetch,
   Token-2022 mint extension screening). The offline verdict is still computed first;
@@ -69,7 +67,7 @@ reject, or proceed, **before** any signature happens.
 ## Optional runtime enrichment (only if the user asks and an RPC/MCP is available)
 
 The offline verdict is authoritative. If, and only if, the user explicitly wants
-deeper context, you MAY use `src/enrich.ts` hooks (ALT resolution, Squads
+deeper context, you MAY use `skill/src/enrich.ts` hooks (ALT resolution, Squads
 proposal context, Token-2022 mint-extension confirmation) to gather facts, then
 **re-run the offline core** over the now-fully-known data. Enrichment never
 upgrades a verdict in place; it only produces better input for another

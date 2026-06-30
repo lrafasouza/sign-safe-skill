@@ -312,7 +312,7 @@ transfers when `holdOutboundTransfers` is set (HOLD).
 
 ## MCP server (`sign-safe-mcp`)
 
-sign-safe ships a JSON-RPC 2.0 MCP server (`bin/sign-safe-mcp` → `dist/src/mcp.js`,
+sign-safe ships a JSON-RPC 2.0 MCP server (the `sign-safe-mcp` bin → `dist/src/mcp.js`,
 source: `src/mcp.ts`). It speaks **Model Context Protocol version `2025-06-18`** over
 stdin/stdout (newline-delimited JSON).
 
