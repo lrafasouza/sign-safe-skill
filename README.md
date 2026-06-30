@@ -1,6 +1,9 @@
 # sign-safe -- Solana Signing-Time Safety Gate
 
-![CI](https://github.com/lrafasouza/sign-safe-skill/actions/workflows/ci.yml/badge.svg)
+[![CI](https://github.com/lrafasouza/sign-safe-skill/actions/workflows/ci.yml/badge.svg)](https://github.com/lrafasouza/sign-safe-skill/actions/workflows/ci.yml)
+[![npm version](https://img.shields.io/npm/v/sign-safe.svg)](https://www.npmjs.com/package/sign-safe)
+[![node](https://img.shields.io/node/v/sign-safe.svg)](package.json)
+[![license: MIT](https://img.shields.io/npm/l/sign-safe.svg)](LICENSE)
 
 A Claude Code skill (and a runnable TypeScript library) that decodes an opaque
 Solana transaction **before you sign it**, classifies it against a danger-primitive
@@ -10,6 +13,29 @@ REJECT** verdict plus a machine-readable `verdict.json` for autonomous-agent gat
 > **Extends**: [solana-dev-skill](https://github.com/solana-foundation/solana-dev-skill)
 > -- core Solana development (programs, frontend, testing, security). sign-safe
 > layers a signing-time gate on top; it does not duplicate the core skill.
+
+## Install
+
+No clone required — run it straight from [npm](https://www.npmjs.com/package/sign-safe):
+
+```bash
+# one-off, nothing installed (offline decode + verdict):
+npx sign-safe <tx.b64>
+
+# or install the CLI:
+npm install -g sign-safe
+sign-safe <tx.b64>          # exit code IS the verdict: 0 SIGN / 10 HOLD / 20 REJECT
+cat tx.b64 | sign-safe      # or pipe base64 on stdin
+
+# MCP server for autonomous agents (zero-dependency, stdio):
+npx sign-safe-mcp
+
+# or as a library (programmatic API + signTransaction/MWA gate):
+npm install sign-safe
+```
+
+Requires Node >= 18.20. The core is offline by default — **no key, no RPC, no broadcast**.
+To run the test suite or regenerate fixtures, clone the repo instead (see [Quickstart](#quickstart)).
 
 ## Judge in 3 minutes
 
@@ -264,6 +290,9 @@ A SIGN verdict is deliberately the weakest claim in the system: it says "nothing
 in this blob is recognized as dangerous," never "this is safe."
 
 ## Quickstart
+
+> For **using** the tool, prefer the [npm install](#install) above (`npx sign-safe <tx.b64>`).
+> The clone below is for **development** — running the test suite, regenerating fixtures, or hacking on the core.
 
 ```bash
 git clone https://github.com/lrafasouza/sign-safe-skill sign-safe
