@@ -3,6 +3,20 @@
 All notable changes to sign-safe are documented here.
 Format: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.3] - 2026-06-30
+
+First public npm release polish. No runtime behavior change — documentation and packaging only.
+
+### Added
+
+- **README install section + npm badges.** The README now leads with `npx sign-safe <tx.b64>` / `npm install -g sign-safe` (and `npx sign-safe-mcp` for agents, `npm install sign-safe` as a library), with npm version / node / license badges. The `git clone` path is now explicitly framed as the development/test-suite route.
+
+### Changed
+
+- **`bin` paths use npm's canonical bare form** (`dist/src/cli.js` instead of `./dist/src/cli.js`), silencing npm 11's `"bin[...] was invalid and removed"` publish warning. The published artifact is byte-identical (npm normalizes the `./` on publish); verified the installed bin still returns SIGN=0 / HOLD=10 / REJECT=20.
+
+803 tests across 42 files; verify:all green.
+
 ## [0.6.2] - 2026-06-29
 
 Critical fix: the published CLI binary was inert when invoked by its bin name.
