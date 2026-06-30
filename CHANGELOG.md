@@ -3,6 +3,20 @@
 All notable changes to sign-safe are documented here.
 Format: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.4] - 2026-06-30
+
+Documentation accuracy and completeness — the docs that landed right after 0.6.3 was published to npm. No runtime change; same offline core, same 803 tests.
+
+### Added
+
+- README **"What's new in v0.6"** section (the What's-new list had skipped straight from v0.5): npm distribution, the real on-chain Drift attack corpus, the IDL-cross-verified registry (69/69), Stryker + fuzz, the 500-tx benign corpus, 803 tests.
+
+### Fixed
+
+- **Doc/code accuracy, from a 1:1 audit:** removed `--signer` and `--offline` from `commands/sign-review.md` (neither is implemented in `cli.ts` — a documented flag that silently mis-parsed); added the real `--simulate` flag to the README CLI-flags table; fixed dangling inline path references (`skill/src/{digest,banned,enrich}.ts`); corrected a non-existent `bin/sign-safe-mcp` path to the `sign-safe-mcp` bin; and restored v0.5's real history numbers (607/29 → 777/40 → 803/42), which had been backfilled with the current 803/42 + v0.6.1's 18.4%/81.6%.
+
+803 tests across 42 files; verify:all green.
+
 ## [0.6.3] - 2026-06-30
 
 First public npm release polish. No runtime behavior change — documentation and packaging only.

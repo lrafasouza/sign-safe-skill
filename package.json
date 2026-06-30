@@ -1,6 +1,6 @@
 {
   "name": "sign-safe",
-  "version": "0.6.3",
+  "version": "0.6.4",
   "description": "v0.6 signing-time gate for Solana: decode any base64 tx offline, classify 37 danger primitives + Native Stake + bounded ATA/Memo recognition + a 14-program DeFi/NFT clear-signing registry, resolve ALTs and clear-sign Squads proposals with --rpc, optionally --simulate (innerInstructions + balance diff, escalate-only), and emit a SIGN/HOLD/REJECT verdict with requiresHumanReview + finding categories. Ships a programmatic API, a signTransaction/MWA gate, MCP outputSchema, JSON Schema, verify:all, and an attack replay pack. Deterministic, fail-closed, zero-dependency core, 803 tests + 2 real on-chain attack replays.",
   "type": "module",
   "license": "MIT",
