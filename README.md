@@ -407,6 +407,7 @@ for the full decision-rule specification and the banned-reassurance-phrase contr
 |------|---------|-------------|
 | `--rpc <url>` | (offline) | Enable on-chain enrichment: ALT resolution, Squads PDA auto-fetch, Token-2022 mint-extension screening. |
 | `--vault-pda <pubkey>` | (auto-extracted) | Override the Squads VaultTransaction PDA address (requires `--rpc`). |
+| `--simulate` | off | After the offline pass, call `simulateTransaction` (requires `--rpc`) for inner-instruction + balance-diff context. Escalate-only: can raise SIGN → HOLD/REJECT, never downgrade a static verdict. |
 | `--strict` | off | Restore aggressive posture: unknown writable → REJECT, broad durable-nonce composite. |
 | `--threshold <lamports>` | 1 SOL | Override the large-transfer HOLD threshold. |
 | `--json` | off | Emit `verdict.json` only (no human prose). Exit code still mirrors verdict. |
@@ -624,7 +625,7 @@ for the machine-readable source.
   `governanceContext` makes even a bare durable nonce REJECT. `--strict` broadens
   the composite to trigger on any non-INFO finding.
 - Out-of-band digest: SHA-256 + 20-hex-char short code for cross-device byte
-  identity confirmation (`src/digest.ts`, exposed by the CLI `--digest` flag).
+  identity confirmation (`skill/src/digest.ts`, exposed by the CLI `--digest` flag).
 - Computing the statically-declared signer outflow (lamports + SPL transfers).
 - Emitting a `SIGN / HOLD / REJECT` verdict and a machine-readable
   `verdict.json` with a verdict-mirroring exit code.
@@ -828,7 +829,7 @@ decoder is our own dependency-free wire parser, so agreeing with both proves it
 is correct, not merely self-consistent or pinned to a single legacy library.
 
 The banned-reassurance-phrase contract is **executable**, not just prose:
-`src/banned.ts` is run over every verdict's narrative fields inside
+`skill/src/banned.ts` is run over every verdict's narrative fields inside
 `buildVerdict`/`rejectVerdict`, so any reason or finding string that reintroduces
 "safe" / "no risk" / etc. fails loud (and the gate fails closed to REJECT).
 
